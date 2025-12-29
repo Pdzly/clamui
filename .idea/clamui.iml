@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">
-    <content url="file://$MODULE_DIR$" />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/.locks" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/baselines" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/file-timelines" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/ideation/screenshots" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/specs/002-migrate-dependencies-to-pyproject-yml-with-uv" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/specs/003-add-freshclam-ui-component" />
+      <excludeFolder url="file://$MODULE_DIR$/.auto-claude/specs/004-add-clamav-configuration-read-and-update" />
+      <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.worktrees/002-migrate-dependencies-to-pyproject-yml-with-uv" />
+      <excludeFolder url="file://$MODULE_DIR$/.worktrees/003-add-freshclam-ui-component" />
+      <excludeFolder url="file://$MODULE_DIR$/.worktrees/004-add-clamav-configuration-read-and-update" />
+    </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>

@@ -1,7 +1,26 @@
 {
   "project_root": "/home/rooki/autoclaudeprojects/clamui",
   "project_type": "single",
-  "services": {},
+  "services": {
+    "main": {
+      "name": "main",
+      "path": "/home/rooki/autoclaudeprojects/clamui",
+      "language": "Python",
+      "framework": null,
+      "type": "unknown",
+      "package_manager": "pip",
+      "key_directories": {
+        "src": {
+          "path": "src",
+          "purpose": "Source code"
+        }
+      },
+      "dependencies": [
+        "PyGObject",
+        "pycairo"
+      ]
+    }
+  },
   "infrastructure": {},
   "conventions": {}
 }

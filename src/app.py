@@ -11,6 +11,7 @@ from gi.repository import Gtk, Adw, GLib, Gio
 from .ui.window import MainWindow
 from .ui.scan_view import ScanView
 from .ui.update_view import UpdateView
+from .ui.logs_view import LogsView
 
 
 class ClamUIApp(Adw.Application):
@@ -35,6 +36,7 @@ class ClamUIApp(Adw.Application):
         # View management
         self._scan_view = None
         self._update_view = None
+        self._logs_view = None
         self._current_view = None
 
     @property
@@ -61,9 +63,10 @@ class ClamUIApp(Adw.Application):
             # Create the main window
             win = MainWindow(application=self)
 
-            # Create both views (kept in memory for state preservation)
+            # Create all views (kept in memory for state preservation)
             self._scan_view = ScanView()
             self._update_view = UpdateView()
+            self._logs_view = LogsView()
 
             # Set the scan view as the default content
             win.set_content_view(self._scan_view)
@@ -107,6 +110,10 @@ class ClamUIApp(Adw.Application):
         show_update_action.connect("activate", self._on_show_update)
         self.add_action(show_update_action)
 
+        show_logs_action = Gio.SimpleAction.new("show-logs", None)
+        show_logs_action.connect("activate", self._on_show_logs)
+        self.add_action(show_logs_action)
+
     def _on_quit(self, action, param):
         """Handle quit action."""
         self.quit()
@@ -132,6 +139,17 @@ class ClamUIApp(Adw.Application):
             win.set_content_view(self._update_view)
             win.set_active_view("update")
             self._current_view = "update"
+
+    def _on_show_logs(self, action, param):
+        """Handle show-logs action - switch to logs view."""
+        if self._current_view == "logs":
+            return
+
+        win = self.props.active_window
+        if win and self._logs_view:
+            win.set_content_view(self._logs_view)
+            win.set_active_view("logs")
+            self._current_view = "logs"
 
     def _on_about(self, action, param):
         """Handle about action - show about dialog."""

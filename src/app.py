@@ -10,6 +10,7 @@ from gi.repository import Gtk, Adw, GLib, Gio
 
 from .ui.window import MainWindow
 from .ui.scan_view import ScanView
+from .ui.update_view import UpdateView
 
 
 class ClamUIApp(Adw.Application):
@@ -30,6 +31,11 @@ class ClamUIApp(Adw.Application):
         # Application metadata
         self._app_name = "ClamUI"
         self._version = "0.1.0"
+
+        # View management
+        self._scan_view = None
+        self._update_view = None
+        self._current_view = None
 
     @property
     def app_name(self) -> str:
@@ -55,9 +61,14 @@ class ClamUIApp(Adw.Application):
             # Create the main window
             win = MainWindow(application=self)
 
-            # Create the scan view and set it as the main content
-            scan_view = ScanView()
-            win.set_content_view(scan_view)
+            # Create both views (kept in memory for state preservation)
+            self._scan_view = ScanView()
+            self._update_view = UpdateView()
+
+            # Set the scan view as the default content
+            win.set_content_view(self._scan_view)
+            win.set_active_view("scan")
+            self._current_view = "scan"
 
         win.present()
 
@@ -87,9 +98,40 @@ class ClamUIApp(Adw.Application):
         about_action.connect("activate", self._on_about)
         self.add_action(about_action)
 
+        # View switching actions
+        show_scan_action = Gio.SimpleAction.new("show-scan", None)
+        show_scan_action.connect("activate", self._on_show_scan)
+        self.add_action(show_scan_action)
+
+        show_update_action = Gio.SimpleAction.new("show-update", None)
+        show_update_action.connect("activate", self._on_show_update)
+        self.add_action(show_update_action)
+
     def _on_quit(self, action, param):
         """Handle quit action."""
         self.quit()
+
+    def _on_show_scan(self, action, param):
+        """Handle show-scan action - switch to scan view."""
+        if self._current_view == "scan":
+            return
+
+        win = self.props.active_window
+        if win and self._scan_view:
+            win.set_content_view(self._scan_view)
+            win.set_active_view("scan")
+            self._current_view = "scan"
+
+    def _on_show_update(self, action, param):
+        """Handle show-update action - switch to update view."""
+        if self._current_view == "update":
+            return
+
+        win = self.props.active_window
+        if win and self._update_view:
+            win.set_content_view(self._update_view)
+            win.set_active_view("update")
+            self._current_view = "update"
 
     def _on_about(self, action, param):
         """Handle about action - show about dialog."""

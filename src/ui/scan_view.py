@@ -10,6 +10,7 @@ from gi.repository import Gtk, Adw, Gio, GLib
 
 from ..core.scanner import Scanner, ScanResult, ScanStatus
 from ..core.utils import format_scan_path, check_clamav_installed
+from .fullscreen_dialog import FullscreenLogDialog
 
 
 class ScanView(Gtk.Box):
@@ -148,6 +149,21 @@ class ScanView(Gtk.Box):
         results_group.set_title("Scan Results")
         results_group.set_description("Results will appear here after scanning")
         self._results_group = results_group
+
+        # Header box with fullscreen button
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        header_box.set_halign(Gtk.Align.END)
+
+        # Fullscreen button
+        fullscreen_button = Gtk.Button()
+        fullscreen_button.set_icon_name("view-fullscreen-symbolic")
+        fullscreen_button.set_tooltip_text("View fullscreen")
+        fullscreen_button.add_css_class("flat")
+        fullscreen_button.connect("clicked", self._on_fullscreen_results_clicked)
+        self._fullscreen_button = fullscreen_button
+
+        header_box.append(fullscreen_button)
+        results_group.set_header_suffix(header_box)
 
         # Results container
         results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -461,6 +477,21 @@ class ScanView(Gtk.Box):
         # Update the text view
         buffer = self._results_text.get_buffer()
         buffer.set_text("\n".join(lines))
+
+    def _on_fullscreen_results_clicked(self, button: Gtk.Button):
+        """Handle fullscreen button click for scan results."""
+        # Get current content from results text view
+        buffer = self._results_text.get_buffer()
+        start = buffer.get_start_iter()
+        end = buffer.get_end_iter()
+        content = buffer.get_text(start, end, False)
+
+        # Create and present the fullscreen dialog
+        dialog = FullscreenLogDialog(
+            title="Scan Results",
+            content=content
+        )
+        dialog.present(self.get_root())
 
     @property
     def scanner(self) -> Scanner:

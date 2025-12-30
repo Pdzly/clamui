@@ -32,6 +32,7 @@ class SettingsManager:
         "schedule_auto_quarantine": False,
         "schedule_day_of_week": 0,  # 0=Monday, 6=Sunday (for weekly scans)
         "schedule_day_of_month": 1,  # 1-28 (for monthly scans)
+        "exclusion_patterns": [],
     }
 
     def __init__(self, config_dir: Optional[Path] = None):

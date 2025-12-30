@@ -66,12 +66,14 @@ class TestScheduleFrequency:
 
     def test_frequency_values(self):
         """Test ScheduleFrequency enum values."""
+        assert ScheduleFrequency.HOURLY.value == "hourly"
         assert ScheduleFrequency.DAILY.value == "daily"
         assert ScheduleFrequency.WEEKLY.value == "weekly"
         assert ScheduleFrequency.MONTHLY.value == "monthly"
 
     def test_frequency_from_string(self):
         """Test ScheduleFrequency can be created from string."""
+        assert ScheduleFrequency("hourly") == ScheduleFrequency.HOURLY
         assert ScheduleFrequency("daily") == ScheduleFrequency.DAILY
         assert ScheduleFrequency("weekly") == ScheduleFrequency.WEEKLY
         assert ScheduleFrequency("monthly") == ScheduleFrequency.MONTHLY
@@ -155,6 +157,12 @@ class TestSchedulerOnCalendar:
         with tempfile.TemporaryDirectory() as tmpdir:
             yield Scheduler(config_dir=Path(tmpdir))
 
+    def test_generate_oncalendar_hourly(self, scheduler):
+        """Test OnCalendar generation for hourly schedule."""
+        result = scheduler._generate_oncalendar(ScheduleFrequency.HOURLY, "02:00")
+        # Hourly ignores the time parameter and runs at minute 0 of every hour
+        assert result == "*-*-* *:00:00"
+
     def test_generate_oncalendar_daily(self, scheduler):
         """Test OnCalendar generation for daily schedule."""
         result = scheduler._generate_oncalendar(ScheduleFrequency.DAILY, "02:00")
@@ -229,6 +237,12 @@ class TestSchedulerCrontabEntry:
         """Create a Scheduler instance."""
         with tempfile.TemporaryDirectory() as tmpdir:
             yield Scheduler(config_dir=Path(tmpdir))
+
+    def test_generate_crontab_hourly(self, scheduler):
+        """Test crontab entry for hourly schedule."""
+        result = scheduler._generate_crontab_entry(ScheduleFrequency.HOURLY, "02:00")
+        # Hourly runs at minute 0 of every hour
+        assert result == "0 * * * *"
 
     def test_generate_crontab_daily(self, scheduler):
         """Test crontab entry for daily schedule."""
@@ -375,7 +389,7 @@ class TestSchedulerEnableDisable:
     def test_enable_schedule_invalid_frequency(self, scheduler):
         """Test enable_schedule fails with invalid frequency."""
         success, error = scheduler.enable_schedule(
-            frequency="hourly",  # Invalid
+            frequency="biweekly",  # Invalid - not a valid frequency option
             time="02:00",
             targets=["/home/user"]
         )

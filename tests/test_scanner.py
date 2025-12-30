@@ -14,7 +14,7 @@ _original_gi_repository = sys.modules.get("gi.repository")
 sys.modules["gi"] = mock.MagicMock()
 sys.modules["gi.repository"] = mock.MagicMock()
 
-from src.core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail
+from src.core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail, glob_to_regex, validate_pattern
 
 # Restore original gi modules after imports are done
 if _original_gi is not None:
@@ -114,6 +114,133 @@ class TestScannerBuildCommand:
         # Should NOT be prefixed with flatpak-spawn
         assert cmd[0] == "/usr/bin/clamscan"
         assert "flatpak-spawn" not in cmd
+
+    def test_build_command_with_exclusions(self, tmp_path):
+        """Test _build_command includes exclusion patterns from settings."""
+        test_dir = tmp_path / "test_dir"
+        test_dir.mkdir()
+
+        # Create a mock settings manager with exclusion patterns
+        mock_settings = mock.MagicMock()
+        mock_settings.get.return_value = [
+            {"pattern": "*.log", "type": "file", "enabled": True},
+            {"pattern": "node_modules", "type": "directory", "enabled": True},
+            {"pattern": "*.tmp", "type": "pattern", "enabled": True},
+            {"pattern": "*.disabled", "type": "file", "enabled": False},  # Should be skipped
+            {"pattern": "", "type": "file", "enabled": True},  # Empty pattern, should be skipped
+        ]
+
+        scanner = Scanner(settings_manager=mock_settings)
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                cmd = scanner._build_command(str(test_dir), recursive=True)
+
+        # Verify the command structure
+        assert cmd[0] == "/usr/bin/clamscan"
+        assert "-r" in cmd
+        assert "-i" in cmd
+        assert str(test_dir) in cmd
+
+        # Verify file exclusions (--exclude) for *.log and *.tmp
+        exclude_indices = [i for i, arg in enumerate(cmd) if arg == "--exclude"]
+        assert len(exclude_indices) == 2  # *.log and *.tmp (not *.disabled which is disabled)
+
+        # Verify directory exclusion (--exclude-dir) for node_modules
+        exclude_dir_indices = [i for i, arg in enumerate(cmd) if arg == "--exclude-dir"]
+        assert len(exclude_dir_indices) == 1
+
+        # Verify the exclusion patterns are converted to regex
+        # Get the argument following each --exclude flag
+        exclude_patterns = [cmd[i + 1] for i in exclude_indices]
+        exclude_dir_patterns = [cmd[i + 1] for i in exclude_dir_indices]
+
+        # Verify regex patterns are present (glob_to_regex converts *.log to .*\.log etc.)
+        # The exact regex format depends on fnmatch.translate, but should contain backslash-escaped dot
+        assert any("log" in p for p in exclude_patterns)
+        assert any("tmp" in p for p in exclude_patterns)
+        assert any("node_modules" in p for p in exclude_dir_patterns)
+
+        # Verify disabled patterns are NOT included
+        all_args = " ".join(cmd)
+        assert "disabled" not in all_args
+
+    def test_build_command_without_settings_manager(self, tmp_path):
+        """Test _build_command works without settings manager (no exclusions)."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        # Scanner without settings manager
+        scanner = Scanner()
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                cmd = scanner._build_command(str(test_file), recursive=False)
+
+        # Should not have any exclusion flags
+        assert "--exclude" not in cmd
+        assert "--exclude-dir" not in cmd
+        assert cmd[0] == "/usr/bin/clamscan"
+        assert "-i" in cmd
+        assert str(test_file) in cmd
+
+    def test_build_command_with_empty_exclusions(self, tmp_path):
+        """Test _build_command handles empty exclusions list."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        # Create a mock settings manager with empty exclusions
+        mock_settings = mock.MagicMock()
+        mock_settings.get.return_value = []
+
+        scanner = Scanner(settings_manager=mock_settings)
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                cmd = scanner._build_command(str(test_file), recursive=False)
+
+        # Should not have any exclusion flags
+        assert "--exclude" not in cmd
+        assert "--exclude-dir" not in cmd
+
+    def test_disabled_exclusions_ignored(self, tmp_path):
+        """Test _build_command ignores all disabled exclusions regardless of type."""
+        test_dir = tmp_path / "test_dir"
+        test_dir.mkdir()
+
+        # Create a mock settings manager with ONLY disabled exclusions
+        mock_settings = mock.MagicMock()
+        mock_settings.get.return_value = [
+            {"pattern": "*.log", "type": "file", "enabled": False},
+            {"pattern": "node_modules", "type": "directory", "enabled": False},
+            {"pattern": "*.tmp", "type": "pattern", "enabled": False},
+            {"pattern": "__pycache__", "type": "directory", "enabled": False},
+            {"pattern": ".git", "type": "directory", "enabled": False},
+        ]
+
+        scanner = Scanner(settings_manager=mock_settings)
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                cmd = scanner._build_command(str(test_dir), recursive=True)
+
+        # Verify the command structure is correct
+        assert cmd[0] == "/usr/bin/clamscan"
+        assert "-r" in cmd
+        assert "-i" in cmd
+        assert str(test_dir) in cmd
+
+        # Verify NO exclusion flags are present (all exclusions were disabled)
+        assert "--exclude" not in cmd
+        assert "--exclude-dir" not in cmd
+
+        # Double-check none of the disabled patterns appear in the command
+        all_args = " ".join(cmd)
+        assert "log" not in all_args.lower()
+        assert "node_modules" not in all_args
+        assert "tmp" not in all_args.lower()
+        assert "pycache" not in all_args
+        assert ".git" not in all_args
 
 
 class TestScannerFlatpakIntegration:
@@ -710,3 +837,193 @@ Infected files: 1
 
         # Verify threat_details and infected_files are consistent
         assert result.threat_details[0].file_path == result.infected_files[0]
+
+
+class TestPatternUtilities:
+    """Tests for the glob_to_regex and validate_pattern utility functions."""
+
+    # Tests for glob_to_regex function
+
+    def test_glob_to_regex_simple_wildcard(self):
+        """Test glob_to_regex converts simple wildcard patterns."""
+        regex = glob_to_regex("*.log")
+        # Should match any string ending with .log
+        assert regex  # Not empty
+        # Verify it's a valid regex by compiling
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("test.log")
+        assert compiled.match("error.log")
+        assert not compiled.match("test.txt")
+
+    def test_glob_to_regex_directory_pattern(self):
+        """Test glob_to_regex converts directory name patterns."""
+        regex = glob_to_regex("node_modules")
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("node_modules")
+        assert not compiled.match("node_modules_backup")
+
+    def test_glob_to_regex_path_wildcard(self):
+        """Test glob_to_regex converts path wildcard patterns."""
+        regex = glob_to_regex("/tmp/*")
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("/tmp/file.txt")
+        assert compiled.match("/tmp/subdir")
+        assert not compiled.match("/var/tmp/file")
+
+    def test_glob_to_regex_multiple_wildcards(self):
+        """Test glob_to_regex handles multiple wildcards."""
+        regex = glob_to_regex("*.test.*")
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("file.test.js")
+        assert compiled.match("module.test.py")
+        assert not compiled.match("file.spec.js")
+
+    def test_glob_to_regex_question_mark_wildcard(self):
+        """Test glob_to_regex converts ? wildcard (single character)."""
+        regex = glob_to_regex("file?.txt")
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("file1.txt")
+        assert compiled.match("fileA.txt")
+        assert not compiled.match("file12.txt")
+        assert not compiled.match("file.txt")
+
+    def test_glob_to_regex_character_class(self):
+        """Test glob_to_regex converts character class patterns."""
+        regex = glob_to_regex("file[0-9].txt")
+        import re
+        compiled = re.compile(regex)
+        assert compiled.match("file0.txt")
+        assert compiled.match("file9.txt")
+        assert not compiled.match("fileA.txt")
+        assert not compiled.match("file10.txt")
+
+    def test_glob_to_regex_no_python_suffix(self):
+        """Test glob_to_regex strips Python-specific regex suffixes."""
+        regex = glob_to_regex("*.log")
+        # Should not contain \Z (Python anchor)
+        assert "\\Z" not in regex
+        # Should not contain (?s: wrapper (newer Python)
+        assert not regex.startswith("(?s:")
+
+    def test_glob_to_regex_common_exclusion_patterns(self):
+        """Test glob_to_regex handles common exclusion patterns."""
+        import re
+
+        # .git directory
+        regex = glob_to_regex(".git")
+        assert re.compile(regex).match(".git")
+
+        # __pycache__ directory
+        regex = glob_to_regex("__pycache__")
+        assert re.compile(regex).match("__pycache__")
+
+        # .venv directory
+        regex = glob_to_regex(".venv")
+        assert re.compile(regex).match(".venv")
+
+        # build directory
+        regex = glob_to_regex("build")
+        assert re.compile(regex).match("build")
+
+        # *.pyc files
+        regex = glob_to_regex("*.pyc")
+        compiled = re.compile(regex)
+        assert compiled.match("module.pyc")
+        assert not compiled.match("module.py")
+
+    def test_glob_to_regex_special_characters_escaped(self):
+        """Test glob_to_regex properly escapes special regex characters."""
+        import re
+
+        # Dots are escaped (not treated as regex wildcard)
+        regex = glob_to_regex("file.txt")
+        compiled = re.compile(regex)
+        assert compiled.match("file.txt")
+        assert not compiled.match("filextxt")  # Would match if . wasn't escaped
+
+    def test_glob_to_regex_empty_pattern(self):
+        """Test glob_to_regex handles empty pattern."""
+        regex = glob_to_regex("")
+        # Should return something (empty string becomes regex that matches empty)
+        assert regex is not None
+
+    # Tests for validate_pattern function
+
+    def test_validate_pattern_valid_simple_wildcard(self):
+        """Test validate_pattern accepts valid simple wildcard patterns."""
+        assert validate_pattern("*.log") is True
+        assert validate_pattern("*.txt") is True
+        assert validate_pattern("*.py") is True
+
+    def test_validate_pattern_valid_directory_names(self):
+        """Test validate_pattern accepts valid directory name patterns."""
+        assert validate_pattern("node_modules") is True
+        assert validate_pattern(".git") is True
+        assert validate_pattern("__pycache__") is True
+        assert validate_pattern(".venv") is True
+        assert validate_pattern("build") is True
+        assert validate_pattern("dist") is True
+
+    def test_validate_pattern_valid_path_patterns(self):
+        """Test validate_pattern accepts valid path patterns."""
+        assert validate_pattern("/tmp/*") is True
+        assert validate_pattern("/var/log/*.log") is True
+        assert validate_pattern("src/**") is True
+
+    def test_validate_pattern_valid_complex_patterns(self):
+        """Test validate_pattern accepts valid complex patterns."""
+        assert validate_pattern("*.test.js") is True
+        assert validate_pattern("file[0-9].txt") is True
+        assert validate_pattern("file?.txt") is True
+
+    def test_validate_pattern_empty_string(self):
+        """Test validate_pattern rejects empty string."""
+        assert validate_pattern("") is False
+
+    def test_validate_pattern_whitespace_only(self):
+        """Test validate_pattern rejects whitespace-only patterns."""
+        assert validate_pattern("   ") is False
+        assert validate_pattern("\t") is False
+        assert validate_pattern("\n") is False
+        assert validate_pattern("  \t\n  ") is False
+
+    def test_validate_pattern_valid_with_spaces(self):
+        """Test validate_pattern accepts patterns with internal spaces."""
+        # Patterns with spaces are valid (e.g., matching files with spaces)
+        assert validate_pattern("My Documents") is True
+        assert validate_pattern("*.log file") is True
+
+    def test_validate_pattern_common_development_exclusions(self):
+        """Test validate_pattern accepts all common development exclusion patterns."""
+        common_patterns = [
+            "node_modules",
+            ".git",
+            ".venv",
+            "build",
+            "dist",
+            "__pycache__",
+            "*.pyc",
+            "*.pyo",
+            ".env",
+            ".DS_Store",
+            "*.log",
+            "*.tmp",
+            "coverage",
+            ".coverage",
+            ".pytest_cache",
+            ".mypy_cache",
+            "*.egg-info",
+        ]
+        for pattern in common_patterns:
+            assert validate_pattern(pattern) is True, f"Pattern '{pattern}' should be valid"
+
+    def test_validate_pattern_preserves_none_handling(self):
+        """Test validate_pattern handles None gracefully (if passed)."""
+        # The function expects a string, but should handle edge cases
+        # This test verifies that empty/falsy values are rejected
+        assert validate_pattern("") is False

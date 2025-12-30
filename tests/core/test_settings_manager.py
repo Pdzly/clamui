@@ -473,3 +473,232 @@ class TestSettingsManagerDefaults:
 
             # DEFAULT_SETTINGS should be unchanged
             assert SettingsManager.DEFAULT_SETTINGS == original_defaults
+
+
+class TestSettingsExclusions:
+    """Tests for exclusion_patterns settings persistence."""
+
+    @pytest.fixture
+    def temp_config_dir(self):
+        """Create a temporary directory for settings storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def settings_manager(self, temp_config_dir):
+        """Create a SettingsManager with a temporary directory."""
+        return SettingsManager(config_dir=temp_config_dir)
+
+    def test_default_exclusion_patterns_is_empty_list(self, settings_manager):
+        """Test that default exclusion_patterns is an empty list."""
+        patterns = settings_manager.get("exclusion_patterns")
+        assert patterns == []
+        assert isinstance(patterns, list)
+
+    def test_default_settings_has_exclusion_patterns(self):
+        """Test that DEFAULT_SETTINGS contains exclusion_patterns."""
+        assert "exclusion_patterns" in SettingsManager.DEFAULT_SETTINGS
+        assert SettingsManager.DEFAULT_SETTINGS["exclusion_patterns"] == []
+
+    def test_set_exclusion_patterns_single_pattern(self, settings_manager):
+        """Test setting a single exclusion pattern."""
+        pattern = {
+            "pattern": "*.log",
+            "type": "pattern",
+            "enabled": True
+        }
+        settings_manager.set("exclusion_patterns", [pattern])
+
+        patterns = settings_manager.get("exclusion_patterns")
+        assert len(patterns) == 1
+        assert patterns[0]["pattern"] == "*.log"
+        assert patterns[0]["type"] == "pattern"
+        assert patterns[0]["enabled"] is True
+
+    def test_set_exclusion_patterns_multiple_patterns(self, settings_manager):
+        """Test setting multiple exclusion patterns."""
+        patterns = [
+            {"pattern": "node_modules", "type": "directory", "enabled": True},
+            {"pattern": ".git", "type": "directory", "enabled": True},
+            {"pattern": "*.log", "type": "pattern", "enabled": False},
+        ]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert len(retrieved) == 3
+        assert retrieved[0]["pattern"] == "node_modules"
+        assert retrieved[1]["pattern"] == ".git"
+        assert retrieved[2]["pattern"] == "*.log"
+        assert retrieved[2]["enabled"] is False
+
+    def test_exclusion_patterns_persist_to_file(self, settings_manager, temp_config_dir):
+        """Test that exclusion patterns persist to the settings file."""
+        patterns = [
+            {"pattern": "*.tmp", "type": "file", "enabled": True},
+            {"pattern": "__pycache__", "type": "directory", "enabled": True},
+        ]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        # Read directly from file
+        settings_file = Path(temp_config_dir) / "settings.json"
+        with open(settings_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert "exclusion_patterns" in data
+        assert len(data["exclusion_patterns"]) == 2
+        assert data["exclusion_patterns"][0]["pattern"] == "*.tmp"
+        assert data["exclusion_patterns"][1]["pattern"] == "__pycache__"
+
+    def test_exclusion_patterns_persist_across_instances(self, temp_config_dir):
+        """Test that exclusion patterns persist across manager instances."""
+        patterns = [
+            {"pattern": ".venv", "type": "directory", "enabled": True},
+            {"pattern": "build", "type": "directory", "enabled": False},
+        ]
+
+        manager1 = SettingsManager(config_dir=temp_config_dir)
+        manager1.set("exclusion_patterns", patterns)
+
+        manager2 = SettingsManager(config_dir=temp_config_dir)
+        retrieved = manager2.get("exclusion_patterns")
+
+        assert len(retrieved) == 2
+        assert retrieved[0]["pattern"] == ".venv"
+        assert retrieved[0]["enabled"] is True
+        assert retrieved[1]["pattern"] == "build"
+        assert retrieved[1]["enabled"] is False
+
+    def test_exclusion_patterns_load_from_existing_file(self, temp_config_dir):
+        """Test loading exclusion patterns from an existing settings file."""
+        config_dir = Path(temp_config_dir)
+        config_dir.mkdir(parents=True, exist_ok=True)
+        settings_file = config_dir / "settings.json"
+
+        existing_data = {
+            "notifications_enabled": True,
+            "exclusion_patterns": [
+                {"pattern": "dist", "type": "directory", "enabled": True}
+            ]
+        }
+        settings_file.write_text(json.dumps(existing_data))
+
+        manager = SettingsManager(config_dir=config_dir)
+        patterns = manager.get("exclusion_patterns")
+
+        assert len(patterns) == 1
+        assert patterns[0]["pattern"] == "dist"
+
+    def test_exclusion_patterns_empty_list_after_clear(self, settings_manager):
+        """Test clearing exclusion patterns to an empty list."""
+        patterns = [{"pattern": "*.log", "type": "pattern", "enabled": True}]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        # Clear patterns
+        settings_manager.set("exclusion_patterns", [])
+        retrieved = settings_manager.get("exclusion_patterns")
+
+        assert retrieved == []
+
+    def test_exclusion_patterns_all_types(self, settings_manager):
+        """Test all three exclusion pattern types."""
+        patterns = [
+            {"pattern": "/path/to/file.txt", "type": "file", "enabled": True},
+            {"pattern": "node_modules", "type": "directory", "enabled": True},
+            {"pattern": "*.log", "type": "pattern", "enabled": True},
+        ]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert retrieved[0]["type"] == "file"
+        assert retrieved[1]["type"] == "directory"
+        assert retrieved[2]["type"] == "pattern"
+
+    def test_exclusion_patterns_enabled_toggle(self, settings_manager):
+        """Test toggling enabled state of exclusion patterns."""
+        patterns = [{"pattern": "*.log", "type": "pattern", "enabled": True}]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        # Toggle to disabled
+        patterns[0]["enabled"] = False
+        settings_manager.set("exclusion_patterns", patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert retrieved[0]["enabled"] is False
+
+        # Toggle back to enabled
+        patterns[0]["enabled"] = True
+        settings_manager.set("exclusion_patterns", patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert retrieved[0]["enabled"] is True
+
+    def test_exclusion_patterns_reset_to_defaults(self, settings_manager):
+        """Test that reset_to_defaults clears exclusion patterns."""
+        patterns = [{"pattern": "*.log", "type": "pattern", "enabled": True}]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        settings_manager.reset_to_defaults()
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert retrieved == []
+
+    def test_exclusion_patterns_in_get_all(self, settings_manager):
+        """Test that exclusion_patterns appears in get_all output."""
+        patterns = [{"pattern": "*.tmp", "type": "file", "enabled": True}]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        all_settings = settings_manager.get_all()
+
+        assert "exclusion_patterns" in all_settings
+        assert len(all_settings["exclusion_patterns"]) == 1
+        assert all_settings["exclusion_patterns"][0]["pattern"] == "*.tmp"
+
+    def test_exclusion_patterns_merge_with_defaults(self, temp_config_dir):
+        """Test that exclusion_patterns merges correctly when file has partial settings."""
+        config_dir = Path(temp_config_dir)
+        config_dir.mkdir(parents=True, exist_ok=True)
+        settings_file = config_dir / "settings.json"
+
+        # Write settings without exclusion_patterns
+        settings_file.write_text(json.dumps({"notifications_enabled": False}))
+
+        manager = SettingsManager(config_dir=config_dir)
+
+        # Should get default empty list
+        assert manager.get("exclusion_patterns") == []
+        # Other settings should be from file
+        assert manager.get("notifications_enabled") is False
+
+    def test_exclusion_patterns_special_characters(self, settings_manager):
+        """Test exclusion patterns with special characters."""
+        patterns = [
+            {"pattern": "path with spaces", "type": "directory", "enabled": True},
+            {"pattern": "file[1-9].txt", "type": "pattern", "enabled": True},
+            {"pattern": "special_chars!@#", "type": "file", "enabled": True},
+        ]
+        settings_manager.set("exclusion_patterns", patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert retrieved[0]["pattern"] == "path with spaces"
+        assert retrieved[1]["pattern"] == "file[1-9].txt"
+        assert retrieved[2]["pattern"] == "special_chars!@#"
+
+    def test_exclusion_patterns_preset_development_directories(self, settings_manager):
+        """Test saving common development directory exclusion presets."""
+        preset_patterns = [
+            {"pattern": "node_modules", "type": "directory", "enabled": True},
+            {"pattern": ".git", "type": "directory", "enabled": True},
+            {"pattern": ".venv", "type": "directory", "enabled": True},
+            {"pattern": "build", "type": "directory", "enabled": True},
+            {"pattern": "dist", "type": "directory", "enabled": True},
+            {"pattern": "__pycache__", "type": "directory", "enabled": True},
+        ]
+        settings_manager.set("exclusion_patterns", preset_patterns)
+
+        retrieved = settings_manager.get("exclusion_patterns")
+        assert len(retrieved) == 6
+        pattern_names = [p["pattern"] for p in retrieved]
+        assert "node_modules" in pattern_names
+        assert ".git" in pattern_names
+        assert ".venv" in pattern_names
+        assert "__pycache__" in pattern_names

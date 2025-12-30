@@ -14,6 +14,10 @@ from ..core.log_manager import LogManager, LogEntry, DaemonStatus
 from ..core.utils import copy_to_clipboard
 from .fullscreen_dialog import FullscreenLogDialog
 
+# Pagination thresholds for historical logs
+INITIAL_LOG_DISPLAY_LIMIT = 25
+LOAD_MORE_LOG_BATCH_SIZE = 25
+
 
 class LogsView(Gtk.Box):
     """
@@ -48,6 +52,11 @@ class LogsView(Gtk.Box):
 
         # Loading state for historical logs
         self._is_loading = False
+
+        # Pagination state for log entries
+        self._displayed_log_count: int = 0
+        self._all_log_entries: list[LogEntry] = []
+        self._load_more_row: Gtk.Box | None = None
 
         # Set up the UI
         self._setup_ui()
@@ -432,19 +441,7 @@ class LogsView(Gtk.Box):
         if self._is_loading:
             return
 
-        # Quick check if there are any logs to load (non-blocking file count)
-        # This prevents showing "Loading logs..." when there's nothing to load
-        log_count = self._log_manager.get_log_count()
-        if log_count == 0:
-            # No logs to load - show empty state immediately without loading indicator
-            try:
-                self._logs_listbox.remove_all()
-            except Exception:
-                pass
-            self._clear_button.set_sensitive(False)
-            return
-
-        # Set loading state - only show "Loading logs..." when there are actual logs
+        # Set loading state - let callback handle empty case
         self._set_loading_state(True)
 
         # Get logs from log manager asynchronously
@@ -460,7 +457,7 @@ class LogsView(Gtk.Box):
         Handle completion of async log loading.
 
         This callback is invoked on the main GTK thread when async loading
-        completes. It populates the listbox with the loaded logs.
+        completes. It populates the listbox with the loaded logs using pagination.
 
         Args:
             logs: List of LogEntry objects from the log manager
@@ -478,6 +475,11 @@ class LogsView(Gtk.Box):
                 # Widget may be in invalid state, just return
                 return False
 
+            # Reset pagination state
+            self._all_log_entries = logs
+            self._displayed_log_count = 0
+            self._load_more_row = None
+
             # Handle empty logs - placeholder will be shown automatically
             # by GTK ListBox since we set it with set_placeholder()
             if not logs:
@@ -485,14 +487,13 @@ class LogsView(Gtk.Box):
                 self._clear_button.set_sensitive(False)
                 return False
 
-            # Add log entries to list
-            for entry in logs:
-                try:
-                    row = self._create_log_row(entry)
-                    self._logs_listbox.append(row)
-                except Exception:
-                    # Skip entries that fail to render (corrupted data)
-                    continue
+            # Display initial batch with pagination
+            initial_limit = min(INITIAL_LOG_DISPLAY_LIMIT, len(logs))
+            self._display_log_batch(0, initial_limit)
+
+            # Add "Load More" button if there are more logs
+            if len(logs) > INITIAL_LOG_DISPLAY_LIMIT:
+                self._add_load_more_button()
 
             # Update clear button sensitivity based on actual rendered rows
             has_logs = self._logs_listbox.get_row_at_index(0) is not None
@@ -502,6 +503,93 @@ class LogsView(Gtk.Box):
             self._set_loading_state(False)
 
         return False  # Don't repeat
+
+    def _display_log_batch(self, start_index: int, count: int):
+        """
+        Display a batch of log rows starting from the given index.
+
+        Args:
+            start_index: Index in _all_log_entries to start from
+            count: Number of logs to display
+        """
+        end_index = min(start_index + count, len(self._all_log_entries))
+
+        for i in range(start_index, end_index):
+            entry = self._all_log_entries[i]
+            try:
+                row = self._create_log_row(entry)
+                # Insert before the "Load More" button if it exists
+                if self._load_more_row:
+                    self._logs_listbox.insert(row, self._displayed_log_count)
+                else:
+                    self._logs_listbox.append(row)
+                self._displayed_log_count += 1
+            except Exception:
+                # Skip entries that fail to render (corrupted data)
+                continue
+
+    def _add_load_more_button(self):
+        """Add a 'Show More' button row to load additional logs."""
+        load_more_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        load_more_box.set_halign(Gtk.Align.CENTER)
+        load_more_box.set_margin_top(12)
+        load_more_box.set_margin_bottom(12)
+
+        # Progress label
+        remaining = len(self._all_log_entries) - self._displayed_log_count
+        progress_label = Gtk.Label()
+        progress_label.set_markup(
+            f"<span size='small'>Showing {self._displayed_log_count} of "
+            f"{len(self._all_log_entries)} logs</span>"
+        )
+        progress_label.add_css_class("dim-label")
+        load_more_box.append(progress_label)
+
+        # Button row
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        button_box.set_halign(Gtk.Align.CENTER)
+
+        # "Show More" button
+        show_more_btn = Gtk.Button()
+        show_more_btn.set_label(f"Show {min(LOAD_MORE_LOG_BATCH_SIZE, remaining)} More")
+        show_more_btn.add_css_class("pill")
+        show_more_btn.connect("clicked", self._on_load_more_logs_clicked)
+        button_box.append(show_more_btn)
+
+        # "Show All" button (only if many remaining)
+        if remaining > LOAD_MORE_LOG_BATCH_SIZE:
+            show_all_btn = Gtk.Button()
+            show_all_btn.set_label(f"Show All ({remaining} remaining)")
+            show_all_btn.add_css_class("pill")
+            show_all_btn.connect("clicked", self._on_show_all_logs_clicked)
+            button_box.append(show_all_btn)
+
+        load_more_box.append(button_box)
+
+        self._load_more_row = load_more_box
+        self._logs_listbox.append(load_more_box)
+
+    def _on_load_more_logs_clicked(self, button):
+        """Handle 'Show More' button click."""
+        if self._load_more_row:
+            self._logs_listbox.remove(self._load_more_row)
+            self._load_more_row = None
+
+        remaining = len(self._all_log_entries) - self._displayed_log_count
+        batch_size = min(LOAD_MORE_LOG_BATCH_SIZE, remaining)
+        self._display_log_batch(self._displayed_log_count, batch_size)
+
+        if self._displayed_log_count < len(self._all_log_entries):
+            self._add_load_more_button()
+
+    def _on_show_all_logs_clicked(self, button):
+        """Handle 'Show All' button click."""
+        if self._load_more_row:
+            self._logs_listbox.remove(self._load_more_row)
+            self._load_more_row = None
+
+        remaining = len(self._all_log_entries) - self._displayed_log_count
+        self._display_log_batch(self._displayed_log_count, remaining)
 
     def _create_log_row(self, entry: LogEntry) -> Adw.ActionRow:
         """
@@ -913,6 +1001,12 @@ class LogsView(Gtk.Box):
         """Handle clear confirmation dialog response."""
         if response == "clear":
             self._log_manager.clear_logs()
+
+            # Reset pagination state before reloading
+            self._all_log_entries = []
+            self._displayed_log_count = 0
+            self._load_more_row = None
+
             self._load_logs_async()
 
             # Clear detail view

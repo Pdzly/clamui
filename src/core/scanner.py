@@ -3,6 +3,8 @@
 Scanner module for ClamUI providing ClamAV subprocess execution and async scanning.
 """
 
+import fnmatch
+import re
 import subprocess
 import threading
 import time
@@ -14,7 +16,54 @@ from typing import Callable, Optional
 from gi.repository import GLib
 
 from .log_manager import LogEntry, LogManager
+from .settings_manager import SettingsManager
 from .utils import check_clamav_installed, validate_path, get_clamav_path, wrap_host_command
+
+
+def glob_to_regex(pattern: str) -> str:
+    """
+    Convert a user-friendly glob pattern to POSIX ERE for ClamAV.
+
+    Uses fnmatch.translate() for conversion and strips Python-specific
+    regex suffixes for ClamAV compatibility.
+
+    Note: fnmatch doesn't support '**' recursive wildcards - document as limitation.
+
+    Args:
+        pattern: Glob pattern (e.g., '*.log', 'node_modules', '/tmp/*')
+
+    Returns:
+        POSIX Extended Regular Expression string
+    """
+    regex = fnmatch.translate(pattern)
+    # Strip fnmatch's \Z(?ms) suffix for ClamAV compatibility
+    # fnmatch.translate() adds (?s:...) wrapper and \Z anchor
+    # We need to remove these for ClamAV's regex engine
+    if regex.endswith(r"\Z"):
+        regex = regex[:-2]
+    # Handle newer Python versions that use (?s:pattern)\Z format
+    if regex.startswith("(?s:") and regex.endswith(")"):
+        regex = regex[4:-1]
+    return regex
+
+
+def validate_pattern(pattern: str) -> bool:
+    """
+    Validate that a pattern can be converted and compiled as regex.
+
+    Args:
+        pattern: Glob pattern to validate
+
+    Returns:
+        True if pattern is valid, False otherwise
+    """
+    if not pattern or not pattern.strip():
+        return False
+    try:
+        re.compile(glob_to_regex(pattern))
+        return True
+    except re.error:
+        return False
 
 
 class ScanStatus(Enum):
@@ -68,17 +117,25 @@ class Scanner:
     while safely updating the UI via GLib.idle_add.
     """
 
-    def __init__(self, log_manager: Optional[LogManager] = None):
+    def __init__(
+        self,
+        log_manager: Optional[LogManager] = None,
+        settings_manager: Optional[SettingsManager] = None
+    ):
         """
         Initialize the scanner.
 
         Args:
             log_manager: Optional LogManager instance for saving scan logs.
                          If not provided, a default instance is created.
+            settings_manager: Optional SettingsManager instance for reading
+                              exclusion patterns. If not provided, exclusions
+                              will not be applied to scans.
         """
         self._current_process: Optional[subprocess.Popen] = None
         self._scan_cancelled = False
         self._log_manager = log_manager if log_manager else LogManager()
+        self._settings_manager = settings_manager
 
     def check_available(self) -> tuple[bool, Optional[str]]:
         """
@@ -301,6 +358,25 @@ class Scanner:
         # Show infected files only (reduces output noise)
         cmd.append("-i")
 
+        # Inject exclusion patterns from settings
+        if self._settings_manager is not None:
+            exclusions = self._settings_manager.get('exclusion_patterns', [])
+            for exclusion in exclusions:
+                if not exclusion.get('enabled', True):
+                    continue
+
+                pattern = exclusion.get('pattern', '')
+                if not pattern:
+                    continue
+
+                regex = glob_to_regex(pattern)
+                exclusion_type = exclusion.get('type', 'pattern')
+
+                if exclusion_type == 'directory':
+                    cmd.extend(['--exclude-dir', regex])
+                else:  # file or pattern
+                    cmd.extend(['--exclude', regex])
+
         # Add the path to scan
         cmd.append(path)
 
@@ -461,34 +537,26 @@ class Scanner:
                         severity=self._classify_threat_severity(threat_name)
                     )
                     threat_details.append(threat_detail)
+                    infected_count += 1
 
-            # Parse summary statistics
-            if line.startswith("Scanned files:"):
-                try:
-                    scanned_files = int(line.split(":")[1].strip())
-                except (ValueError, IndexError):
-                    pass
-            elif line.startswith("Scanned directories:"):
-                try:
-                    scanned_dirs = int(line.split(":")[1].strip())
-                except (ValueError, IndexError):
-                    pass
-            elif line.startswith("Infected files:"):
-                try:
-                    infected_count = int(line.split(":")[1].strip())
-                except (ValueError, IndexError):
-                    pass
+            # Look for summary line (format: "Scanned: X files, Y directories, Z infected files")
+            elif line.startswith("Scanned:"):
+                # Parse: "Scanned: 1234 files, 56 directories, 2 infected files"
+                # Use regex to extract numbers
+                match = re.search(r"Scanned:\s+(\d+)\s+files,\s+(\d+)\s+directories,\s+(\d+)\s+infected", line)
+                if match:
+                    scanned_files = int(match.group(1))
+                    scanned_dirs = int(match.group(2))
+                    # The infected count from summary should match what we counted
+                    # but we use our manual count to be consistent
 
-        # Determine status from exit code
+        # Determine overall status based on exit code
         if exit_code == 0:
             status = ScanStatus.CLEAN
-            error_message = None
         elif exit_code == 1:
             status = ScanStatus.INFECTED
-            error_message = None
         else:
             status = ScanStatus.ERROR
-            error_message = stderr.strip() if stderr else "Scan error occurred"
 
         return ScanResult(
             status=status,
@@ -500,131 +568,23 @@ class Scanner:
             scanned_files=scanned_files,
             scanned_dirs=scanned_dirs,
             infected_count=infected_count,
-            error_message=error_message,
+            error_message=stderr if status == ScanStatus.ERROR else None,
             threat_details=threat_details
         )
 
     def _save_scan_log(self, result: ScanResult, duration: float) -> None:
         """
-        Save a scan result to the log manager.
+        Save scan result to log.
 
         Args:
-            result: The ScanResult to log
-            duration: Duration of the scan in seconds
+            result: The scan result
+            duration: Scan duration in seconds
         """
-        # Build summary based on scan result
-        if result.status == ScanStatus.CLEAN:
-            summary = f"Scan completed - No threats found in {result.path}"
-        elif result.status == ScanStatus.INFECTED:
-            summary = f"Scan completed - {result.infected_count} threat(s) found in {result.path}"
-        elif result.status == ScanStatus.CANCELLED:
-            summary = f"Scan cancelled for {result.path}"
-        else:
-            summary = f"Scan failed for {result.path}: {result.error_message or 'Unknown error'}"
-
-        # Build details combining stdout and stderr
-        details_parts = []
-        if result.stdout:
-            details_parts.append(result.stdout)
-        if result.stderr:
-            details_parts.append(f"--- Errors ---\n{result.stderr}")
-        details = "\n".join(details_parts) if details_parts else "(No output)"
-
-        # Create and save log entry
-        log_entry = LogEntry.create(
-            log_type="scan",
-            status=result.status.value,
-            summary=summary,
-            details=details,
-            path=result.path,
-            duration=duration
+        entry = LogEntry(
+            scan_path=result.path,
+            scan_status=result.status.value,
+            threats_detected=result.infected_count,
+            scan_duration=duration,
+            timestamp=None
         )
-
-        self._log_manager.save_log(log_entry)
-
-    def quarantine_infected(
-        self,
-        infected_files: list[str],
-        quarantine_dir: Optional[str] = None
-    ) -> tuple[list[str], list[tuple[str, str]]]:
-        """
-        Move infected files to quarantine directory.
-
-        Quarantined files are renamed with a unique suffix to avoid collisions
-        and stored in a secure directory with restricted permissions (0700).
-
-        Args:
-            infected_files: List of file paths to quarantine
-            quarantine_dir: Optional custom quarantine directory.
-                            Defaults to ~/.local/share/clamui/quarantine/
-
-        Returns:
-            Tuple of (successfully_quarantined, failed_files):
-            - successfully_quarantined: List of original file paths that were quarantined
-            - failed_files: List of (file_path, error_message) tuples for failures
-        """
-        import os
-        import shutil
-        import uuid
-
-        # Determine quarantine directory
-        if quarantine_dir:
-            qdir = Path(quarantine_dir)
-        else:
-            xdg_data_home = os.environ.get("XDG_DATA_HOME", "~/.local/share")
-            qdir = Path(xdg_data_home).expanduser() / "clamui" / "quarantine"
-
-        # Ensure quarantine directory exists with restricted permissions
-        try:
-            qdir.mkdir(parents=True, exist_ok=True)
-            # Set directory permissions to 0700 (owner read/write/execute only)
-            os.chmod(qdir, 0o700)
-        except (OSError, PermissionError) as e:
-            # Cannot create quarantine directory - all files will fail
-            return ([], [(f, f"Cannot create quarantine directory: {e}") for f in infected_files])
-
-        successfully_quarantined: list[str] = []
-        failed_files: list[tuple[str, str]] = []
-
-        for file_path in infected_files:
-            try:
-                source = Path(file_path)
-
-                # Check if source file exists
-                if not source.exists():
-                    failed_files.append((file_path, "File does not exist"))
-                    continue
-
-                # Check if source file is readable
-                if not os.access(source, os.R_OK):
-                    failed_files.append((file_path, "Permission denied: cannot read file"))
-                    continue
-
-                # Generate unique quarantine filename to avoid collisions
-                # Format: original_name.quarantined.uuid
-                unique_suffix = str(uuid.uuid4())[:8]
-                quarantine_name = f"{source.name}.quarantined.{unique_suffix}"
-                dest = qdir / quarantine_name
-
-                # Move file to quarantine
-                shutil.move(str(source), str(dest))
-
-                # Set quarantined file permissions to read-only for owner (0400)
-                try:
-                    os.chmod(dest, 0o400)
-                except (OSError, PermissionError):
-                    # File was moved but permission change failed - still counts as success
-                    pass
-
-                successfully_quarantined.append(file_path)
-
-            except PermissionError as e:
-                failed_files.append((file_path, f"Permission denied: {e}"))
-            except shutil.Error as e:
-                failed_files.append((file_path, f"Move failed: {e}"))
-            except OSError as e:
-                failed_files.append((file_path, f"OS error: {e}"))
-            except Exception as e:
-                failed_files.append((file_path, f"Unexpected error: {e}"))
-
-        return (successfully_quarantined, failed_files)
+        self._log_manager.add_entry(entry)

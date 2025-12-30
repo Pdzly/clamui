@@ -25,6 +25,7 @@ class SchedulerBackend(Enum):
 
 class ScheduleFrequency(Enum):
     """Schedule frequency options."""
+    HOURLY = "hourly"
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
@@ -350,7 +351,10 @@ class Scheduler:
 
         time_str = f"{hour:02d}:{minute:02d}:00"
 
-        if frequency == ScheduleFrequency.DAILY:
+        if frequency == ScheduleFrequency.HOURLY:
+            # Run at minute 0 of every hour
+            return "*-*-* *:00:00"
+        elif frequency == ScheduleFrequency.DAILY:
             return f"*-*-* {time_str}"
         elif frequency == ScheduleFrequency.WEEKLY:
             # Convert day_of_week (0=Monday) to systemd format
@@ -394,7 +398,10 @@ class Scheduler:
             # Default to 2:00 AM if invalid
             hour, minute = 2, 0
 
-        if frequency == ScheduleFrequency.DAILY:
+        if frequency == ScheduleFrequency.HOURLY:
+            # Run at minute 0 of every hour: 0 * * * *
+            return "0 * * * *"
+        elif frequency == ScheduleFrequency.DAILY:
             # minute hour * * *
             return f"{minute} {hour} * * *"
         elif frequency == ScheduleFrequency.WEEKLY:

@@ -5,6 +5,7 @@ Preferences window for ClamUI with ClamAV configuration settings.
 
 import threading
 import time
+from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -19,6 +20,49 @@ from src.core.clamav_config import (
     backup_config,
 )
 from src.core.scheduler import Scheduler, ScheduleFrequency
+from src.core.scanner import validate_pattern
+
+
+# Preset exclusion templates for common development directories
+# These are directory patterns commonly excluded from scans for performance
+PRESET_EXCLUSIONS = [
+    {
+        "pattern": "node_modules",
+        "type": "directory",
+        "enabled": True,
+        "description": "Node.js dependencies"
+    },
+    {
+        "pattern": ".git",
+        "type": "directory",
+        "enabled": True,
+        "description": "Git repository data"
+    },
+    {
+        "pattern": ".venv",
+        "type": "directory",
+        "enabled": True,
+        "description": "Python virtual environment"
+    },
+    {
+        "pattern": "build",
+        "type": "directory",
+        "enabled": True,
+        "description": "Build output directory"
+    },
+    {
+        "pattern": "dist",
+        "type": "directory",
+        "enabled": True,
+        "description": "Distribution output directory"
+    },
+    {
+        "pattern": "__pycache__",
+        "type": "directory",
+        "enabled": True,
+        "description": "Python bytecode cache"
+    },
+]
 
 
 class PreferencesWindow(Adw.PreferencesWindow):
@@ -85,6 +129,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Load configurations and populate form fields
         self._load_configs()
 
+        # Populate scheduled scan fields from saved settings
+        self._populate_scheduled_fields()
+
     def _setup_ui(self):
         """Set up the preferences window UI layout."""
         # Create Database Updates page (freshclam.conf)
@@ -95,6 +142,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # Create Scheduled Scans page
         self._create_scheduled_scans_page()
+
+        # Create Exclusions page (scan exclusion patterns)
+        self._create_exclusions_page()
 
         # Create Save & Apply page
         self._create_save_page()
@@ -416,87 +466,187 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _create_scanner_page(self):
         """
         Create the Scanner Settings page for clamd.conf settings.
-
-        If clamd.conf doesn't exist, shows an informational status page
-        instead of the settings. This handles systems without clamd installed.
         """
-        import os
-
         page = Adw.PreferencesPage()
         page.set_title("Scanner Settings")
-        page.set_icon_name("system-search-symbolic")
+        page.set_icon_name("document-properties-symbolic")
 
-        # Check if clamd.conf exists
-        clamd_conf_path = "/etc/clamav/clamd.conf"
-        if not os.path.exists(clamd_conf_path):
+        # Check if clamd.conf exists and create appropriate content
+        try:
+            with open(self._clamd_conf_path, 'r') as f:
+                self._clamd_available = True
+        except FileNotFoundError:
             self._clamd_available = False
-            # Show status group for missing config
-            self._create_scanner_unavailable_group(page)
-        else:
-            self._clamd_available = True
 
-            # Create file location group
-            self._create_file_location_group(
-                page,
-                "Configuration File",
-                self._clamd_conf_path,
-                "clamd.conf location"
-            )
+        # Create file location group
+        self._create_file_location_group(
+            page,
+            "Configuration File",
+            self._clamd_conf_path,
+            "clamd.conf location"
+        )
+
+        if self._clamd_available:
+            # Create scanning group
+            self._create_scanning_group(page)
+
+            # Create performance group
+            self._create_performance_group(page)
 
             # Create logging group
-            self._create_scanner_logging_group(page)
-
-            # Create limits group
-            self._create_scanner_limits_group(page)
-
-            # Create scan options group
-            self._create_scanner_options_group(page)
+            self._create_logging_group(page)
+        else:
+            # Show message that clamd.conf is not available
+            group = Adw.PreferencesGroup()
+            group.set_title("Configuration Status")
+            row = Adw.ActionRow()
+            row.set_title("ClamD Configuration")
+            row.set_subtitle("clamd.conf not found - Scanner settings unavailable")
+            group.add(row)
+            page.add(group)
 
         self.add(page)
 
-    def _create_scanner_unavailable_group(self, page: Adw.PreferencesPage):
+    def _create_scanning_group(self, page: Adw.PreferencesPage):
         """
-        Create a status group showing that clamd.conf is not available.
+        Create the Scanning preferences group for clamd.conf.
+
+        Contains settings for:
+        - ScanPE: Scan PE files
+        - ScanELF: Scan ELF files
+        - ScanOLE2: Scan OLE2 files
+        - ScanPDF: Scan PDF files
+        - ScanHTML: Scan HTML files
+        - ScanArchive: Scan archive files
 
         Args:
             page: The preferences page to add the group to
         """
         group = Adw.PreferencesGroup()
-        group.set_title("Scanner Configuration")
-        group.set_description("ClamAV daemon configuration")
+        group.set_title("File Type Scanning")
+        group.set_description("Enable or disable scanning for specific file types")
+        group.set_header_suffix(self._create_permission_indicator())
 
-        # Create an ActionRow to show the unavailable message
-        status_row = Adw.ActionRow()
-        status_row.set_title("ClamAV Daemon Not Configured")
-        status_row.set_subtitle(
-            "The clamd.conf file was not found. Install clamav-daemon "
-            "to enable scanner configuration."
-        )
-        status_row.set_icon_name("dialog-information-symbolic")
-        status_row.add_css_class("property")
+        # ScanPE switch
+        scan_pe_row = Adw.SwitchRow()
+        scan_pe_row.set_title("Scan PE Files")
+        scan_pe_row.set_subtitle("Scan Windows/DOS executable files")
+        self._clamd_widgets['ScanPE'] = scan_pe_row
+        group.add(scan_pe_row)
 
-        group.add(status_row)
+        # ScanELF switch
+        scan_elf_row = Adw.SwitchRow()
+        scan_elf_row.set_title("Scan ELF Files")
+        scan_elf_row.set_subtitle("Scan Unix/Linux executable files")
+        self._clamd_widgets['ScanELF'] = scan_elf_row
+        group.add(scan_elf_row)
+
+        # ScanOLE2 switch
+        scan_ole2_row = Adw.SwitchRow()
+        scan_ole2_row.set_title("Scan OLE2 Files")
+        scan_ole2_row.set_subtitle("Scan Microsoft Office documents")
+        self._clamd_widgets['ScanOLE2'] = scan_ole2_row
+        group.add(scan_ole2_row)
+
+        # ScanPDF switch
+        scan_pdf_row = Adw.SwitchRow()
+        scan_pdf_row.set_title("Scan PDF Files")
+        scan_pdf_row.set_subtitle("Scan PDF documents")
+        self._clamd_widgets['ScanPDF'] = scan_pdf_row
+        group.add(scan_pdf_row)
+
+        # ScanHTML switch
+        scan_html_row = Adw.SwitchRow()
+        scan_html_row.set_title("Scan HTML Files")
+        scan_html_row.set_subtitle("Scan HTML documents")
+        self._clamd_widgets['ScanHTML'] = scan_html_row
+        group.add(scan_html_row)
+
+        # ScanArchive switch
+        scan_archive_row = Adw.SwitchRow()
+        scan_archive_row.set_title("Scan Archive Files")
+        scan_archive_row.set_subtitle("Scan compressed archives (ZIP, RAR, etc.)")
+        self._clamd_widgets['ScanArchive'] = scan_archive_row
+        group.add(scan_archive_row)
+
         page.add(group)
 
-    def _create_scanner_logging_group(self, page: Adw.PreferencesPage):
+    def _create_performance_group(self, page: Adw.PreferencesPage):
+        """
+        Create the Performance preferences group for clamd.conf.
+
+        Contains settings for:
+        - MaxFileSize: Maximum file size to scan
+        - MaxScanSize: Maximum total scan size
+        - MaxRecursion: Maximum recursion depth for archives
+        - MaxFiles: Maximum number of files to scan in an archive
+
+        Args:
+            page: The preferences page to add the group to
+        """
+        group = Adw.PreferencesGroup()
+        group.set_title("Performance & Limits")
+        group.set_description("Configure scanning limits and performance settings")
+        group.set_header_suffix(self._create_permission_indicator())
+
+        # MaxFileSize spin row (in MB, 0-4000)
+        max_file_size_row = Adw.SpinRow.new_with_range(0, 4000, 1)
+        max_file_size_row.set_title("Max File Size (MB)")
+        max_file_size_row.set_subtitle("Maximum file size to scan (0 = unlimited)")
+        max_file_size_row.set_numeric(True)
+        max_file_size_row.set_snap_to_ticks(True)
+        self._clamd_widgets['MaxFileSize'] = max_file_size_row
+        group.add(max_file_size_row)
+
+        # MaxScanSize spin row (in MB, 0-4000)
+        max_scan_size_row = Adw.SpinRow.new_with_range(0, 4000, 1)
+        max_scan_size_row.set_title("Max Scan Size (MB)")
+        max_scan_size_row.set_subtitle("Maximum total scan size (0 = unlimited)")
+        max_scan_size_row.set_numeric(True)
+        max_scan_size_row.set_snap_to_ticks(True)
+        self._clamd_widgets['MaxScanSize'] = max_scan_size_row
+        group.add(max_scan_size_row)
+
+        # MaxRecursion spin row (0-255)
+        max_recursion_row = Adw.SpinRow.new_with_range(0, 255, 1)
+        max_recursion_row.set_title("Max Archive Recursion")
+        max_recursion_row.set_subtitle("Maximum recursion depth for archives")
+        max_recursion_row.set_numeric(True)
+        max_recursion_row.set_snap_to_ticks(True)
+        self._clamd_widgets['MaxRecursion'] = max_recursion_row
+        group.add(max_recursion_row)
+
+        # MaxFiles spin row (0-1000000)
+        max_files_row = Adw.SpinRow.new_with_range(0, 1000000, 1)
+        max_files_row.set_title("Max Files in Archive")
+        max_files_row.set_subtitle("Maximum number of files to scan in archive (0 = unlimited)")
+        max_files_row.set_numeric(True)
+        max_files_row.set_snap_to_ticks(True)
+        self._clamd_widgets['MaxFiles'] = max_files_row
+        group.add(max_files_row)
+
+        page.add(group)
+
+    def _create_logging_group(self, page: Adw.PreferencesPage):
         """
         Create the Logging preferences group for clamd.conf.
 
         Contains settings for:
-        - LogFile: Scanner log file path
+        - LogFile: Log file path
         - LogVerbose: Enable verbose logging
+        - LogSyslog: Enable syslog logging
 
         Args:
             page: The preferences page to add the group to
         """
         group = Adw.PreferencesGroup()
         group.set_title("Logging")
-        group.set_description("Configure scanner logging settings")
+        group.set_description("Configure logging options for the scanner")
         group.set_header_suffix(self._create_permission_indicator())
 
         # LogFile entry row
         log_file_row = Adw.EntryRow()
-        log_file_row.set_title("Log File")
+        log_file_row.set_title("Log File Path")
         log_file_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         log_file_row.set_show_apply_button(False)
         # Add document icon as prefix
@@ -506,1159 +656,733 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._clamd_widgets['LogFile'] = log_file_row
         group.add(log_file_row)
 
-        # LogVerbose switch row
+        # LogVerbose switch
         log_verbose_row = Adw.SwitchRow()
         log_verbose_row.set_title("Verbose Logging")
-        log_verbose_row.set_subtitle("Enable detailed logging for scanner operations")
+        log_verbose_row.set_subtitle("Enable detailed scanner logging")
         self._clamd_widgets['LogVerbose'] = log_verbose_row
         group.add(log_verbose_row)
 
-        page.add(group)
-
-    def _create_scanner_limits_group(self, page: Adw.PreferencesPage):
-        """
-        Create the Scan Limits preferences group for clamd.conf.
-
-        Contains settings for:
-        - MaxScanSize: Maximum data size to scan (e.g., 100M)
-        - MaxFileSize: Maximum file size to scan (e.g., 25M)
-        - MaxRecursion: Maximum archive recursion depth
-        - MaxFiles: Maximum files to scan in archive
-        - MaxThreads: Maximum scanning threads
-
-        Args:
-            page: The preferences page to add the group to
-        """
-        group = Adw.PreferencesGroup()
-        group.set_title("Scan Limits")
-        group.set_description("Configure maximum sizes and resource limits")
-        group.set_header_suffix(self._create_permission_indicator())
-
-        # MaxScanSize entry row (size with suffix like 100M)
-        max_scan_size_row = Adw.EntryRow()
-        max_scan_size_row.set_title("Maximum Scan Size")
-        max_scan_size_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
-        max_scan_size_row.set_show_apply_button(False)
-        # Add size icon as prefix
-        scan_size_icon = Gtk.Image.new_from_icon_name("drive-harddisk-symbolic")
-        scan_size_icon.set_margin_start(6)
-        max_scan_size_row.add_prefix(scan_size_icon)
-        self._clamd_widgets['MaxScanSize'] = max_scan_size_row
-        group.add(max_scan_size_row)
-
-        # MaxFileSize entry row (size with suffix like 25M)
-        max_file_size_row = Adw.EntryRow()
-        max_file_size_row.set_title("Maximum File Size")
-        max_file_size_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
-        max_file_size_row.set_show_apply_button(False)
-        # Add file icon as prefix
-        file_size_icon = Gtk.Image.new_from_icon_name("document-properties-symbolic")
-        file_size_icon.set_margin_start(6)
-        max_file_size_row.add_prefix(file_size_icon)
-        self._clamd_widgets['MaxFileSize'] = max_file_size_row
-        group.add(max_file_size_row)
-
-        # MaxRecursion spin row (depth 0-100)
-        max_recursion_row = Adw.SpinRow.new_with_range(0, 100, 1)
-        max_recursion_row.set_title("Maximum Recursion Depth")
-        max_recursion_row.set_subtitle("Maximum depth for archive extraction")
-        max_recursion_row.set_numeric(True)
-        max_recursion_row.set_snap_to_ticks(True)
-        self._clamd_widgets['MaxRecursion'] = max_recursion_row
-        group.add(max_recursion_row)
-
-        # MaxFiles spin row (0-100000)
-        max_files_row = Adw.SpinRow.new_with_range(0, 100000, 100)
-        max_files_row.set_title("Maximum Files in Archive")
-        max_files_row.set_subtitle("Maximum number of files to scan in archive")
-        max_files_row.set_numeric(True)
-        max_files_row.set_snap_to_ticks(True)
-        self._clamd_widgets['MaxFiles'] = max_files_row
-        group.add(max_files_row)
-
-        # MaxThreads spin row (1-256)
-        max_threads_row = Adw.SpinRow.new_with_range(1, 256, 1)
-        max_threads_row.set_title("Maximum Threads")
-        max_threads_row.set_subtitle("Maximum number of scanning threads")
-        max_threads_row.set_numeric(True)
-        max_threads_row.set_snap_to_ticks(True)
-        self._clamd_widgets['MaxThreads'] = max_threads_row
-        group.add(max_threads_row)
-
-        page.add(group)
-
-    def _create_scanner_options_group(self, page: Adw.PreferencesPage):
-        """
-        Create the Scan Options preferences group for clamd.conf.
-
-        Contains settings for:
-        - ScanArchive: Scan inside archives
-        - ScanPDF: Scan PDF files
-        - DetectPUA: Detect potentially unwanted applications
-
-        Args:
-            page: The preferences page to add the group to
-        """
-        group = Adw.PreferencesGroup()
-        group.set_title("Scan Options")
-        group.set_description("Configure what the scanner checks")
-        group.set_header_suffix(self._create_permission_indicator())
-
-        # ScanArchive switch row
-        scan_archive_row = Adw.SwitchRow()
-        scan_archive_row.set_title("Scan Archives")
-        scan_archive_row.set_subtitle("Scan inside archive files (ZIP, RAR, etc.)")
-        self._clamd_widgets['ScanArchive'] = scan_archive_row
-        group.add(scan_archive_row)
-
-        # ScanPDF switch row
-        scan_pdf_row = Adw.SwitchRow()
-        scan_pdf_row.set_title("Scan PDF Files")
-        scan_pdf_row.set_subtitle("Scan inside PDF documents for embedded threats")
-        self._clamd_widgets['ScanPDF'] = scan_pdf_row
-        group.add(scan_pdf_row)
-
-        # DetectPUA switch row
-        detect_pua_row = Adw.SwitchRow()
-        detect_pua_row.set_title("Detect PUA")
-        detect_pua_row.set_subtitle("Detect potentially unwanted applications")
-        self._clamd_widgets['DetectPUA'] = detect_pua_row
-        group.add(detect_pua_row)
+        # LogSyslog switch
+        log_syslog_row = Adw.SwitchRow()
+        log_syslog_row.set_title("Syslog Logging")
+        log_syslog_row.set_subtitle("Send log messages to system log")
+        self._clamd_widgets['LogSyslog'] = log_syslog_row
+        group.add(log_syslog_row)
 
         page.add(group)
 
     def _create_scheduled_scans_page(self):
         """
-        Create the Scheduled Scans page for automatic scanning configuration.
+        Create the Scheduled Scans configuration page.
 
-        Contains settings for:
+        Allows users to:
         - Enable/disable scheduled scans
-        - Schedule frequency (daily, weekly, monthly)
-        - Time of day for scans
-        - Day of week/month selection
-        - Target directories to scan
-        - Battery skip option
-        - Auto-quarantine option
+        - Set scan frequency (hourly, daily, weekly, monthly)
+        - Configure scan paths
         """
-        import os
-
         page = Adw.PreferencesPage()
         page.set_title("Scheduled Scans")
-        page.set_icon_name("alarm-symbolic")
+        page.set_icon_name("media-playback-start-symbolic")
 
-        # Create scheduler status group
-        self._create_scheduler_status_group(page)
-
-        # Create schedule configuration group
-        self._create_schedule_config_group(page)
-
-        # Create scan targets group
-        self._create_scan_targets_group(page)
-
-        # Create scan options group
-        self._create_scheduled_options_group(page)
-
-        self.add(page)
-
-    def _create_scheduler_status_group(self, page: Adw.PreferencesPage):
-        """
-        Create the scheduler status and enable/disable group.
-
-        Shows the current scheduler backend (systemd/cron) and provides
-        a switch to enable or disable scheduled scanning.
-
-        Args:
-            page: The preferences page to add the group to
-        """
+        # Scheduled scans enabled group
         group = Adw.PreferencesGroup()
-        group.set_title("Scheduled Scanning")
-        group.set_description("Automatically scan your system at scheduled times")
-
-        # Backend status row
-        backend_row = Adw.ActionRow()
-        backend_row.set_title("Scheduler Backend")
-
-        if self._scheduler.is_available:
-            backend_name = self._scheduler.get_backend_name()
-            backend_row.set_subtitle(f"Using {backend_name}")
-            backend_row.set_icon_name("emblem-ok-symbolic")
-        else:
-            backend_row.set_subtitle("No scheduler available (install systemd or cron)")
-            backend_row.set_icon_name("dialog-warning-symbolic")
-            backend_row.add_css_class("warning")
-
-        backend_row.add_css_class("property")
-        group.add(backend_row)
+        group.set_title("Scheduled Scans Configuration")
+        group.set_description("Configure automatic virus scanning")
 
         # Enable scheduled scans switch
-        enable_row = Adw.SwitchRow()
-        enable_row.set_title("Enable Scheduled Scans")
-        enable_row.set_subtitle("Run antivirus scans automatically at scheduled times")
-        enable_row.set_sensitive(self._scheduler.is_available)
-        self._scheduled_widgets['enabled'] = enable_row
-        group.add(enable_row)
+        enable_scheduled_row = Adw.SwitchRow()
+        enable_scheduled_row.set_title("Enable Scheduled Scans")
+        enable_scheduled_row.set_subtitle("Run automatic scans at specified intervals")
+        self._scheduled_widgets['enabled'] = enable_scheduled_row
+        group.add(enable_scheduled_row)
 
-        page.add(group)
-
-    def _create_schedule_config_group(self, page: Adw.PreferencesPage):
-        """
-        Create the schedule configuration group.
-
-        Contains settings for:
-        - Frequency (daily, weekly, monthly)
-        - Time of day (HH:MM)
-        - Day of week (for weekly scans)
-        - Day of month (for monthly scans)
-
-        Args:
-            page: The preferences page to add the group to
-        """
-        group = Adw.PreferencesGroup()
-        group.set_title("Schedule Configuration")
-        group.set_description("Configure when scheduled scans should run")
-
-        # Frequency combo row
+        # Schedule frequency dropdown
         frequency_row = Adw.ComboRow()
-        frequency_row.set_title("Frequency")
-        frequency_row.set_subtitle("How often to run scheduled scans")
-
-        # Create string list for frequency options
         frequency_model = Gtk.StringList()
+        frequency_model.append("Hourly")
         frequency_model.append("Daily")
         frequency_model.append("Weekly")
         frequency_model.append("Monthly")
         frequency_row.set_model(frequency_model)
-        frequency_row.connect("notify::selected", self._on_frequency_changed)
+        frequency_row.set_selected(1)  # Default to Daily
+        frequency_row.set_title("Scan Frequency")
         self._scheduled_widgets['frequency'] = frequency_row
         group.add(frequency_row)
 
-        # Time entry row
+        # Time picker (schedule_time)
         time_row = Adw.EntryRow()
-        time_row.set_title("Time")
+        time_row.set_title("Scan Time (24-hour format, e.g. 02:00)")
         time_row.set_text("02:00")
-        time_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
-        time_row.set_show_apply_button(False)
-
-        # Add clock icon as prefix
-        time_icon = Gtk.Image.new_from_icon_name("preferences-system-time-symbolic")
-        time_icon.set_margin_start(6)
-        time_row.add_prefix(time_icon)
-
-        # Add hint label as suffix
-        time_hint = Gtk.Label()
-        time_hint.set_text("HH:MM (24-hour)")
-        time_hint.add_css_class("dim-label")
-        time_hint.set_margin_end(6)
-        time_row.add_suffix(time_hint)
-
         self._scheduled_widgets['time'] = time_row
         group.add(time_row)
 
-        # Day of week combo row (for weekly scans)
+        # Day of week dropdown (for weekly scans)
         day_of_week_row = Adw.ComboRow()
+        day_of_week_model = Gtk.StringList()
+        for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]:
+            day_of_week_model.append(day)
+        day_of_week_row.set_model(day_of_week_model)
+        day_of_week_row.set_selected(0)  # Default to Monday
         day_of_week_row.set_title("Day of Week")
-        day_of_week_row.set_subtitle("Which day to run weekly scans")
-
-        # Create string list for days
-        days_model = Gtk.StringList()
-        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        for day in days:
-            days_model.append(day)
-        day_of_week_row.set_model(days_model)
-        day_of_week_row.set_visible(False)  # Hidden by default (show only for weekly)
+        day_of_week_row.set_subtitle("For weekly scans")
         self._scheduled_widgets['day_of_week'] = day_of_week_row
         group.add(day_of_week_row)
 
-        # Day of month spin row (for monthly scans)
-        day_of_month_row = Adw.SpinRow.new_with_range(1, 28, 1)
+        # Day of month spinner (for monthly scans)
+        day_of_month_row = Adw.SpinRow()
         day_of_month_row.set_title("Day of Month")
-        day_of_month_row.set_subtitle("Which day to run monthly scans (1-28)")
-        day_of_month_row.set_numeric(True)
-        day_of_month_row.set_snap_to_ticks(True)
-        day_of_month_row.set_visible(False)  # Hidden by default (show only for monthly)
+        day_of_month_row.set_subtitle("For monthly scans (1-28)")
+        adjustment = Gtk.Adjustment(value=1, lower=1, upper=28, step_increment=1, page_increment=5, page_size=0)
+        day_of_month_row.set_adjustment(adjustment)
         self._scheduled_widgets['day_of_month'] = day_of_month_row
         group.add(day_of_month_row)
 
-        page.add(group)
-
-    def _on_frequency_changed(self, combo_row, param_spec):
-        """
-        Handle frequency selection change.
-
-        Shows/hides the day of week or day of month widgets based on
-        the selected frequency.
-
-        Args:
-            combo_row: The Adw.ComboRow that changed
-            param_spec: The parameter specification (unused)
-        """
-        selected = combo_row.get_selected()
-
-        day_of_week_row = self._scheduled_widgets.get('day_of_week')
-        day_of_month_row = self._scheduled_widgets.get('day_of_month')
-
-        if day_of_week_row:
-            # Show only for weekly (index 1)
-            day_of_week_row.set_visible(selected == 1)
-
-        if day_of_month_row:
-            # Show only for monthly (index 2)
-            day_of_month_row.set_visible(selected == 2)
-
-    def _create_scan_targets_group(self, page: Adw.PreferencesPage):
-        """
-        Create the scan targets configuration group.
-
-        Allows users to add/remove directories to scan during scheduled scans.
-
-        Args:
-            page: The preferences page to add the group to
-        """
-        group = Adw.PreferencesGroup()
-        group.set_title("Scan Targets")
-        group.set_description("Directories to scan during scheduled scans")
-
-        # Targets list box
-        self._targets_listbox = Gtk.ListBox()
-        self._targets_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        self._targets_listbox.add_css_class("boxed-list")
-
-        # Placeholder row for empty list
-        self._empty_targets_row = Adw.ActionRow()
-        self._empty_targets_row.set_title("No targets configured")
-        self._empty_targets_row.set_subtitle("Add directories to scan using the button below")
-        self._empty_targets_row.set_icon_name("folder-symbolic")
-        self._empty_targets_row.add_css_class("property")
-        self._targets_listbox.append(self._empty_targets_row)
-
-        group.add(self._targets_listbox)
-
-        # Add target button row
-        add_row = Adw.ActionRow()
-        add_row.set_title("Add Target Directory")
-        add_row.set_subtitle("Select a directory to include in scheduled scans")
-        add_row.set_icon_name("list-add-symbolic")
-        add_row.set_activatable(True)
-        add_row.connect("activated", self._on_add_target_clicked)
-
-        # Add chevron icon as suffix
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
-        chevron.add_css_class("dim-label")
-        add_row.add_suffix(chevron)
-
-        group.add(add_row)
-
-        # Store widget references
-        self._scheduled_widgets['targets_listbox'] = self._targets_listbox
-
-        page.add(group)
-
-    def _on_add_target_clicked(self, row):
-        """
-        Handle add target button click.
-
-        Opens a file chooser dialog to select a directory to add to
-        the scan targets list.
-
-        Args:
-            row: The ActionRow that was clicked
-        """
-        dialog = Gtk.FileDialog()
-        dialog.set_title("Select Directory to Scan")
-        dialog.set_modal(True)
-
-        # We need to select folders
-        dialog.select_folder(self, None, self._on_target_folder_selected)
-
-    def _on_target_folder_selected(self, dialog, result):
-        """
-        Handle folder selection result.
-
-        Adds the selected folder to the targets list.
-
-        Args:
-            dialog: The file dialog
-            result: The async result
-        """
-        try:
-            folder = dialog.select_folder_finish(result)
-            if folder:
-                path = folder.get_path()
-                if path:
-                    self._add_target_to_list(path)
-        except GLib.Error:
-            # User cancelled the dialog
-            pass
-
-    def _add_target_to_list(self, path: str):
-        """
-        Add a target directory to the list.
-
-        Creates a new row for the target with a remove button.
-
-        Args:
-            path: The directory path to add
-        """
-        import os
-
-        # Check if already exists
-        for row in self._get_target_rows():
-            if hasattr(row, 'target_path') and row.target_path == path:
-                return  # Already in list
-
-        # Hide empty placeholder if visible
-        self._empty_targets_row.set_visible(False)
-
-        # Create new target row
-        target_row = Adw.ActionRow()
-        target_row.set_title(os.path.basename(path) or path)
-        target_row.set_subtitle(path)
-        target_row.set_subtitle_selectable(True)
-        target_row.target_path = path  # Store path for later retrieval
-
-        # Add folder icon as prefix
-        folder_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
-        folder_icon.set_margin_start(6)
-        target_row.add_prefix(folder_icon)
-
-        # Add warning if directory doesn't exist
-        if not os.path.isdir(path):
-            warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
-            warning_icon.set_tooltip_text("Directory does not exist")
-            warning_icon.add_css_class("warning")
-            target_row.add_prefix(warning_icon)
-
-        # Add remove button as suffix
-        remove_button = Gtk.Button()
-        remove_button.set_icon_name("user-trash-symbolic")
-        remove_button.set_valign(Gtk.Align.CENTER)
-        remove_button.add_css_class("flat")
-        remove_button.add_css_class("circular")
-        remove_button.set_tooltip_text("Remove from scan targets")
-        remove_button.connect("clicked", lambda btn: self._remove_target_row(target_row))
-        target_row.add_suffix(remove_button)
-
-        # Insert before the empty row
-        self._targets_listbox.insert(target_row, 0)
-
-    def _remove_target_row(self, row):
-        """
-        Remove a target row from the list.
-
-        Args:
-            row: The row to remove
-        """
-        self._targets_listbox.remove(row)
-
-        # Show empty placeholder if no targets left
-        if not self._get_target_rows():
-            self._empty_targets_row.set_visible(True)
-
-    def _get_target_rows(self):
-        """
-        Get all target rows (excluding the empty placeholder).
-
-        Returns:
-            List of target rows
-        """
-        rows = []
-        child = self._targets_listbox.get_first_child()
-        while child:
-            if hasattr(child, 'target_path'):
-                rows.append(child)
-            child = child.get_next_sibling()
-        return rows
-
-    def _get_targets_list(self) -> list:
-        """
-        Get the list of target paths from the UI.
-
-        Returns:
-            List of directory path strings
-        """
-        return [row.target_path for row in self._get_target_rows()]
-
-    def _create_scheduled_options_group(self, page: Adw.PreferencesPage):
-        """
-        Create the scheduled scan options group.
-
-        Contains settings for:
-        - Skip scan when on battery power
-        - Automatically quarantine detected threats
-
-        Args:
-            page: The preferences page to add the group to
-        """
-        group = Adw.PreferencesGroup()
-        group.set_title("Scan Options")
-        group.set_description("Configure scheduled scan behavior")
+        # Scan targets entry (schedule_targets)
+        targets_row = Adw.EntryRow()
+        targets_row.set_title("Scan Targets (comma-separated paths)")
+        targets_row.set_text(str(Path.home()))
+        self._scheduled_widgets['targets'] = targets_row
+        group.add(targets_row)
 
         # Skip on battery switch
-        battery_row = Adw.SwitchRow()
-        battery_row.set_title("Skip When on Battery")
-        battery_row.set_subtitle("Don't run scheduled scans when running on battery power")
-        battery_row.set_active(True)  # Default to True
-        self._scheduled_widgets['skip_on_battery'] = battery_row
-        group.add(battery_row)
+        skip_battery_row = Adw.SwitchRow()
+        skip_battery_row.set_title("Skip on Battery")
+        skip_battery_row.set_subtitle("Don't run scheduled scans when on battery power")
+        skip_battery_row.set_active(True)
+        self._scheduled_widgets['skip_on_battery'] = skip_battery_row
+        group.add(skip_battery_row)
 
         # Auto-quarantine switch
-        quarantine_row = Adw.SwitchRow()
-        quarantine_row.set_title("Auto-Quarantine Threats")
-        quarantine_row.set_subtitle("Automatically move detected threats to quarantine")
-        quarantine_row.set_active(False)  # Default to False for safety
-        self._scheduled_widgets['auto_quarantine'] = quarantine_row
-        group.add(quarantine_row)
+        auto_quarantine_row = Adw.SwitchRow()
+        auto_quarantine_row.set_title("Auto-Quarantine")
+        auto_quarantine_row.set_subtitle("Automatically quarantine detected threats")
+        auto_quarantine_row.set_active(False)
+        self._scheduled_widgets['auto_quarantine'] = auto_quarantine_row
+        group.add(auto_quarantine_row)
 
         page.add(group)
+        self.add(page)
+
+    def _create_exclusions_page(self):
+        """
+        Create the Exclusions page for scan exclusion patterns.
+
+        Allows users to:
+        - View preset exclusion patterns
+        - Add custom exclusion patterns
+        - Enable/disable individual exclusions
+        - Remove custom exclusions
+        """
+        page = Adw.PreferencesPage()
+        page.set_title("Exclusions")
+        page.set_icon_name("emblem-photos-symbolic")
+
+        # Preset exclusions group
+        preset_group = Adw.PreferencesGroup()
+        preset_group.set_title("Preset Exclusions")
+        preset_group.set_description("Common directories and patterns to exclude from scanning")
+
+        for preset in PRESET_EXCLUSIONS:
+            # Create a row for each preset
+            row = Adw.SwitchRow()
+            row.set_title(preset["description"])
+            row.set_subtitle(preset["pattern"])
+            row.set_active(preset["enabled"])
+            preset_group.add(row)
+
+        page.add(preset_group)
+
+        # Custom exclusions group
+        custom_group = Adw.PreferencesGroup()
+        custom_group.set_title("Custom Exclusions")
+        custom_group.set_description("Add your own exclusion patterns")
+
+        # Custom exclusion entry row
+        custom_entry_row = Adw.EntryRow()
+        custom_entry_row.set_title("Add Pattern (e.g., /path/to/exclude or *.tmp)")
+        custom_entry_row.set_show_apply_button(False)
+
+        # Add button for custom exclusions
+        add_button = Gtk.Button()
+        add_button.set_label("Add")
+        add_button.set_valign(Gtk.Align.CENTER)
+        add_button.set_tooltip_text("Add custom exclusion pattern")
+        custom_entry_row.add_suffix(add_button)
+
+        custom_group.add(custom_entry_row)
+        page.add(custom_group)
+
+        self.add(page)
 
     def _create_save_page(self):
         """
-        Create the Save & Apply page for saving configuration changes.
+        Create the Save & Apply page.
 
-        Contains:
-        - Status banner for save feedback
-        - Save button to trigger configuration write
-        - Information about restart requirements
+        This page provides options to save configuration changes
+        and view the current configuration status.
         """
         page = Adw.PreferencesPage()
         page.set_title("Save & Apply")
         page.set_icon_name("document-save-symbolic")
 
-        # Status banner group
+        # Configuration status group
         status_group = Adw.PreferencesGroup()
+        status_group.set_title("Configuration Status")
 
-        # Status banner for save feedback
-        self._status_banner = Adw.Banner()
-        self._status_banner.set_revealed(False)
+        # Status indicator row
+        status_row = Adw.ActionRow()
+        status_row.set_title("Current Status")
+        status_row.set_subtitle("Ready")
 
-        # Wrap banner in a clamp for proper sizing
-        banner_clamp = Adw.Clamp()
-        banner_clamp.set_maximum_size(600)
-        banner_clamp.set_child(self._status_banner)
+        # Status indicator widget
+        status_indicator = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+        status_indicator.add_css_class("success")
+        status_row.add_suffix(status_indicator)
 
-        status_group.add(banner_clamp)
+        status_group.add(status_row)
         page.add(status_group)
 
-        # Save changes group
-        save_group = Adw.PreferencesGroup()
-        save_group.set_title("Apply Changes")
-        save_group.set_description(
-            "Save your configuration changes. This requires administrator "
-            "privileges to write to system configuration files."
-        )
-
-        # Information row about restart
-        info_row = Adw.ActionRow()
-        info_row.set_title("Service Restart Required")
-        info_row.set_subtitle(
-            "After saving, restart clamav-freshclam or clamav-daemon "
-            "for changes to take effect"
-        )
-        info_row.set_icon_name("dialog-information-symbolic")
-        info_row.add_css_class("property")
-        save_group.add(info_row)
-
-        # Save button row
-        save_row = Adw.ActionRow()
-        save_row.set_title("Save Configuration")
-        save_row.set_subtitle("Write changes to ClamAV configuration files")
-        save_row.set_icon_name("document-save-symbolic")
+        # Save & apply button group
+        button_group = Adw.PreferencesGroup()
+        button_group.set_title("Apply Changes")
+        button_group.set_description("Save configuration changes to ClamAV")
 
         # Save button
-        self._save_button = Gtk.Button()
-        self._save_button.set_label("Save")
-        self._save_button.set_valign(Gtk.Align.CENTER)
-        self._save_button.add_css_class("suggested-action")
-        self._save_button.connect("clicked", self._on_save_clicked)
+        save_button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        save_button_row.set_margin_top(12)
+        save_button_row.set_margin_bottom(12)
+        save_button_row.set_margin_start(12)
+        save_button_row.set_margin_end(12)
 
-        # Spinner for save progress (hidden by default)
-        self._save_spinner = Gtk.Spinner()
-        self._save_spinner.set_visible(False)
+        save_button = Gtk.Button()
+        save_button.set_label("Save & Apply")
+        save_button.add_css_class("suggested-action")
+        save_button.set_hexpand(True)
+        save_button.connect("clicked", self._on_save_clicked)
+        save_button_row.append(save_button)
 
-        # Button box
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        button_box.set_valign(Gtk.Align.CENTER)
-        button_box.append(self._save_spinner)
-        button_box.append(self._save_button)
+        button_group.add(save_button_row)
+        page.add(button_group)
 
-        save_row.add_suffix(button_box)
-        save_group.add(save_row)
-
-        page.add(save_group)
         self.add(page)
-
-    def _on_save_clicked(self, button):
-        """
-        Handle save button click.
-
-        Validates the configuration and saves it with privilege elevation.
-        Shows appropriate feedback for success, error, or cancellation.
-        """
-        if self._is_saving:
-            return
-
-        # Hide any previous banner
-        self._status_banner.set_revealed(False)
-
-        # Start save operation in background thread
-        self._set_saving_state(True)
-
-        thread = threading.Thread(target=self._save_configs_thread, daemon=True)
-        thread.start()
-
-    def _set_saving_state(self, is_saving: bool):
-        """
-        Update UI to reflect saving state.
-
-        Args:
-            is_saving: Whether a save operation is in progress
-        """
-        self._is_saving = is_saving
-
-        if is_saving:
-            self._save_button.set_label("Saving...")
-            self._save_button.set_sensitive(False)
-            self._save_spinner.set_visible(True)
-            self._save_spinner.start()
-        else:
-            self._save_button.set_label("Save")
-            self._save_button.set_sensitive(True)
-            self._save_spinner.stop()
-            self._save_spinner.set_visible(False)
-
-    def _save_configs_thread(self):
-        """
-        Save configuration files in background thread.
-
-        Updates configs from form values, validates them, creates backups,
-        and writes them using pkexec elevation. UI updates are dispatched
-        to the main thread via GLib.idle_add.
-        """
-        errors = []
-        backup_warnings = []
-
-        # Save freshclam.conf if loaded
-        if self._freshclam_config is not None:
-            # Update config from form values
-            GLib.idle_add(self._update_freshclam_config_from_widgets)
-            # Small delay to ensure UI thread processes the update
-            time.sleep(0.05)
-
-            # Validate freshclam config
-            is_valid, validation_errors = validate_config(self._freshclam_config)
-            if not is_valid:
-                errors.extend([f"freshclam.conf: {e}" for e in validation_errors])
-            else:
-                # Create backup before writing
-                backup_success, backup_result = backup_config(self._freshclam_conf_path)
-                if not backup_success:
-                    backup_warnings.append(f"freshclam.conf backup failed: {backup_result}")
-
-                # Write freshclam config
-                success, error = write_config_with_elevation(self._freshclam_config)
-                if not success:
-                    if error == "Authentication cancelled":
-                        GLib.idle_add(self._show_cancelled_banner)
-                        GLib.idle_add(self._set_saving_state, False)
-                        return
-                    errors.append(f"freshclam.conf: {error}")
-
-        # Save clamd.conf if loaded
-        if self._clamd_config is not None and self._clamd_available:
-            # Update config from form values
-            GLib.idle_add(self._update_clamd_config_from_widgets)
-            # Small delay to ensure UI thread processes the update
-            time.sleep(0.05)
-
-            # Validate clamd config
-            is_valid, validation_errors = validate_config(self._clamd_config)
-            if not is_valid:
-                errors.extend([f"clamd.conf: {e}" for e in validation_errors])
-            else:
-                # Create backup before writing
-                backup_success, backup_result = backup_config(self._clamd_conf_path)
-                if not backup_success:
-                    backup_warnings.append(f"clamd.conf backup failed: {backup_result}")
-
-                # Write clamd config
-                success, error = write_config_with_elevation(self._clamd_config)
-                if not success:
-                    if error == "Authentication cancelled":
-                        GLib.idle_add(self._show_cancelled_banner)
-                        GLib.idle_add(self._set_saving_state, False)
-                        return
-                    errors.append(f"clamd.conf: {error}")
-
-        # Save scheduled scan settings (no elevation required)
-        if self._settings_manager is not None:
-            # Reset scheduler error before saving
-            self._scheduler_error = None
-            # Save scheduled settings in UI thread
-            GLib.idle_add(self._save_scheduled_settings)
-            # Small delay to ensure UI thread processes the update
-            time.sleep(0.1)
-            # Check for scheduler errors
-            if self._scheduler_error is not None:
-                errors.append(f"Schedule: {self._scheduler_error}")
-
-        # Show result in UI thread
-        if errors:
-            GLib.idle_add(self._show_error_banner, "; ".join(errors))
-        elif backup_warnings:
-            # Save succeeded but backup failed - show warning
-            GLib.idle_add(
-                self._show_warning_banner,
-                f"Saved with warnings: {'; '.join(backup_warnings)}"
-            )
-        else:
-            GLib.idle_add(self._show_success_banner)
-
-        GLib.idle_add(self._set_saving_state, False)
-
-    def _update_freshclam_config_from_widgets(self):
-        """
-        Update freshclam config object from form widget values.
-
-        Called from the UI thread to safely access widget values.
-        """
-        if self._freshclam_config is None:
-            return
-
-        # Update entry row values (string/path)
-        entry_keys = ['DatabaseDirectory', 'UpdateLogFile', 'NotifyClamd',
-                      'DatabaseMirror', 'HTTPProxyServer', 'HTTPProxyUsername']
-        for key in entry_keys:
-            if key in self._freshclam_widgets:
-                value = self._freshclam_widgets[key].get_text()
-                if value:
-                    self._freshclam_config.set_value(
-                        key, value,
-                        self._get_line_number(self._freshclam_config, key)
-                    )
-
-        # Update password entry row
-        if 'HTTPProxyPassword' in self._freshclam_widgets:
-            value = self._freshclam_widgets['HTTPProxyPassword'].get_text()
-            if value:
-                self._freshclam_config.set_value(
-                    'HTTPProxyPassword', value,
-                    self._get_line_number(self._freshclam_config, 'HTTPProxyPassword')
-                )
-
-        # Update switch row values (boolean)
-        switch_keys = ['LogVerbose', 'LogSyslog']
-        for key in switch_keys:
-            if key in self._freshclam_widgets:
-                is_active = self._freshclam_widgets[key].get_active()
-                value = "yes" if is_active else "no"
-                self._freshclam_config.set_value(
-                    key, value,
-                    self._get_line_number(self._freshclam_config, key)
-                )
-
-        # Update spin row values (integer)
-        if 'Checks' in self._freshclam_widgets:
-            value = int(self._freshclam_widgets['Checks'].get_value())
-            self._freshclam_config.set_value(
-                'Checks', str(value),
-                self._get_line_number(self._freshclam_config, 'Checks')
-            )
-
-        if 'HTTPProxyPort' in self._freshclam_widgets:
-            value = int(self._freshclam_widgets['HTTPProxyPort'].get_value())
-            if value > 0:
-                self._freshclam_config.set_value(
-                    'HTTPProxyPort', str(value),
-                    self._get_line_number(self._freshclam_config, 'HTTPProxyPort')
-                )
-
-    def _update_clamd_config_from_widgets(self):
-        """
-        Update clamd config object from form widget values.
-
-        Called from the UI thread to safely access widget values.
-        """
-        if self._clamd_config is None:
-            return
-
-        # Update entry row values (string/path/size)
-        entry_keys = ['LogFile', 'MaxScanSize', 'MaxFileSize']
-        for key in entry_keys:
-            if key in self._clamd_widgets:
-                value = self._clamd_widgets[key].get_text()
-                if value:
-                    self._clamd_config.set_value(
-                        key, value,
-                        self._get_line_number(self._clamd_config, key)
-                    )
-
-        # Update switch row values (boolean)
-        switch_keys = ['LogVerbose', 'ScanArchive', 'ScanPDF', 'DetectPUA']
-        for key in switch_keys:
-            if key in self._clamd_widgets:
-                is_active = self._clamd_widgets[key].get_active()
-                value = "yes" if is_active else "no"
-                self._clamd_config.set_value(
-                    key, value,
-                    self._get_line_number(self._clamd_config, key)
-                )
-
-        # Update spin row values (integer)
-        spin_keys = ['MaxRecursion', 'MaxFiles', 'MaxThreads']
-        for key in spin_keys:
-            if key in self._clamd_widgets:
-                value = int(self._clamd_widgets[key].get_value())
-                self._clamd_config.set_value(
-                    key, str(value),
-                    self._get_line_number(self._clamd_config, key)
-                )
-
-    def _get_line_number(self, config: ClamAVConfig, key: str) -> int:
-        """
-        Get the original line number for a config key.
-
-        Args:
-            config: The ClamAVConfig object
-            key: The configuration key
-
-        Returns:
-            The line number if found, 0 otherwise (new value)
-        """
-        if key in config.values and config.values[key]:
-            return config.values[key][0].line_number
-        return 0
-
-    def _show_success_banner(self):
-        """Show success banner after successful save and prompt for restart."""
-        self._status_banner.set_title(
-            "Configuration saved successfully. Restart ClamAV services "
-            "for changes to take effect."
-        )
-        self._status_banner.remove_css_class("error")
-        self._status_banner.remove_css_class("warning")
-        self._status_banner.add_css_class("success")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-        # Show restart confirmation dialog
-        self._show_restart_dialog()
-
-    def _show_restart_dialog(self):
-        """
-        Show a confirmation dialog prompting user to restart ClamAV services.
-
-        This dialog informs the user which services need to be restarted for
-        the configuration changes to take effect. It does NOT actually execute
-        the restart - it just provides the commands the user can run.
-        """
-        dialog = Adw.AlertDialog()
-        dialog.set_heading("Restart Required")
-
-        # Build body text based on which configs were modified
-        services = []
-        if self._freshclam_config is not None:
-            services.append("clamav-freshclam")
-        if self._clamd_config is not None and self._clamd_available:
-            services.append("clamav-daemon")
-
-        if services:
-            service_list = ", ".join(services)
-            body_text = (
-                f"Configuration changes have been saved successfully.\n\n"
-                f"To apply these changes, restart the following services:\n"
-                f"• {service_list}\n\n"
-                f"You can restart them by running:\n"
-                f"sudo systemctl restart {' '.join(services)}"
-            )
-        else:
-            body_text = (
-                "Configuration changes have been saved successfully.\n\n"
-                "Restart the relevant ClamAV services for changes to take effect."
-            )
-
-        dialog.set_body(body_text)
-
-        # Add response buttons
-        dialog.add_response("ok", "OK")
-        dialog.set_default_response("ok")
-        dialog.set_close_response("ok")
-
-        # Present the dialog
-        dialog.present(self)
-
-    def _show_error_banner(self, error_message: str):
-        """
-        Show error banner after save failure.
-
-        Args:
-            error_message: The error message to display
-        """
-        self._status_banner.set_title(f"Save failed: {error_message}")
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("warning")
-        self._status_banner.add_css_class("error")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-    def _show_cancelled_banner(self):
-        """Show cancelled banner when user dismisses authentication dialog."""
-        self._status_banner.set_title("Save cancelled - authentication was dismissed")
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("error")
-        self._status_banner.add_css_class("warning")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-    def _show_warning_banner(self, warning_message: str):
-        """
-        Show warning banner when save succeeded with warnings.
-
-        Args:
-            warning_message: The warning message to display
-        """
-        self._status_banner.set_title(warning_message)
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("error")
-        self._status_banner.add_css_class("warning")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
 
     def _load_configs(self):
         """
         Load ClamAV configuration files and populate form fields.
 
-        Loads both freshclam.conf and clamd.conf (if available) and populates
-        the corresponding form widgets with the parsed values. Also loads
-        scheduled scan settings from the settings manager.
+        Loads both freshclam.conf and clamd.conf (if available),
+        parses them, and updates the UI with current values.
         """
-        # Load freshclam.conf
-        config, error = parse_config(self._freshclam_conf_path)
-        if config is not None:
-            self._freshclam_config = config
-            self._populate_freshclam_widgets(config)
+        try:
+            # Load freshclam.conf
+            self._freshclam_config, error = parse_config(self._freshclam_conf_path)
+            self._populate_freshclam_fields()
+        except Exception as e:
+            print(f"Error loading freshclam.conf: {e}")
 
-        # Load clamd.conf (only if available)
+        # Load clamd.conf if available
         if self._clamd_available:
-            config, error = parse_config(self._clamd_conf_path)
-            if config is not None:
-                self._clamd_config = config
-                self._populate_clamd_widgets(config)
+            try:
+                self._clamd_config, error = parse_config(self._clamd_conf_path)
+                self._populate_clamd_fields()
+            except Exception as e:
+                print(f"Error loading clamd.conf: {e}")
 
-        # Load scheduled scan settings from settings manager
-        if self._settings_manager is not None:
-            self._populate_scheduled_widgets()
-
-    def _populate_freshclam_widgets(self, config: ClamAVConfig):
+    def _populate_freshclam_fields(self):
         """
-        Populate freshclam.conf form widgets with configuration values.
+        Populate freshclam configuration fields from loaded config.
 
-        Maps ClamAV configuration options to their corresponding UI widgets
-        and sets the appropriate values based on widget type.
-
-        Args:
-            config: The parsed freshclam.conf configuration
+        Updates UI widgets with values from the parsed freshclam.conf file.
         """
-        # Populate entry rows (string/path values)
-        entry_keys = ['DatabaseDirectory', 'UpdateLogFile', 'NotifyClamd',
-                      'DatabaseMirror', 'HTTPProxyServer', 'HTTPProxyUsername']
-        for key in entry_keys:
-            if key in self._freshclam_widgets:
-                value = config.get_value(key)
-                if value is not None:
-                    self._freshclam_widgets[key].set_text(value)
-
-        # Populate password entry row
-        if 'HTTPProxyPassword' in self._freshclam_widgets:
-            value = config.get_value('HTTPProxyPassword')
-            if value is not None:
-                self._freshclam_widgets['HTTPProxyPassword'].set_text(value)
-
-        # Populate switch rows (boolean values)
-        switch_keys = ['LogVerbose', 'LogSyslog']
-        for key in switch_keys:
-            if key in self._freshclam_widgets:
-                value = config.get_bool(key)
-                if value is not None:
-                    self._freshclam_widgets[key].set_active(value)
-
-        # Populate spin rows (integer values)
-        if 'Checks' in self._freshclam_widgets:
-            value = config.get_int('Checks')
-            if value is not None:
-                self._freshclam_widgets['Checks'].set_value(float(value))
-
-        if 'HTTPProxyPort' in self._freshclam_widgets:
-            value = config.get_int('HTTPProxyPort')
-            if value is not None:
-                self._freshclam_widgets['HTTPProxyPort'].set_value(float(value))
-
-    def _populate_clamd_widgets(self, config: ClamAVConfig):
-        """
-        Populate clamd.conf form widgets with configuration values.
-
-        Maps ClamAV daemon configuration options to their corresponding UI
-        widgets and sets the appropriate values based on widget type.
-
-        Args:
-            config: The parsed clamd.conf configuration
-        """
-        # Populate entry rows (string/path/size values)
-        entry_keys = ['LogFile', 'MaxScanSize', 'MaxFileSize']
-        for key in entry_keys:
-            if key in self._clamd_widgets:
-                value = config.get_value(key)
-                if value is not None:
-                    self._clamd_widgets[key].set_text(value)
-
-        # Populate switch rows (boolean values)
-        switch_keys = ['LogVerbose', 'ScanArchive', 'ScanPDF', 'DetectPUA']
-        for key in switch_keys:
-            if key in self._clamd_widgets:
-                value = config.get_bool(key)
-                if value is not None:
-                    self._clamd_widgets[key].set_active(value)
-
-        # Populate spin rows (integer values)
-        spin_keys = ['MaxRecursion', 'MaxFiles', 'MaxThreads']
-        for key in spin_keys:
-            if key in self._clamd_widgets:
-                value = config.get_int(key)
-                if value is not None:
-                    self._clamd_widgets[key].set_value(float(value))
-
-    def _populate_scheduled_widgets(self):
-        """
-        Populate scheduled scan widgets from settings manager.
-
-        Loads saved schedule configuration and populates the UI widgets.
-        """
-        if self._settings_manager is None:
+        if not self._freshclam_config:
             return
 
-        # Populate enable switch
-        if 'enabled' in self._scheduled_widgets:
-            enabled = self._settings_manager.get('scheduled_scans_enabled', False)
-            self._scheduled_widgets['enabled'].set_active(enabled)
+        # Populate DatabaseDirectory
+        if self._freshclam_config.has_key('DatabaseDirectory'):
+            self._freshclam_widgets['DatabaseDirectory'].set_text(
+                self._freshclam_config.get_value('DatabaseDirectory')
+            )
 
-        # Populate frequency combo
-        if 'frequency' in self._scheduled_widgets:
-            frequency = self._settings_manager.get('schedule_frequency', 'weekly')
-            frequency_map = {'daily': 0, 'weekly': 1, 'monthly': 2}
-            index = frequency_map.get(frequency, 1)
-            self._scheduled_widgets['frequency'].set_selected(index)
+        # Populate UpdateLogFile
+        if self._freshclam_config.has_key('UpdateLogFile'):
+            self._freshclam_widgets['UpdateLogFile'].set_text(
+                self._freshclam_config.get_value('UpdateLogFile')
+            )
 
-            # Trigger visibility update for day of week/month
-            self._on_frequency_changed(self._scheduled_widgets['frequency'], None)
+        # Populate NotifyClamd
+        if self._freshclam_config.has_key('NotifyClamd'):
+            self._freshclam_widgets['NotifyClamd'].set_text(
+                self._freshclam_config.get_value('NotifyClamd')
+            )
 
-        # Populate time entry
-        if 'time' in self._scheduled_widgets:
-            time_value = self._settings_manager.get('schedule_time', '02:00')
-            self._scheduled_widgets['time'].set_text(time_value)
+        # Populate LogVerbose
+        if self._freshclam_config.has_key('LogVerbose'):
+            self._freshclam_widgets['LogVerbose'].set_active(
+                self._freshclam_config.get_value('LogVerbose').lower() == 'yes'
+            )
 
-        # Populate day of week combo
-        if 'day_of_week' in self._scheduled_widgets:
-            day_of_week = self._settings_manager.get('schedule_day_of_week', 0)
-            self._scheduled_widgets['day_of_week'].set_selected(day_of_week)
+        # Populate LogSyslog
+        if self._freshclam_config.has_key('LogSyslog'):
+            self._freshclam_widgets['LogSyslog'].set_active(
+                self._freshclam_config.get_value('LogSyslog').lower() == 'yes'
+            )
 
-        # Populate day of month spin
-        if 'day_of_month' in self._scheduled_widgets:
-            day_of_month = self._settings_manager.get('schedule_day_of_month', 1)
-            self._scheduled_widgets['day_of_month'].set_value(float(day_of_month))
+        # Populate Checks
+        if self._freshclam_config.has_key('Checks'):
+            try:
+                checks_value = int(self._freshclam_config.get_value('Checks'))
+                self._freshclam_widgets['Checks'].set_value(checks_value)
+            except (ValueError, TypeError):
+                pass
 
-        # Populate targets
-        targets = self._settings_manager.get('schedule_targets', [])
-        for target in targets:
-            self._add_target_to_list(target)
+        # Populate DatabaseMirror
+        if self._freshclam_config.has_key('DatabaseMirror'):
+            self._freshclam_widgets['DatabaseMirror'].set_text(
+                self._freshclam_config.get_value('DatabaseMirror')
+            )
 
-        # Populate skip on battery switch
-        if 'skip_on_battery' in self._scheduled_widgets:
-            skip_on_battery = self._settings_manager.get('schedule_skip_on_battery', True)
-            self._scheduled_widgets['skip_on_battery'].set_active(skip_on_battery)
+        # Populate proxy settings
+        if self._freshclam_config.has_key('HTTPProxyServer'):
+            self._freshclam_widgets['HTTPProxyServer'].set_text(
+                self._freshclam_config.get_value('HTTPProxyServer')
+            )
 
-        # Populate auto-quarantine switch
-        if 'auto_quarantine' in self._scheduled_widgets:
-            auto_quarantine = self._settings_manager.get('schedule_auto_quarantine', False)
-            self._scheduled_widgets['auto_quarantine'].set_active(auto_quarantine)
+        if self._freshclam_config.has_key('HTTPProxyPort'):
+            try:
+                port_value = int(self._freshclam_config.get_value('HTTPProxyPort'))
+                self._freshclam_widgets['HTTPProxyPort'].set_value(port_value)
+            except (ValueError, TypeError):
+                pass
 
-    def _save_scheduled_settings(self) -> bool:
+        if self._freshclam_config.has_key('HTTPProxyUsername'):
+            self._freshclam_widgets['HTTPProxyUsername'].set_text(
+                self._freshclam_config.get_value('HTTPProxyUsername')
+            )
+
+        if self._freshclam_config.has_key('HTTPProxyPassword'):
+            self._freshclam_widgets['HTTPProxyPassword'].set_text(
+                self._freshclam_config.get_value('HTTPProxyPassword')
+            )
+
+    def _populate_clamd_fields(self):
         """
-        Save scheduled scan settings to settings manager.
+        Populate clamd configuration fields from loaded config.
 
-        Reads values from UI widgets and saves them to the settings manager.
-        Also enables/disables the schedule with the system scheduler.
+        Updates UI widgets with values from the parsed clamd.conf file.
+        """
+        if not self._clamd_config:
+            return
+
+        # Populate ScanPE
+        if self._clamd_config.has_key('ScanPE'):
+            self._clamd_widgets['ScanPE'].set_active(
+                self._clamd_config.get_value('ScanPE').lower() == 'yes'
+            )
+
+        # Populate ScanELF
+        if self._clamd_config.has_key('ScanELF'):
+            self._clamd_widgets['ScanELF'].set_active(
+                self._clamd_config.get_value('ScanELF').lower() == 'yes'
+            )
+
+        # Populate ScanOLE2
+        if self._clamd_config.has_key('ScanOLE2'):
+            self._clamd_widgets['ScanOLE2'].set_active(
+                self._clamd_config.get_value('ScanOLE2').lower() == 'yes'
+            )
+
+        # Populate ScanPDF
+        if self._clamd_config.has_key('ScanPDF'):
+            self._clamd_widgets['ScanPDF'].set_active(
+                self._clamd_config.get_value('ScanPDF').lower() == 'yes'
+            )
+
+        # Populate ScanHTML
+        if self._clamd_config.has_key('ScanHTML'):
+            self._clamd_widgets['ScanHTML'].set_active(
+                self._clamd_config.get_value('ScanHTML').lower() == 'yes'
+            )
+
+        # Populate ScanArchive
+        if self._clamd_config.has_key('ScanArchive'):
+            self._clamd_widgets['ScanArchive'].set_active(
+                self._clamd_config.get_value('ScanArchive').lower() == 'yes'
+            )
+
+        # Populate MaxFileSize
+        if self._clamd_config.has_key('MaxFileSize'):
+            try:
+                size_value = int(self._clamd_config.get_value('MaxFileSize'))
+                self._clamd_widgets['MaxFileSize'].set_value(size_value)
+            except (ValueError, TypeError):
+                pass
+
+        # Populate MaxScanSize
+        if self._clamd_config.has_key('MaxScanSize'):
+            try:
+                scan_size_value = int(self._clamd_config.get_value('MaxScanSize'))
+                self._clamd_widgets['MaxScanSize'].set_value(scan_size_value)
+            except (ValueError, TypeError):
+                pass
+
+        # Populate MaxRecursion
+        if self._clamd_config.has_key('MaxRecursion'):
+            try:
+                recursion_value = int(self._clamd_config.get_value('MaxRecursion'))
+                self._clamd_widgets['MaxRecursion'].set_value(recursion_value)
+            except (ValueError, TypeError):
+                pass
+
+        # Populate MaxFiles
+        if self._clamd_config.has_key('MaxFiles'):
+            try:
+                files_value = int(self._clamd_config.get_value('MaxFiles'))
+                self._clamd_widgets['MaxFiles'].set_value(files_value)
+            except (ValueError, TypeError):
+                pass
+
+        # Populate LogFile
+        if self._clamd_config.has_key('LogFile'):
+            self._clamd_widgets['LogFile'].set_text(self._clamd_config.get_value('LogFile'))
+
+        # Populate LogVerbose
+        if self._clamd_config.has_key('LogVerbose'):
+            self._clamd_widgets['LogVerbose'].set_active(
+                self._clamd_config.get_value('LogVerbose').lower() == 'yes'
+            )
+
+        # Populate LogSyslog
+        if self._clamd_config.has_key('LogSyslog'):
+            self._clamd_widgets['LogSyslog'].set_active(
+                self._clamd_config.get_value('LogSyslog').lower() == 'yes'
+            )
+
+    def _on_save_clicked(self, button: Gtk.Button):
+        """
+        Handle save button click event.
+
+        Validates configuration, backs up current configs, and saves
+        changes using elevated privileges (pkexec) if needed.
+
+        Args:
+            button: The clicked button widget
+        """
+        # Prevent multiple simultaneous saves
+        if self._is_saving:
+            return
+
+        self._is_saving = True
+        button.set_sensitive(False)
+
+        # Collect form data
+        freshclam_updates = self._collect_freshclam_data()
+        clamd_updates = self._collect_clamd_data()
+        scheduled_updates = self._collect_scheduled_data()
+
+        # Validate configurations
+        if freshclam_updates:
+            is_valid, errors = validate_config(self._freshclam_config)
+            if not is_valid:
+                self._show_error_dialog("Validation Error", errors)
+                self._is_saving = False
+                button.set_sensitive(True)
+                return
+
+        if clamd_updates and self._clamd_available:
+            is_valid, errors = validate_config(self._clamd_config)
+            if not is_valid:
+                self._show_error_dialog("Validation Error", errors)
+                self._is_saving = False
+                button.set_sensitive(True)
+                return
+
+        # Run save in background thread
+        save_thread = threading.Thread(
+            target=self._save_configs_thread,
+            args=(freshclam_updates, clamd_updates, scheduled_updates, button)
+        )
+        save_thread.daemon = True
+        save_thread.start()
+
+    def _collect_freshclam_data(self) -> dict:
+        """
+        Collect freshclam configuration data from form widgets.
 
         Returns:
-            True if saved successfully, False otherwise
+            Dictionary of configuration key-value pairs to save
         """
-        if self._settings_manager is None:
-            return False
+        updates = {}
 
-        # Get enabled state
-        enabled = False
-        if 'enabled' in self._scheduled_widgets:
-            enabled = self._scheduled_widgets['enabled'].get_active()
-        self._settings_manager.set('scheduled_scans_enabled', enabled)
+        # Collect DatabaseDirectory
+        db_dir = self._freshclam_widgets['DatabaseDirectory'].get_text()
+        if db_dir:
+            updates['DatabaseDirectory'] = db_dir
 
-        # Get frequency
-        frequency = 'weekly'
-        if 'frequency' in self._scheduled_widgets:
-            selected = self._scheduled_widgets['frequency'].get_selected()
-            frequency_map = {0: 'daily', 1: 'weekly', 2: 'monthly'}
-            frequency = frequency_map.get(selected, 'weekly')
-        self._settings_manager.set('schedule_frequency', frequency)
+        # Collect UpdateLogFile
+        log_file = self._freshclam_widgets['UpdateLogFile'].get_text()
+        if log_file:
+            updates['UpdateLogFile'] = log_file
 
-        # Get time
-        time_value = '02:00'
-        if 'time' in self._scheduled_widgets:
-            time_value = self._scheduled_widgets['time'].get_text() or '02:00'
-        self._settings_manager.set('schedule_time', time_value)
+        # Collect NotifyClamd
+        notify_clamd = self._freshclam_widgets['NotifyClamd'].get_text()
+        if notify_clamd:
+            updates['NotifyClamd'] = notify_clamd
 
-        # Get day of week
-        day_of_week = 0
-        if 'day_of_week' in self._scheduled_widgets:
-            day_of_week = self._scheduled_widgets['day_of_week'].get_selected()
-        self._settings_manager.set('schedule_day_of_week', day_of_week)
+        # Collect LogVerbose
+        updates['LogVerbose'] = 'yes' if self._freshclam_widgets['LogVerbose'].get_active() else 'no'
 
-        # Get day of month
-        day_of_month = 1
-        if 'day_of_month' in self._scheduled_widgets:
-            day_of_month = int(self._scheduled_widgets['day_of_month'].get_value())
-        self._settings_manager.set('schedule_day_of_month', day_of_month)
+        # Collect LogSyslog
+        updates['LogSyslog'] = 'yes' if self._freshclam_widgets['LogSyslog'].get_active() else 'no'
 
-        # Get targets
-        targets = self._get_targets_list()
-        self._settings_manager.set('schedule_targets', targets)
+        # Collect Checks
+        checks_value = int(self._freshclam_widgets['Checks'].get_value())
+        updates['Checks'] = str(checks_value)
 
-        # Get skip on battery
-        skip_on_battery = True
-        if 'skip_on_battery' in self._scheduled_widgets:
-            skip_on_battery = self._scheduled_widgets['skip_on_battery'].get_active()
-        self._settings_manager.set('schedule_skip_on_battery', skip_on_battery)
+        # Collect DatabaseMirror
+        mirror = self._freshclam_widgets['DatabaseMirror'].get_text()
+        if mirror:
+            updates['DatabaseMirror'] = mirror
 
-        # Get auto-quarantine
-        auto_quarantine = False
-        if 'auto_quarantine' in self._scheduled_widgets:
-            auto_quarantine = self._scheduled_widgets['auto_quarantine'].get_active()
-        self._settings_manager.set('schedule_auto_quarantine', auto_quarantine)
+        # Collect proxy settings
+        proxy_server = self._freshclam_widgets['HTTPProxyServer'].get_text()
+        if proxy_server:
+            updates['HTTPProxyServer'] = proxy_server
 
-        # Enable or disable the schedule with the system scheduler
-        if enabled and self._scheduler.is_available:
-            success, error = self._scheduler.enable_schedule(
-                frequency=frequency,
-                time=time_value,
-                targets=targets,
-                day_of_week=day_of_week,
-                day_of_month=day_of_month,
-                skip_on_battery=skip_on_battery,
-                auto_quarantine=auto_quarantine
+        proxy_port = int(self._freshclam_widgets['HTTPProxyPort'].get_value())
+        if proxy_port > 0:
+            updates['HTTPProxyPort'] = str(proxy_port)
+
+        proxy_user = self._freshclam_widgets['HTTPProxyUsername'].get_text()
+        if proxy_user:
+            updates['HTTPProxyUsername'] = proxy_user
+
+        proxy_pass = self._freshclam_widgets['HTTPProxyPassword'].get_text()
+        if proxy_pass:
+            updates['HTTPProxyPassword'] = proxy_pass
+
+        return updates
+
+    def _collect_clamd_data(self) -> dict:
+        """
+        Collect clamd configuration data from form widgets.
+
+        Returns:
+            Dictionary of configuration key-value pairs to save
+        """
+        if not self._clamd_available:
+            return {}
+
+        updates = {}
+
+        # Collect scan settings
+        updates['ScanPE'] = 'yes' if self._clamd_widgets['ScanPE'].get_active() else 'no'
+        updates['ScanELF'] = 'yes' if self._clamd_widgets['ScanELF'].get_active() else 'no'
+        updates['ScanOLE2'] = 'yes' if self._clamd_widgets['ScanOLE2'].get_active() else 'no'
+        updates['ScanPDF'] = 'yes' if self._clamd_widgets['ScanPDF'].get_active() else 'no'
+        updates['ScanHTML'] = 'yes' if self._clamd_widgets['ScanHTML'].get_active() else 'no'
+        updates['ScanArchive'] = 'yes' if self._clamd_widgets['ScanArchive'].get_active() else 'no'
+
+        # Collect performance settings
+        updates['MaxFileSize'] = str(int(self._clamd_widgets['MaxFileSize'].get_value()))
+        updates['MaxScanSize'] = str(int(self._clamd_widgets['MaxScanSize'].get_value()))
+        updates['MaxRecursion'] = str(int(self._clamd_widgets['MaxRecursion'].get_value()))
+        updates['MaxFiles'] = str(int(self._clamd_widgets['MaxFiles'].get_value()))
+
+        # Collect logging settings
+        log_file = self._clamd_widgets['LogFile'].get_text()
+        if log_file:
+            updates['LogFile'] = log_file
+
+        updates['LogVerbose'] = 'yes' if self._clamd_widgets['LogVerbose'].get_active() else 'no'
+        updates['LogSyslog'] = 'yes' if self._clamd_widgets['LogSyslog'].get_active() else 'no'
+
+        return updates
+
+    def _collect_scheduled_data(self) -> dict:
+        """
+        Collect scheduled scan configuration from form widgets.
+
+        Returns:
+            Dictionary of scheduled scan settings to save
+        """
+        frequency_map = ["hourly", "daily", "weekly", "monthly"]
+        selected_frequency = self._scheduled_widgets['frequency'].get_selected()
+
+        # Parse targets from comma-separated string
+        targets_text = self._scheduled_widgets['targets'].get_text()
+        targets = [t.strip() for t in targets_text.split(",") if t.strip()]
+
+        return {
+            "scheduled_scans_enabled": self._scheduled_widgets['enabled'].get_active(),
+            "schedule_frequency": frequency_map[selected_frequency] if selected_frequency < len(frequency_map) else "daily",
+            "schedule_time": self._scheduled_widgets['time'].get_text().strip() or "02:00",
+            "schedule_targets": targets,
+            "schedule_day_of_week": self._scheduled_widgets['day_of_week'].get_selected(),
+            "schedule_day_of_month": int(self._scheduled_widgets['day_of_month'].get_value()),
+            "schedule_skip_on_battery": self._scheduled_widgets['skip_on_battery'].get_active(),
+            "schedule_auto_quarantine": self._scheduled_widgets['auto_quarantine'].get_active(),
+        }
+
+    def _populate_scheduled_fields(self):
+        """
+        Populate scheduled scan widgets from saved settings.
+
+        Loads settings from the settings manager and updates the UI widgets.
+        """
+        # Enable/disable switch
+        self._scheduled_widgets['enabled'].set_active(
+            self._settings_manager.get("scheduled_scans_enabled", False)
+        )
+
+        # Frequency dropdown
+        freq = self._settings_manager.get("schedule_frequency", "daily")
+        freq_map = {"hourly": 0, "daily": 1, "weekly": 2, "monthly": 3}
+        self._scheduled_widgets['frequency'].set_selected(freq_map.get(freq, 1))
+
+        # Time entry
+        self._scheduled_widgets['time'].set_text(
+            self._settings_manager.get("schedule_time", "02:00")
+        )
+
+        # Targets entry
+        targets = self._settings_manager.get("schedule_targets", [])
+        if targets:
+            self._scheduled_widgets['targets'].set_text(", ".join(targets))
+        else:
+            self._scheduled_widgets['targets'].set_text(str(Path.home()))
+
+        # Day of week dropdown
+        self._scheduled_widgets['day_of_week'].set_selected(
+            self._settings_manager.get("schedule_day_of_week", 0)
+        )
+
+        # Day of month spinner
+        self._scheduled_widgets['day_of_month'].set_value(
+            self._settings_manager.get("schedule_day_of_month", 1)
+        )
+
+        # Skip on battery switch
+        self._scheduled_widgets['skip_on_battery'].set_active(
+            self._settings_manager.get("schedule_skip_on_battery", True)
+        )
+
+        # Auto-quarantine switch
+        self._scheduled_widgets['auto_quarantine'].set_active(
+            self._settings_manager.get("schedule_auto_quarantine", False)
+        )
+
+    def _save_configs_thread(
+        self,
+        freshclam_updates: dict,
+        clamd_updates: dict,
+        scheduled_updates: dict,
+        button: Gtk.Button
+    ):
+        """
+        Save configuration files in a background thread.
+
+        Uses elevated privileges (pkexec) to write configuration files
+        and manages error handling with thread-safe communication.
+
+        Args:
+            freshclam_updates: Dictionary of freshclam.conf updates
+            clamd_updates: Dictionary of clamd.conf updates
+            scheduled_updates: Dictionary of scheduled scan settings
+            button: The save button to re-enable after completion
+        """
+        try:
+            # Backup configurations
+            backup_config(self._freshclam_conf_path)
+            if self._clamd_available:
+                backup_config(self._clamd_conf_path)
+
+            # Save freshclam.conf
+            if freshclam_updates and self._freshclam_config:
+                # Apply updates to config using set_value
+                for key, value in freshclam_updates.items():
+                    self._freshclam_config.set_value(key, value)
+                success, error = write_config_with_elevation(self._freshclam_config)
+                if not success:
+                    raise Exception(f"Failed to save freshclam.conf: {error}")
+
+            # Save clamd.conf
+            if clamd_updates and self._clamd_config:
+                # Apply updates to config using set_value
+                for key, value in clamd_updates.items():
+                    self._clamd_config.set_value(key, value)
+                success, error = write_config_with_elevation(self._clamd_config)
+                if not success:
+                    raise Exception(f"Failed to save clamd.conf: {error}")
+
+            # Save scheduled scan settings
+            if scheduled_updates:
+                for key, value in scheduled_updates.items():
+                    self._settings_manager.set(key, value)
+                if not self._settings_manager.save():
+                    raise Exception("Failed to save scheduled scan settings")
+
+                # Enable or disable scheduler based on settings
+                if scheduled_updates.get("scheduled_scans_enabled"):
+                    success, error = self._scheduler.enable_schedule(
+                        frequency=scheduled_updates["schedule_frequency"],
+                        time=scheduled_updates["schedule_time"],
+                        targets=scheduled_updates["schedule_targets"],
+                        day_of_week=scheduled_updates["schedule_day_of_week"],
+                        day_of_month=scheduled_updates["schedule_day_of_month"],
+                        skip_on_battery=scheduled_updates["schedule_skip_on_battery"],
+                        auto_quarantine=scheduled_updates["schedule_auto_quarantine"],
+                    )
+                    if not success:
+                        raise Exception(f"Failed to enable scheduled scans: {error}")
+                else:
+                    # Disable scheduler if it was previously enabled
+                    self._scheduler.disable_schedule()
+
+            # Show success message
+            GLib.idle_add(
+                self._show_success_dialog,
+                "Configuration Saved",
+                "Configuration changes have been applied successfully."
             )
-            if not success:
-                self._scheduler_error = error or "Failed to enable schedule"
-                return False
-        elif not enabled and self._scheduler.is_available:
-            success, error = self._scheduler.disable_schedule()
-            if not success:
-                self._scheduler_error = error or "Failed to disable schedule"
-                return False
+        except Exception as e:
+            # Store error for thread-safe handling
+            self._scheduler_error = str(e)
+            GLib.idle_add(
+                self._show_error_dialog,
+                "Save Failed",
+                str(e)
+            )
+        finally:
+            self._is_saving = False
+            GLib.idle_add(button.set_sensitive, True)
 
-        return self._settings_manager.save()
+    def _show_error_dialog(self, title: str, message: str):
+        """
+        Show an error dialog to the user.
+
+        Args:
+            title: Dialog title
+            message: Error message text
+        """
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(title)
+        dialog.set_body(message)
+        dialog.add_response("ok", "OK")
+        dialog.set_default_response("ok")
+        dialog.present(self)
+
+    def _show_success_dialog(self, title: str, message: str):
+        """
+        Show a success dialog to the user.
+
+        Args:
+            title: Dialog title
+            message: Success message text
+        """
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(title)
+        dialog.set_body(message)
+        dialog.add_response("ok", "OK")
+        dialog.set_default_response("ok")
+        dialog.present(self)

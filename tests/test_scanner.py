@@ -422,3 +422,291 @@ Infected files: 3
         # Default category for unknown
         assert scanner._categorize_threat("Unknown.Malware") == "Virus"
         assert scanner._categorize_threat("") == "Unknown"
+
+
+class TestScannerThreatDetailsIntegration:
+    """Integration tests for enhanced scanner with threat details."""
+
+    def test_scan_sync_threat_details_integration(self, tmp_path):
+        """Integration test: scan_sync produces structured threat details."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = Scanner()
+
+        # Mock clamscan output with infected result
+        mock_stdout = """
+/home/user/virus.exe: Win.Trojan.Agent FOUND
+
+----------- SCAN SUMMARY -----------
+Scanned files: 5
+Infected files: 1
+"""
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 1
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_file))
+
+        # Verify threat details are properly populated
+        assert result.status == ScanStatus.INFECTED
+        assert len(result.threat_details) == 1
+        assert result.threat_details[0].file_path == "/home/user/virus.exe"
+        assert result.threat_details[0].threat_name == "Win.Trojan.Agent"
+        assert result.threat_details[0].category == "Trojan"
+        assert result.threat_details[0].severity == "high"
+
+    def test_scan_sync_multiple_threat_details_integration(self, tmp_path):
+        """Integration test: scan_sync handles multiple threats with different severities."""
+        test_dir = tmp_path / "test_dir"
+        test_dir.mkdir()
+
+        scanner = Scanner()
+
+        # Mock clamscan output with multiple infected files
+        mock_stdout = """
+/home/user/critical.exe: Ransomware.Locky FOUND
+/home/user/high.exe: Win.Trojan.Agent FOUND
+/home/user/medium.exe: PUA.Adware.Generic FOUND
+/home/user/low.exe: Eicar-Test-Signature FOUND
+
+----------- SCAN SUMMARY -----------
+Scanned directories: 1
+Scanned files: 100
+Infected files: 4
+"""
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 1
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_dir), recursive=True)
+
+        # Verify all threat details are captured with correct classification
+        assert result.status == ScanStatus.INFECTED
+        assert result.infected_count == 4
+        assert len(result.threat_details) == 4
+
+        # Verify each threat has correct severity
+        severities = {t.threat_name: t.severity for t in result.threat_details}
+        assert severities["Ransomware.Locky"] == "critical"
+        assert severities["Win.Trojan.Agent"] == "high"
+        assert severities["PUA.Adware.Generic"] == "medium"
+        assert severities["Eicar-Test-Signature"] == "low"
+
+        # Verify categories
+        categories = {t.threat_name: t.category for t in result.threat_details}
+        assert categories["Ransomware.Locky"] == "Ransomware"
+        assert categories["Win.Trojan.Agent"] == "Trojan"
+        assert categories["PUA.Adware.Generic"] == "Adware"
+        assert categories["Eicar-Test-Signature"] == "Test"
+
+    def test_scan_sync_clean_threat_details_empty(self, tmp_path):
+        """Integration test: clean scan produces empty threat_details list."""
+        test_file = tmp_path / "clean.txt"
+        test_file.write_text("clean content")
+
+        scanner = Scanner()
+
+        # Mock clamscan output with clean result
+        mock_stdout = """
+/home/user/clean.txt: OK
+
+----------- SCAN SUMMARY -----------
+Scanned files: 1
+Infected files: 0
+"""
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 0
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_file))
+
+        # Verify clean result has empty threat_details
+        assert result.status == ScanStatus.CLEAN
+        assert result.is_clean is True
+        assert result.has_threats is False
+        assert len(result.threat_details) == 0
+        assert result.infected_count == 0
+
+    def test_threat_details_file_path_preserved(self, tmp_path):
+        """Integration test: threat details preserve full file paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = Scanner()
+
+        # Mock output with complex path
+        mock_stdout = """
+/home/user/Documents/My Files/virus (copy).exe: Win.Trojan.Agent FOUND
+
+----------- SCAN SUMMARY -----------
+Scanned files: 1
+Infected files: 1
+"""
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 1
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_file))
+
+        # Verify file path is preserved including spaces and special characters
+        assert len(result.threat_details) == 1
+        assert result.threat_details[0].file_path == "/home/user/Documents/My Files/virus (copy).exe"
+
+    def test_threat_details_with_cancelled_scan(self, tmp_path):
+        """Integration test: cancelled scan produces empty threat_details."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = Scanner()
+
+        # Set up mock to simulate cancellation during communicate()
+        def simulate_cancel(*args, **kwargs):
+            scanner._scan_cancelled = True
+            return ("", "")
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.side_effect = simulate_cancel
+                        mock_process.returncode = 0
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_file))
+
+        # Verify cancelled scan has empty threat_details
+        assert result.status == ScanStatus.CANCELLED
+        assert len(result.threat_details) == 0
+
+    def test_threat_details_with_error_scan(self, tmp_path):
+        """Integration test: error scan produces empty threat_details."""
+        scanner = Scanner()
+
+        # Mock ClamAV not installed
+        with mock.patch("src.core.scanner.check_clamav_installed", return_value=(False, "ClamAV not found")):
+            with mock.patch("src.core.scanner.validate_path", return_value=(True, None)):
+                result = scanner.scan_sync("/nonexistent/path")
+
+        # Verify error result has empty threat_details
+        assert result.status == ScanStatus.ERROR
+        assert len(result.threat_details) == 0
+
+    def test_threat_details_dataclass_attributes(self):
+        """Test ThreatDetail dataclass has correct attributes."""
+        threat = ThreatDetail(
+            file_path="/test/virus.exe",
+            threat_name="Win.Trojan.Agent",
+            category="Trojan",
+            severity="high"
+        )
+
+        assert threat.file_path == "/test/virus.exe"
+        assert threat.threat_name == "Win.Trojan.Agent"
+        assert threat.category == "Trojan"
+        assert threat.severity == "high"
+
+    def test_threat_details_all_severity_levels(self):
+        """Integration test: verify all severity levels are correctly assigned."""
+        scanner = Scanner()
+
+        # Create output with threats of each severity level
+        mock_stdout = """
+/path/ransomware.exe: Ransomware.WannaCry FOUND
+/path/rootkit.exe: Linux.Rootkit.Agent FOUND
+/path/trojan.exe: Trojan.Banker FOUND
+/path/worm.exe: Worm.Slammer FOUND
+/path/backdoor.exe: Backdoor.Cobalt FOUND
+/path/adware.exe: Adware.Toolbar FOUND
+/path/eicar.txt: Eicar-Test-Signature FOUND
+/path/generic.exe: Heuristic.Generic FOUND
+
+----------- SCAN SUMMARY -----------
+Scanned files: 8
+Infected files: 8
+"""
+
+        result = scanner._parse_results("/path", mock_stdout, "", 1)
+
+        assert len(result.threat_details) == 8
+
+        # Build a map for easy verification
+        threat_map = {t.threat_name: t for t in result.threat_details}
+
+        # Critical severity
+        assert threat_map["Ransomware.WannaCry"].severity == "critical"
+        assert threat_map["Linux.Rootkit.Agent"].severity == "critical"
+
+        # High severity
+        assert threat_map["Trojan.Banker"].severity == "high"
+        assert threat_map["Worm.Slammer"].severity == "high"
+        assert threat_map["Backdoor.Cobalt"].severity == "high"
+
+        # Medium severity
+        assert threat_map["Adware.Toolbar"].severity == "medium"
+
+        # Low severity
+        assert threat_map["Eicar-Test-Signature"].severity == "low"
+        assert threat_map["Heuristic.Generic"].severity == "low"
+
+    def test_threat_details_integration_with_scan_result_properties(self, tmp_path):
+        """Integration test: threat_details integrates with ScanResult properties."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        scanner = Scanner()
+
+        mock_stdout = """
+/home/user/virus.exe: Win.Trojan.Agent FOUND
+
+----------- SCAN SUMMARY -----------
+Scanned files: 10
+Scanned directories: 2
+Infected files: 1
+"""
+
+        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 1
+                        mock_popen.return_value = mock_process
+
+                        result = scanner.scan_sync(str(test_file))
+
+        # Verify ScanResult properties work with threat_details
+        assert result.is_clean is False
+        assert result.has_threats is True
+        assert result.infected_count == 1
+        assert len(result.infected_files) == 1
+        assert len(result.threat_details) == 1
+
+        # Verify threat_details and infected_files are consistent
+        assert result.threat_details[0].file_path == result.infected_files[0]

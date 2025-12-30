@@ -76,6 +76,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Saving state
         self._is_saving = False
 
+        # Scheduler error storage (for thread-safe error passing)
+        self._scheduler_error = None
+
         # Set up the UI
         self._setup_ui()
 
@@ -1188,10 +1191,15 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # Save scheduled scan settings (no elevation required)
         if self._settings_manager is not None:
+            # Reset scheduler error before saving
+            self._scheduler_error = None
             # Save scheduled settings in UI thread
             GLib.idle_add(self._save_scheduled_settings)
             # Small delay to ensure UI thread processes the update
-            time.sleep(0.05)
+            time.sleep(0.1)
+            # Check for scheduler errors
+            if self._scheduler_error is not None:
+                errors.append(f"Schedule: {self._scheduler_error}")
 
         # Show result in UI thread
         if errors:
@@ -1645,10 +1653,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 auto_quarantine=auto_quarantine
             )
             if not success:
+                self._scheduler_error = error or "Failed to enable schedule"
                 return False
         elif not enabled and self._scheduler.is_available:
             success, error = self._scheduler.disable_schedule()
             if not success:
+                self._scheduler_error = error or "Failed to disable schedule"
                 return False
 
         return self._settings_manager.save()

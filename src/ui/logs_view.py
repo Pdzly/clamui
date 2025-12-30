@@ -24,6 +24,8 @@ class LogsView(Gtk.Box):
     - Log detail view
     - Daemon status and live logs
     - Clear logs functionality
+
+    Uses a tabbed interface to separate historical logs from daemon logs.
     """
 
     def __init__(self, **kwargs):
@@ -51,24 +53,92 @@ class LogsView(Gtk.Box):
         GLib.idle_add(self._load_logs)
 
     def _setup_ui(self):
-        """Set up the logs view UI layout."""
-        self.set_margin_top(24)
-        self.set_margin_bottom(24)
-        self.set_margin_start(24)
-        self.set_margin_end(24)
-        self.set_spacing(18)
+        """Set up the logs view UI layout with tabbed interface."""
+        self.set_margin_top(12)
+        self.set_margin_bottom(12)
+        self.set_margin_start(12)
+        self.set_margin_end(12)
+        self.set_spacing(0)
+
+        # Create view stack for tab content
+        self._view_stack = Adw.ViewStack()
+        self._view_stack.set_vexpand(True)
+        self._view_stack.set_hexpand(True)
+
+        # Create view switcher for tab navigation
+        switcher = Adw.ViewSwitcher()
+        switcher.set_stack(self._view_stack)
+        switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
+        switcher.set_margin_bottom(12)
+
+        self.append(switcher)
+        self.append(self._view_stack)
+
+        # Create the historical logs tab (with list and details)
+        self._create_historical_logs_tab()
+
+        # Create the daemon logs tab
+        self._create_daemon_logs_tab()
+
+    def _create_historical_logs_tab(self):
+        """Create the historical logs tab containing log list and details."""
+        # Container for historical logs tab content
+        tab_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        tab_content.set_spacing(18)
+        tab_content.set_margin_top(12)
+        tab_content.set_margin_bottom(12)
+        tab_content.set_margin_start(12)
+        tab_content.set_margin_end(12)
+
+        # Create scrollable container for the entire tab
+        scrolled_container = Gtk.ScrolledWindow()
+        scrolled_container.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled_container.set_vexpand(True)
+        scrolled_container.set_child(tab_content)
 
         # Create the historical logs section
-        self._create_historical_logs_section()
+        self._create_historical_logs_section(tab_content)
 
         # Create the log detail section
-        self._create_log_detail_section()
+        self._create_log_detail_section(tab_content)
+
+        # Add to view stack
+        self._view_stack.add_titled_with_icon(
+            scrolled_container,
+            "historical",
+            "Historical Logs",
+            "document-open-recent-symbolic"
+        )
+
+    def _create_daemon_logs_tab(self):
+        """Create the daemon logs tab."""
+        # Container for daemon logs tab content
+        tab_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        tab_content.set_spacing(18)
+        tab_content.set_margin_top(12)
+        tab_content.set_margin_bottom(12)
+        tab_content.set_margin_start(12)
+        tab_content.set_margin_end(12)
+        tab_content.set_vexpand(True)
 
         # Create the daemon logs section
-        self._create_daemon_logs_section()
+        self._create_daemon_logs_section(tab_content)
 
-    def _create_historical_logs_section(self):
-        """Create the historical logs list section."""
+        # Add to view stack
+        self._view_stack.add_titled_with_icon(
+            tab_content,
+            "daemon",
+            "ClamAV Daemon",
+            "utilities-terminal-symbolic"
+        )
+
+    def _create_historical_logs_section(self, parent: Gtk.Box):
+        """
+        Create the historical logs list section.
+
+        Args:
+            parent: The parent container to add the section to
+        """
         # Historical logs group
         logs_group = Adw.PreferencesGroup()
         logs_group.set_title("Historical Logs")
@@ -99,7 +169,7 @@ class LogsView(Gtk.Box):
         # Scrolled window for log entries
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_min_content_height(150)
-        scrolled.set_max_content_height(200)
+        scrolled.set_max_content_height(250)
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled.add_css_class("card")
 
@@ -113,7 +183,7 @@ class LogsView(Gtk.Box):
         scrolled.set_child(self._logs_listbox)
 
         logs_group.add(scrolled)
-        self.append(logs_group)
+        parent.append(logs_group)
 
     def _create_empty_state(self) -> Gtk.Widget:
         """Create the empty state placeholder widget."""
@@ -144,8 +214,13 @@ class LogsView(Gtk.Box):
 
         return empty_box
 
-    def _create_log_detail_section(self):
-        """Create the log detail display section."""
+    def _create_log_detail_section(self, parent: Gtk.Box):
+        """
+        Create the log detail display section.
+
+        Args:
+            parent: The parent container to add the section to
+        """
         # Log detail group
         detail_group = Adw.PreferencesGroup()
         detail_group.set_title("Log Details")
@@ -204,7 +279,7 @@ class LogsView(Gtk.Box):
 
         # Log detail text view in a scrolled window
         scrolled = Gtk.ScrolledWindow()
-        scrolled.set_min_content_height(150)
+        scrolled.set_min_content_height(200)
         scrolled.set_vexpand(False)
         scrolled.add_css_class("card")
 
@@ -226,10 +301,15 @@ class LogsView(Gtk.Box):
         detail_box.append(scrolled)
 
         detail_group.add(detail_box)
-        self.append(detail_group)
+        parent.append(detail_group)
 
-    def _create_daemon_logs_section(self):
-        """Create the daemon logs section."""
+    def _create_daemon_logs_section(self, parent: Gtk.Box):
+        """
+        Create the daemon logs section.
+
+        Args:
+            parent: The parent container to add the section to
+        """
         # Daemon logs group
         daemon_group = Adw.PreferencesGroup()
         daemon_group.set_title("ClamAV Daemon Logs")
@@ -269,7 +349,7 @@ class LogsView(Gtk.Box):
 
         # Daemon log text view in a scrolled window
         scrolled = Gtk.ScrolledWindow()
-        scrolled.set_min_content_height(150)
+        scrolled.set_min_content_height(300)
         scrolled.set_vexpand(True)
         scrolled.add_css_class("card")
         scrolled.set_margin_top(12)
@@ -291,7 +371,7 @@ class LogsView(Gtk.Box):
         scrolled.set_child(self._daemon_text)
 
         daemon_group.add(scrolled)
-        self.append(daemon_group)
+        parent.append(daemon_group)
 
         # Check daemon status on load
         GLib.idle_add(self._check_daemon_status)

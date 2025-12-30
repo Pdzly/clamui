@@ -38,6 +38,10 @@ def _setup_path():
 # Set up path before importing application modules
 _setup_path()
 
+# Import the application class
+# Note: Tray indicator is handled by app.py with graceful degradation
+# GTK3/GTK4 cannot coexist in the same process, so tray is disabled
+# when running with GTK4 (which is required for the main UI)
 from src.app import ClamUIApp
 
 

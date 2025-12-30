@@ -3,10 +3,18 @@
 Main application window for ClamUI.
 """
 
+import logging
+from typing import TYPE_CHECKING
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gio
+from gi.repository import Gtk, Adw, Gio, Gdk, GLib
+
+if TYPE_CHECKING:
+    from ..core.settings_manager import SettingsManager
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -27,13 +35,126 @@ class MainWindow(Adw.ApplicationWindow):
         """
         super().__init__(application=application, **kwargs)
 
+        # Store application reference for settings access
+        self._application = application
+
         # Set window properties
         self.set_title("ClamUI")
         self.set_default_size(800, 700)
         self.set_size_request(400, 700)  # Minimum size to keep ClamAV status bar visible
 
+        # Set up minimize-to-tray handling
+        self._setup_minimize_to_tray()
+
         # Create the main layout
         self._setup_ui()
+
+    def _setup_minimize_to_tray(self) -> None:
+        """
+        Set up minimize-to-tray functionality.
+
+        Connects to window state changes to detect minimize events.
+        When minimize_to_tray setting is enabled and tray is available,
+        the window will hide to tray instead of minimizing to taskbar.
+        """
+        # Track if we're handling minimize-to-tray to prevent recursion
+        self._handling_minimize = False
+
+        # Connect to the window's surface to detect state changes
+        # We need to do this after the window is realized
+        self.connect("realize", self._on_window_realized)
+
+    def _on_window_realized(self, window) -> None:
+        """
+        Handle window realization.
+
+        Connects to the surface state notify signal to detect minimize events.
+        """
+        surface = self.get_surface()
+        if surface is not None:
+            # Connect to surface state changes to detect minimize
+            surface.connect("notify::state", self._on_surface_state_changed)
+
+    def _on_surface_state_changed(self, surface, pspec) -> None:
+        """
+        Handle surface state changes.
+
+        When the window is minimized (MINIMIZED state set) and
+        minimize_to_tray is enabled, hide the window to tray instead.
+
+        Args:
+            surface: The Gdk.Surface whose state changed
+            pspec: The property specification
+        """
+        if self._handling_minimize:
+            return
+
+        state = surface.get_state()
+
+        # Check if minimized state was just set
+        if state & Gdk.ToplevelState.MINIMIZED:
+            if self._should_minimize_to_tray():
+                self._handling_minimize = True
+                try:
+                    # Unminimize first, then hide to tray
+                    # Use idle_add to defer after state change completes
+                    GLib.idle_add(self._do_minimize_to_tray)
+                finally:
+                    self._handling_minimize = False
+
+    def _should_minimize_to_tray(self) -> bool:
+        """
+        Check if minimize-to-tray should be used.
+
+        Returns:
+            True if minimize_to_tray setting is enabled and tray is available
+        """
+        # Check if we have access to settings manager
+        if not hasattr(self._application, 'settings_manager'):
+            return False
+
+        settings = self._application.settings_manager
+        if settings is None:
+            return False
+
+        # Check if minimize_to_tray is enabled
+        if not settings.get('minimize_to_tray', False):
+            return False
+
+        # Check if tray indicator is available
+        if not hasattr(self._application, 'tray_indicator'):
+            return False
+
+        tray = self._application.tray_indicator
+        if tray is None:
+            return False
+
+        return True
+
+    def _do_minimize_to_tray(self) -> bool:
+        """
+        Perform the minimize-to-tray action.
+
+        Called from idle to ensure state changes have completed.
+
+        Returns:
+            False to remove from idle queue
+        """
+        # Restore window from minimized state first
+        self.unminimize()
+
+        # Then hide to tray
+        self.hide_window()
+
+        logger.debug("Window minimized to tray")
+
+        # Update tray menu label if tray is available
+        if hasattr(self._application, 'tray_indicator'):
+            tray = self._application.tray_indicator
+            if tray is not None and hasattr(tray, 'update_window_menu_label'):
+                tray.update_window_menu_label()
+
+        return False  # Remove from idle queue
 
     def _setup_ui(self):
         """Set up the window UI layout."""
@@ -211,3 +332,31 @@ class MainWindow(Adw.ApplicationWindow):
             The content area Gtk.Box
         """
         return self._content_area
+
+    def toggle_visibility(self) -> None:
+        """
+        Toggle the window's visibility.
+
+        If the window is visible, hide it. If hidden, show and present it.
+        """
+        if self.is_visible():
+            self.hide_window()
+        else:
+            self.show_window()
+
+    def show_window(self) -> None:
+        """
+        Show the window and bring it to front.
+
+        Restores the window from hidden state and presents it to the user.
+        """
+        self.set_visible(True)
+        self.present()
+
+    def hide_window(self) -> None:
+        """
+        Hide the window.
+
+        The window remains in memory but is not visible to the user.
+        """
+        self.set_visible(False)

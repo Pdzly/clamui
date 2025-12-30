@@ -32,16 +32,20 @@ class PreferencesWindow(Adw.PreferencesWindow):
     The window is displayed as a modal dialog transient to the main window.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, settings_manager=None, **kwargs):
         """
         Initialize the preferences window.
 
         Args:
+            settings_manager: Optional SettingsManager instance for application settings
             **kwargs: Additional arguments passed to parent, including:
                 - transient_for: Parent window to be modal to
                 - application: The parent application instance
         """
         super().__init__(**kwargs)
+
+        # Store settings manager reference (not currently used but available for future)
+        self._settings_manager = settings_manager
 
         # Set window properties
         self.set_title("Preferences")

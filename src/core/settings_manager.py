@@ -21,6 +21,8 @@ class SettingsManager:
 
     DEFAULT_SETTINGS = {
         "notifications_enabled": True,
+        "minimize_to_tray": False,
+        "start_minimized": False,
     }
 
     def __init__(self, config_dir: Optional[Path] = None):

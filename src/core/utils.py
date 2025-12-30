@@ -7,7 +7,63 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
+
+
+# Flatpak detection cache (None = not checked, True/False = result)
+_flatpak_detected: Optional[bool] = None
+
+
+def is_flatpak() -> bool:
+    """
+    Detect if running inside a Flatpak sandbox.
+
+    Uses the presence of /.flatpak-info file as the detection method,
+    which is the standard way to detect Flatpak environment.
+
+    The result is cached after the first check for performance.
+
+    Returns:
+        True if running inside Flatpak sandbox, False otherwise
+    """
+    global _flatpak_detected
+
+    if _flatpak_detected is None:
+        _flatpak_detected = os.path.exists('/.flatpak-info')
+
+    return _flatpak_detected
+
+
+def wrap_host_command(command: List[str]) -> List[str]:
+    """
+    Wrap a command with flatpak-spawn --host if running inside Flatpak.
+
+    When running inside a Flatpak sandbox, commands that need to execute
+    on the host system (like ClamAV binaries) must be prefixed with
+    'flatpak-spawn --host' to bridge the sandbox boundary.
+
+    Args:
+        command: The command to wrap as a list of strings
+                 (e.g., ['clamscan', '--version'])
+
+    Returns:
+        The original command if not in Flatpak, or the command prefixed
+        with ['flatpak-spawn', '--host'] if running in Flatpak sandbox
+
+    Example:
+        >>> wrap_host_command(['clamscan', '--version'])
+        ['clamscan', '--version']  # When not in Flatpak
+
+        >>> wrap_host_command(['clamscan', '--version'])
+        ['flatpak-spawn', '--host', 'clamscan', '--version']  # When in Flatpak
+    """
+    if not command:
+        return command
+
+    if is_flatpak():
+        return ['flatpak-spawn', '--host'] + list(command)
+
+    return list(command)
 
 
 def check_clamav_installed() -> Tuple[bool, Optional[str]]:

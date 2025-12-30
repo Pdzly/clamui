@@ -60,7 +60,7 @@ This script will remove:
     - Desktop entry (application menu)
     - Application icon
     - Nemo file manager action (context menu)
-    - ClamUI Python package (pip)
+    - ClamUI virtual environment and wrapper script
 EOF
 }
 
@@ -109,52 +109,53 @@ NEMO_ACTION_DIR="$SHARE_DIR/nemo/actions"
 # Uninstallation Functions
 #
 
-# Uninstall ClamUI Python package using pip or uv
+# Uninstall ClamUI Python package and virtual environment
 uninstall_python_package() {
     log_info "=== Uninstalling ClamUI Python Package ==="
     echo
 
-    # Determine which package manager to use
-    PKG_UNINSTALL_CMD=""
-
-    # Prefer uv if available
-    if command -v uv >/dev/null 2>&1; then
-        PKG_MANAGER="uv"
-        if [ "$SYSTEM_INSTALL" = "1" ]; then
-            PKG_UNINSTALL_CMD="uv pip uninstall --system"
-        else
-            PKG_UNINSTALL_CMD="uv pip uninstall"
-        fi
-        log_info "Using uv package manager"
-    elif command -v pip3 >/dev/null 2>&1; then
-        PKG_MANAGER="pip3"
-        PKG_UNINSTALL_CMD="pip3 uninstall"
-        log_info "Using pip3"
-    elif command -v pip >/dev/null 2>&1; then
-        PKG_MANAGER="pip"
-        PKG_UNINSTALL_CMD="pip uninstall"
-        log_info "Using pip"
+    # Set up virtual environment location (same as install.sh)
+    if [ "$SYSTEM_INSTALL" = "1" ]; then
+        VENV_DIR="/usr/local/share/clamui/venv"
+        CLAMUI_DIR="/usr/local/share/clamui"
     else
-        log_warning "No Python package manager found. Skipping pip package removal."
-        log_warning "You may need to manually remove the clamui package."
-        return 0
+        VENV_DIR="$SHARE_DIR/clamui/venv"
+        CLAMUI_DIR="$SHARE_DIR/clamui"
     fi
 
-    # Check if clamui is installed
-    if $PKG_MANAGER show clamui >/dev/null 2>&1 || pip3 show clamui >/dev/null 2>&1 2>/dev/null; then
-        log_info "Removing clamui package..."
-
-        # Execute the uninstallation
-        if $PKG_UNINSTALL_CMD -y clamui 2>/dev/null; then
-            log_success "ClamUI Python package uninstalled successfully!"
-        else
-            log_warning "Could not uninstall pip package (may not be installed via pip)"
-        fi
+    # Remove the wrapper script
+    WRAPPER_SCRIPT="$BIN_DIR/clamui"
+    if [ -f "$WRAPPER_SCRIPT" ]; then
+        log_info "Removing wrapper script..."
+        rm -f "$WRAPPER_SCRIPT"
+        log_success "Removed: $WRAPPER_SCRIPT"
     else
-        log_info "ClamUI pip package not found (may have been installed differently)"
+        log_info "Wrapper script not found: $WRAPPER_SCRIPT"
+    fi
+
+    # Remove the virtual environment
+    if [ -d "$VENV_DIR" ]; then
+        log_info "Removing virtual environment..."
+        rm -rf "$VENV_DIR"
+        log_success "Removed: $VENV_DIR"
+    else
+        log_info "Virtual environment not found: $VENV_DIR"
+    fi
+
+    # Remove the clamui directory if empty
+    if [ -d "$CLAMUI_DIR" ]; then
+        # Check if directory is empty
+        if [ -z "$(ls -A "$CLAMUI_DIR" 2>/dev/null)" ]; then
+            log_info "Removing empty clamui directory..."
+            rmdir "$CLAMUI_DIR" 2>/dev/null || true
+            log_success "Removed: $CLAMUI_DIR"
+        else
+            log_info "Clamui directory not empty, keeping: $CLAMUI_DIR"
+        fi
     fi
 
     echo
+    log_success "ClamUI Python package uninstalled!"
     return 0
 }
 

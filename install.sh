@@ -52,11 +52,17 @@ ClamUI Installation Script
 Usage: ./install.sh [OPTIONS]
 
 Options:
-    --system    Install system-wide to /usr/share (requires root)
+    --system    Install system-wide to /usr/local/share (requires root)
     --help      Show this help message
 
 By default, installs to user-local directories (~/.local/share/).
 No root privileges required for user-local installation.
+
+ClamUI is installed into an isolated virtual environment:
+    - User install: ~/.local/share/clamui/venv
+    - System install: /usr/local/share/clamui/venv
+
+A wrapper script is created at ~/.local/bin/clamui (or /usr/local/bin/clamui).
 
 Dependencies Required:
     - Python 3.10 or higher
@@ -268,7 +274,7 @@ check_all_dependencies() {
 # Installation Functions
 #
 
-# Install ClamUI Python package using pip or uv
+# Install ClamUI Python package into a dedicated virtual environment
 install_python_package() {
     log_info "=== Installing ClamUI Python Package ==="
     echo
@@ -280,43 +286,51 @@ install_python_package() {
         return 1
     fi
 
-    log_info "Installing clamui package using $PKG_MANAGER..."
+    # Set up virtual environment location
+    if [ "$SYSTEM_INSTALL" = "1" ]; then
+        VENV_DIR="/usr/local/share/clamui/venv"
+    else
+        VENV_DIR="$SHARE_DIR/clamui/venv"
+    fi
 
-    # Build the install command based on package manager and install mode
+    log_info "Creating virtual environment at $VENV_DIR..."
+
+    # Create the parent directory
+    mkdir -p "$(dirname "$VENV_DIR")"
+
+    # Create virtual environment using uv or python venv
     if [ "$PKG_MANAGER" = "uv" ]; then
-        # uv pip install with appropriate options
-        if [ "$SYSTEM_INSTALL" = "1" ]; then
-            # System-wide install with uv (requires --system flag)
-            INSTALL_CMD="uv pip install --system \"$SCRIPT_DIR\""
+        # Use uv to create venv (faster)
+        if uv venv "$VENV_DIR" --python "$PYTHON_CMD" 2>/dev/null; then
+            log_success "Virtual environment created with uv"
         else
-            # User install with uv
-            INSTALL_CMD="uv pip install --user \"$SCRIPT_DIR\""
+            log_error "Failed to create virtual environment with uv"
+            return 1
         fi
     else
-        # pip/pip3 install with appropriate options
-        if [ "$SYSTEM_INSTALL" = "1" ]; then
-            # System-wide install (no --user flag, requires root)
-            INSTALL_CMD="$PKG_INSTALL_CMD \"$SCRIPT_DIR\""
+        # Use python's built-in venv
+        if $PYTHON_CMD -m venv "$VENV_DIR" 2>/dev/null; then
+            log_success "Virtual environment created with python venv"
         else
-            # User install with --user flag
-            INSTALL_CMD="$PKG_INSTALL_CMD --user \"$SCRIPT_DIR\""
+            log_error "Failed to create virtual environment"
+            log_info "You may need to install python3-venv: sudo apt install python3-venv"
+            return 1
         fi
+    fi
+
+    # Install the package into the virtual environment
+    log_info "Installing clamui package into virtual environment..."
+
+    if [ "$PKG_MANAGER" = "uv" ]; then
+        INSTALL_CMD="uv pip install --python \"$VENV_DIR/bin/python\" \"$SCRIPT_DIR\""
+    else
+        INSTALL_CMD="\"$VENV_DIR/bin/pip\" install \"$SCRIPT_DIR\""
     fi
 
     log_info "Running: $INSTALL_CMD"
 
-    # Execute the installation
     if eval "$INSTALL_CMD"; then
         log_success "ClamUI Python package installed successfully!"
-        echo
-
-        # Verify the installation
-        if $PYTHON_CMD -c "import src" 2>/dev/null; then
-            log_success "Package import verification passed"
-        else
-            log_warning "Package installed but import verification skipped (may need shell restart)"
-        fi
-        return 0
     else
         log_error "Failed to install ClamUI Python package."
         log_info "You may need to install build dependencies first:"
@@ -325,6 +339,42 @@ install_python_package() {
         log_info "  Arch: sudo pacman -S python-gobject"
         return 1
     fi
+
+    # Create wrapper script to run clamui from the venv
+    log_info "Creating clamui wrapper script..."
+    mkdir -p "$BIN_DIR"
+
+    # Create wrapper script that activates the venv and runs clamui
+    cat > "$BIN_DIR/clamui" << EOF
+#!/bin/sh
+# ClamUI launcher - runs clamui from its virtual environment
+exec "$VENV_DIR/bin/clamui" "\$@"
+EOF
+    chmod +x "$BIN_DIR/clamui"
+    log_success "Wrapper script created: $BIN_DIR/clamui"
+
+    # Verify the installation
+    echo
+    if "$VENV_DIR/bin/python" -c "import src" 2>/dev/null; then
+        log_success "Package import verification passed"
+    else
+        log_warning "Package installed but import verification skipped"
+    fi
+
+    # Check if bin directory is in PATH
+    case ":$PATH:" in
+        *":$BIN_DIR:"*)
+            log_success "Binary directory is in PATH"
+            ;;
+        *)
+            log_warning "$BIN_DIR is not in your PATH"
+            log_info "Add it to your PATH by adding this to ~/.bashrc or ~/.profile:"
+            log_info "  export PATH=\"$BIN_DIR:\$PATH\""
+            ;;
+    esac
+
+    echo
+    return 0
 }
 
 # Install XDG files (desktop entry, icon, nemo action)

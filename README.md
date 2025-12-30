@@ -210,7 +210,7 @@ For development and testing of the Flatpak package:
 2. **Add Flathub repository and install GNOME SDK:**
    ```bash
    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-   flatpak install flathub org.gnome.Platform//47 org.gnome.Sdk//47
+   flatpak install flathub org.gnome.Platform//46 org.gnome.Sdk//46
    ```
 
 3. **Build the Flatpak:**

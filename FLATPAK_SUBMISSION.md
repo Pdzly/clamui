@@ -241,7 +241,7 @@ Create `com.github.rooki.ClamUI.yml` (Flathub version):
 ```yaml
 app-id: com.github.rooki.ClamUI
 runtime: org.gnome.Platform
-runtime-version: '47'
+runtime-version: '46'
 sdk: org.gnome.Sdk
 command: clamui
 

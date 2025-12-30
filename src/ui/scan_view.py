@@ -12,7 +12,13 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GLib, Gdk
 
 from ..core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail
-from ..core.utils import format_scan_path, check_clamav_installed, validate_dropped_files
+from ..core.utils import (
+    format_scan_path,
+    check_clamav_installed,
+    validate_dropped_files,
+    format_results_as_text,
+    copy_to_clipboard,
+)
 from .fullscreen_dialog import FullscreenLogDialog
 
 # EICAR test string - industry-standard antivirus test pattern
@@ -972,9 +978,40 @@ class ScanView(Gtk.Box):
         )
 
     def _on_copy_results_clicked(self, button):
-        """Handle copy to clipboard button click."""
-        # Placeholder - will be implemented in subtask-5-2
-        pass
+        """
+        Handle copy to clipboard button click.
+
+        Formats the current scan results as human-readable text and copies
+        them to the system clipboard. Shows a success or error banner.
+        """
+        if self._current_result is None:
+            self._status_banner.set_title("No results to copy")
+            self._status_banner.add_css_class("warning")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.set_button_label(None)
+            self._status_banner.set_revealed(True)
+            return
+
+        # Format the results as text
+        formatted_text = format_results_as_text(self._current_result)
+
+        # Copy to clipboard
+        success = copy_to_clipboard(formatted_text)
+
+        if success:
+            self._status_banner.set_title("Results copied to clipboard")
+            self._status_banner.add_css_class("success")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.remove_css_class("warning")
+        else:
+            self._status_banner.set_title("Failed to copy to clipboard")
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("warning")
+
+        self._status_banner.set_button_label(None)
+        self._status_banner.set_revealed(True)
 
     def _on_export_text_clicked(self, button):
         """Handle export to text file button click."""

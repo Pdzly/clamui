@@ -1,0 +1,19 @@
+Package: clamui
+Version: VERSION
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.10), python3-gi, python3-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, clamav
+Maintainer: ClamUI Contributors <clamui@example.com>
+Homepage: https://github.com/yourusername/clamui
+Description: Modern graphical interface for ClamAV antivirus scanner
+ ClamUI is a modern Linux desktop application that provides a graphical
+ user interface for the ClamAV antivirus command-line tool.
+ .
+ Features:
+  - Easy-to-use GTK4/libadwaita interface
+  - Scan files and directories for malware
+  - View and manage scan results
+  - Desktop integration with notifications
+ .
+ This package requires ClamAV to be installed for scanning functionality.

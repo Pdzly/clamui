@@ -619,7 +619,7 @@ class ScanView(Gtk.Box):
             result: The scan result to display
         """
         # Store raw output for fullscreen dialog
-        self._raw_output = result.output
+        self._raw_output = result.stdout
 
         # Store the current result for export functionality
         self._current_result = result

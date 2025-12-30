@@ -396,6 +396,9 @@ class LogsView(Gtk.Box):
         duplicate requests and handle edge cases like:
         - Widget disposed/unmapped
         - Rapid refresh clicks (debouncing via _is_loading flag)
+
+        Note: Row clearing is deferred to _on_logs_loaded() callback to avoid
+        blocking the UI. The rows are cleared right before adding new ones.
         """
         # Guard against loading when widget is disposed
         if self._is_disposed:
@@ -408,19 +411,9 @@ class LogsView(Gtk.Box):
         # Set loading state
         self._set_loading_state(True)
 
-        # Clear existing rows safely
-        try:
-            while True:
-                row = self._logs_listbox.get_row_at_index(0)
-                if row is None:
-                    break
-                self._logs_listbox.remove(row)
-        except Exception:
-            # Widget may be in invalid state, reset and return
-            self._set_loading_state(False)
-            return
-
         # Get logs from log manager asynchronously
+        # Note: Rows are cleared in the callback, not here, to avoid
+        # blocking the main thread with synchronous operations
         self._log_manager.get_logs_async(
             callback=self._on_logs_loaded,
             limit=100
@@ -460,6 +453,15 @@ class LogsView(Gtk.Box):
         except Exception:
             # Widget may be in an invalid state, reset loading flag
             self._is_loading = False
+            return False
+
+        # Clear existing rows efficiently using remove_all()
+        # This is much faster than removing rows one-by-one in a loop
+        try:
+            self._logs_listbox.remove_all()
+        except Exception:
+            # Widget may be in invalid state, reset and return
+            self._set_loading_state(False)
             return False
 
         # Handle empty logs - placeholder will be shown automatically
@@ -1050,17 +1052,18 @@ class LogsView(Gtk.Box):
         Handle widget mapping (being shown).
 
         This is called when the widget becomes visible.
-        We use this to reset the disposed flag and trigger a fresh load.
+        We only reset the disposed flag here - we do NOT trigger a reload
+        because do_map() is called frequently during UI updates (spinner
+        visibility, row changes, etc.) and would cause infinite reload loops.
+
+        The initial load is handled by __init__ and manual refreshes are
+        triggered via the refresh button or refresh_logs() method.
         """
         # Call parent implementation first
         Gtk.Box.do_map(self)
 
         # Reset disposed flag now that we're mapped again
         self._is_disposed = False
-
-        # Trigger a fresh load of logs when view becomes visible again
-        # This ensures logs are up-to-date after navigation
-        GLib.idle_add(self._load_logs_async)
 
     @property
     def log_manager(self) -> LogManager:

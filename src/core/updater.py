@@ -13,7 +13,7 @@ from typing import Callable, Optional
 from gi.repository import GLib
 
 from .log_manager import LogEntry, LogManager
-from .utils import check_freshclam_installed, get_freshclam_path
+from .utils import check_freshclam_installed, get_freshclam_path, wrap_host_command
 
 
 def get_pkexec_path() -> Optional[str]:
@@ -227,8 +227,11 @@ class FreshclamUpdater:
         Uses pkexec for privilege elevation since freshclam requires
         root access to update the ClamAV database in /var/lib/clamav/.
 
+        When running inside a Flatpak sandbox, the command is automatically
+        wrapped with 'flatpak-spawn --host' to execute freshclam on the host system.
+
         Returns:
-            List of command arguments
+            List of command arguments (wrapped with flatpak-spawn if in Flatpak)
         """
         freshclam = get_freshclam_path() or "freshclam"
         pkexec = get_pkexec_path()
@@ -243,7 +246,8 @@ class FreshclamUpdater:
         # Add verbose flag for more detailed output
         cmd.append("--verbose")
 
-        return cmd
+        # Wrap with flatpak-spawn if running inside Flatpak sandbox
+        return wrap_host_command(cmd)
 
     def _parse_results(
         self,

@@ -16,6 +16,7 @@ sys.modules["gi.repository"] = mock.MagicMock()
 
 from src.core.utils import (
     ThreatSeverity,
+    categorize_threat,
     check_clamav_installed,
     check_clamdscan_installed,
     check_freshclam_installed,
@@ -554,3 +555,137 @@ class TestClassifyThreatSeverity:
 
         # Low
         assert classify_threat_severity("Eicar-Test-Signature") == ThreatSeverity.LOW
+
+
+class TestCategorizeThreat:
+    """Tests for the categorize_threat function."""
+
+    def test_categorize_threat_ransomware(self):
+        """Test Ransomware category extraction."""
+        assert categorize_threat("Win.Ransomware.Locky") == "Ransomware"
+        assert categorize_threat("Ransom.WannaCry") == "Ransomware"
+        assert categorize_threat("Win.Ransom.Cerber") == "Ransomware"
+
+    def test_categorize_threat_rootkit(self):
+        """Test Rootkit category extraction."""
+        assert categorize_threat("Win.Rootkit.Agent") == "Rootkit"
+        assert categorize_threat("Unix.Rootkit.Kaiten") == "Rootkit"
+        assert categorize_threat("Win.Bootkit.Rovnix") == "Rootkit"
+
+    def test_categorize_threat_trojan(self):
+        """Test Trojan category extraction."""
+        assert categorize_threat("Win.Trojan.Agent") == "Trojan"
+        assert categorize_threat("Trojan.Generic") == "Trojan"
+        assert categorize_threat("Win.Trojan.Downloader") == "Trojan"
+
+    def test_categorize_threat_worm(self):
+        """Test Worm category extraction."""
+        assert categorize_threat("Win.Worm.Conficker") == "Worm"
+        assert categorize_threat("Worm.Mydoom") == "Worm"
+        assert categorize_threat("Worm.Blaster") == "Worm"
+
+    def test_categorize_threat_backdoor(self):
+        """Test Backdoor category extraction."""
+        assert categorize_threat("Win.Backdoor.Poison") == "Backdoor"
+        assert categorize_threat("Backdoor.IRC") == "Backdoor"
+        assert categorize_threat("Backdoor.Trojan") == "Backdoor"
+
+    def test_categorize_threat_exploit(self):
+        """Test Exploit category extraction."""
+        assert categorize_threat("Exploit.PDF.CVE-2023-1234") == "Exploit"
+        assert categorize_threat("Win.Exploit.Agent") == "Exploit"
+        assert categorize_threat("Exploit.Java") == "Exploit"
+
+    def test_categorize_threat_adware(self):
+        """Test Adware category extraction."""
+        assert categorize_threat("PUA.Win.Adware.Agent") == "Adware"
+        assert categorize_threat("Adware.Generic") == "Adware"
+        assert categorize_threat("Win.Adware.OpenCandy") == "Adware"
+
+    def test_categorize_threat_spyware(self):
+        """Test Spyware category extraction."""
+        assert categorize_threat("Win.Spyware.Agent") == "Spyware"
+        assert categorize_threat("Spyware.Generic") == "Spyware"
+        assert categorize_threat("Win.Keylogger.Agent") == "Spyware"
+
+    def test_categorize_threat_pua(self):
+        """Test PUA category extraction."""
+        assert categorize_threat("PUA.Win.Tool.Agent") == "PUA"
+        assert categorize_threat("PUP.Optional.Agent") == "PUA"
+        assert categorize_threat("Win.PUA.Generic") == "PUA"
+
+    def test_categorize_threat_test(self):
+        """Test Test category extraction for EICAR and test signatures."""
+        assert categorize_threat("Eicar-Test-Signature") == "Test"
+        assert categorize_threat("EICAR_Test") == "Test"
+        assert categorize_threat("ClamAV-Test-Signature") == "Test"
+        assert categorize_threat("Test.File.Virus") == "Test"
+
+    def test_categorize_threat_virus(self):
+        """Test Virus category extraction."""
+        assert categorize_threat("Win.Virus.Agent") == "Virus"
+        assert categorize_threat("Virus.Generic") == "Virus"
+
+    def test_categorize_threat_macro(self):
+        """Test Macro category extraction."""
+        assert categorize_threat("Win.Macro.Agent") == "Macro"
+        assert categorize_threat("Macro.Generic") == "Macro"
+        assert categorize_threat("Doc.Macro.Dropper") == "Macro"
+
+    def test_categorize_threat_phishing(self):
+        """Test Phishing category extraction."""
+        assert categorize_threat("Phishing.Email") == "Phishing"
+        assert categorize_threat("Phish.Bank.Generic") == "Phishing"
+        assert categorize_threat("Win.Phishing.PayPal") == "Phishing"
+
+    def test_categorize_threat_heuristic(self):
+        """Test Heuristic category extraction."""
+        assert categorize_threat("Heuristic.Suspicious") == "Heuristic"
+        assert categorize_threat("Win.Heuristic.Agent") == "Heuristic"
+
+    def test_categorize_threat_empty_string(self):
+        """Test Unknown category for empty string."""
+        assert categorize_threat("") == "Unknown"
+
+    def test_categorize_threat_none(self):
+        """Test Unknown category for None input."""
+        assert categorize_threat(None) == "Unknown"
+
+    def test_categorize_threat_default_to_virus(self):
+        """Test default Virus category for unrecognized threats."""
+        assert categorize_threat("Unknown.Malware") == "Virus"
+        assert categorize_threat("Some.Random.Threat") == "Virus"
+        assert categorize_threat("Win.Agent.Generic") == "Virus"
+
+    def test_categorize_threat_case_insensitive(self):
+        """Test case-insensitive matching."""
+        assert categorize_threat("RANSOMWARE") == "Ransomware"
+        assert categorize_threat("TROJAN") == "Trojan"
+        assert categorize_threat("worm") == "Worm"
+        assert categorize_threat("EICAR") == "Test"
+
+    def test_categorize_threat_priority_order(self):
+        """Test that more specific patterns take priority."""
+        # Ransomware should take priority over generic patterns
+        assert categorize_threat("Win.Ransomware.Trojan") == "Ransomware"
+        # Rootkit should take priority over trojan
+        assert categorize_threat("Win.Rootkit.Trojan") == "Rootkit"
+        # Backdoor in name takes priority when listed first
+        assert categorize_threat("Win.Trojan.Backdoor") == "Trojan"
+
+    def test_categorize_threat_real_world_threats(self):
+        """Test with real-world threat names from ClamAV."""
+        # Ransomware
+        assert categorize_threat("Win.Ransomware.WannaCry-9952423-0") == "Ransomware"
+
+        # Trojan
+        assert categorize_threat("Win.Trojan.Emotet-9953123-0") == "Trojan"
+
+        # Worm
+        assert categorize_threat("Unix.Worm.Mirai-123456") == "Worm"
+
+        # Adware
+        assert categorize_threat("PUA.Win.Adware.OpenCandy-1234") == "Adware"
+
+        # Test
+        assert categorize_threat("Eicar-Test-Signature") == "Test"

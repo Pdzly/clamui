@@ -373,6 +373,80 @@ def format_scan_path(path: str) -> str:
         return path
 
 
+def categorize_threat(threat_name: str) -> str:
+    """
+    Extract the category of a threat from its name.
+
+    ClamAV threat names typically follow patterns that indicate the threat type.
+    This function analyzes the threat name to extract a human-readable category.
+
+    Categories returned:
+    - Ransomware: Ransomware, CryptoLocker variants
+    - Rootkit: Rootkits and bootkits
+    - Trojan: Trojan horse malware
+    - Worm: Self-replicating worms
+    - Backdoor: Backdoor access tools
+    - Exploit: Vulnerability exploits
+    - Adware: Advertising software
+    - Spyware: Spyware and keyloggers
+    - PUA: Potentially Unwanted Applications
+    - Test: Test signatures (EICAR)
+    - Virus: Generic viruses
+    - Macro: Macro viruses
+    - Phishing: Phishing attempts
+    - Heuristic: Heuristic detections
+    - Unknown: Cannot determine category
+
+    Args:
+        threat_name: The threat name from ClamAV output (e.g., "Win.Trojan.Agent")
+
+    Returns:
+        Category as string (e.g., 'Virus', 'Trojan', 'Worm', etc.)
+
+    Example:
+        >>> categorize_threat("Win.Trojan.Agent")
+        'Trojan'
+
+        >>> categorize_threat("Eicar-Test-Signature")
+        'Test'
+    """
+    if not threat_name:
+        return "Unknown"
+
+    name_lower = threat_name.lower()
+
+    # Check for specific categories in order of specificity
+    category_patterns = [
+        ('ransomware', 'Ransomware'),
+        ('ransom', 'Ransomware'),
+        ('rootkit', 'Rootkit'),
+        ('bootkit', 'Rootkit'),
+        ('trojan', 'Trojan'),
+        ('worm', 'Worm'),
+        ('backdoor', 'Backdoor'),
+        ('exploit', 'Exploit'),
+        ('adware', 'Adware'),
+        ('spyware', 'Spyware'),
+        ('keylogger', 'Spyware'),
+        ('pua', 'PUA'),
+        ('pup', 'PUA'),
+        ('eicar', 'Test'),
+        ('test-signature', 'Test'),
+        ('test.file', 'Test'),
+        ('virus', 'Virus'),
+        ('macro', 'Macro'),
+        ('phish', 'Phishing'),
+        ('heuristic', 'Heuristic'),
+    ]
+
+    for pattern, category in category_patterns:
+        if pattern in name_lower:
+            return category
+
+    # Default to "Virus" for unrecognized threats (conservative assumption)
+    return "Virus"
+
+
 def classify_threat_severity(threat_name: str) -> ThreatSeverity:
     """
     Classify the severity level of a threat based on its name.

@@ -51,6 +51,9 @@ class ScanView(Gtk.Box):
         # Temp file path for EICAR test (for cleanup)
         self._eicar_temp_path: str = ""
 
+        # Scan state change callback (for tray integration)
+        self._on_scan_state_changed = None
+
         # Set up the UI
         self._setup_ui()
 
@@ -491,12 +494,27 @@ class ScanView(Gtk.Box):
             callback=self._on_scan_complete
         )
 
-    def _set_scanning_state(self, is_scanning: bool):
+    def set_scan_state_callback(self, callback):
+        """
+        Set callback for scan state changes.
+
+        The callback is invoked when scanning starts or stops.
+        Signature: callback(is_scanning: bool, result: Optional[ScanResult])
+        - When scan starts: is_scanning=True, result=None
+        - When scan ends: is_scanning=False, result=ScanResult
+
+        Args:
+            callback: Callable to invoke on state changes
+        """
+        self._on_scan_state_changed = callback
+
+    def _set_scanning_state(self, is_scanning: bool, result=None):
         """
         Update UI to reflect scanning state.
 
         Args:
             is_scanning: Whether a scan is in progress
+            result: ScanResult when scan completes (None when starting)
         """
         self._is_scanning = is_scanning
 
@@ -525,6 +543,10 @@ class ScanView(Gtk.Box):
             self._select_file_btn.set_sensitive(True)
             self._test_clamav_button.set_sensitive(True)
 
+        # Notify callback of state change
+        if self._on_scan_state_changed:
+            self._on_scan_state_changed(is_scanning, result)
+
     def _on_scan_complete(self, result: ScanResult):
         """
         Handle scan completion.
@@ -532,7 +554,7 @@ class ScanView(Gtk.Box):
         Args:
             result: The scan result from the scanner
         """
-        self._set_scanning_state(False)
+        self._set_scanning_state(False, result)
         self._display_results(result)
         return False  # Don't repeat GLib.idle_add
 

@@ -112,6 +112,9 @@ class ClamUIApp(Adw.Application):
             self._logs_view = LogsView()
             self._components_view = ComponentsView()
 
+            # Connect scan state callback for tray integration
+            self._scan_view.set_scan_state_callback(self._on_scan_state_changed)
+
             # Set the scan view as the default content
             win.set_content_view(self._scan_view)
             win.set_active_view("scan")
@@ -371,3 +374,30 @@ class ClamUIApp(Adw.Application):
         """Execute quit on main thread."""
         self.quit()
         return False  # Don't repeat
+
+    # Scan state change handler (for tray integration)
+
+    def _on_scan_state_changed(self, is_scanning: bool, result=None) -> None:
+        """
+        Handle scan state changes for tray indicator updates.
+
+        Called by ScanView when scanning starts or stops.
+
+        Args:
+            is_scanning: True when scan starts, False when scan ends
+            result: ScanResult when scan completes (None when starting)
+        """
+        if self._tray_indicator is None:
+            return
+
+        if is_scanning:
+            # Update tray to scanning state
+            self._tray_indicator.update_status("scanning")
+            # Show indeterminate progress (tray doesn't get real-time %)
+            # Clear any previous label, icon change indicates scanning
+            self._tray_indicator.update_scan_progress(0)
+            logger.debug("Tray updated to scanning state")
+        else:
+            # Clear progress label
+            self._tray_indicator.update_scan_progress(0)
+            logger.debug("Tray scan progress cleared")

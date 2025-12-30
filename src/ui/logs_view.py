@@ -202,6 +202,21 @@ class LogsView(Gtk.Box):
         daemon_group.set_description("Live logs from the clamd daemon")
         self._daemon_group = daemon_group
 
+        # Header box with fullscreen button
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        header_box.set_halign(Gtk.Align.END)
+
+        # Fullscreen button
+        fullscreen_button = Gtk.Button()
+        fullscreen_button.set_icon_name("view-fullscreen-symbolic")
+        fullscreen_button.set_tooltip_text("View fullscreen")
+        fullscreen_button.add_css_class("flat")
+        fullscreen_button.connect("clicked", self._on_fullscreen_daemon_clicked)
+        self._fullscreen_daemon_button = fullscreen_button
+
+        header_box.append(fullscreen_button)
+        daemon_group.set_header_suffix(header_box)
+
         # Status row
         self._daemon_status_row = Adw.ActionRow()
         self._daemon_status_row.set_title("Daemon Status")
@@ -401,6 +416,21 @@ class LogsView(Gtk.Box):
         # Create and present the fullscreen dialog
         dialog = FullscreenLogDialog(
             title="Log Details",
+            content=content
+        )
+        dialog.present(self.get_root())
+
+    def _on_fullscreen_daemon_clicked(self, button: Gtk.Button):
+        """Handle fullscreen button click for daemon logs."""
+        # Get current content from daemon text view
+        buffer = self._daemon_text.get_buffer()
+        start = buffer.get_start_iter()
+        end = buffer.get_end_iter()
+        content = buffer.get_text(start, end, False)
+
+        # Create and present the fullscreen dialog
+        dialog = FullscreenLogDialog(
+            title="Daemon Logs",
             content=content
         )
         dialog.present(self.get_root())

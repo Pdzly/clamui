@@ -699,17 +699,17 @@ class TestLogManagerAsync:
         def mock_callback(entries):
             callback_event.set()
 
-        # Patch Thread to capture thread properties
-        original_thread_init = threading.Thread.__init__
+        # Patch Thread.start to capture thread properties right before start
+        original_start = threading.Thread.start
 
-        def patched_init(self, *args, **kwargs):
-            original_thread_init(self, *args, **kwargs)
+        def patched_start(self):
             thread_info["daemon"] = self.daemon
+            original_start(self)
 
         with mock.patch("src.core.log_manager.GLib") as mock_glib:
             mock_glib.idle_add.side_effect = lambda func, *args: func(*args)
 
-            with mock.patch.object(threading.Thread, "__init__", patched_init):
+            with mock.patch.object(threading.Thread, "start", patched_start):
                 log_manager.get_logs_async(mock_callback)
                 callback_event.wait(timeout=5)
 

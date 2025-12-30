@@ -327,6 +327,72 @@ install_python_package() {
     fi
 }
 
+# Install XDG files (desktop entry, icon, nemo action)
+install_xdg_files() {
+    log_info "=== Installing XDG Files ==="
+    echo
+
+    # Create directories if they don't exist
+    log_info "Creating XDG directories..."
+    mkdir -p "$DESKTOP_DIR"
+    mkdir -p "$ICON_DIR"
+    mkdir -p "$NEMO_ACTION_DIR"
+
+    # Install desktop entry
+    log_info "Installing desktop entry to $DESKTOP_DIR..."
+    if [ -f "$SCRIPT_DIR/com.github.clamui.desktop" ]; then
+        cp "$SCRIPT_DIR/com.github.clamui.desktop" "$DESKTOP_DIR/"
+        log_success "Desktop entry installed: $DESKTOP_DIR/com.github.clamui.desktop"
+    else
+        log_error "Desktop entry file not found: $SCRIPT_DIR/com.github.clamui.desktop"
+        return 1
+    fi
+
+    # Install application icon
+    log_info "Installing application icon to $ICON_DIR..."
+    if [ -f "$SCRIPT_DIR/icons/com.github.clamui.svg" ]; then
+        cp "$SCRIPT_DIR/icons/com.github.clamui.svg" "$ICON_DIR/"
+        log_success "Icon installed: $ICON_DIR/com.github.clamui.svg"
+    else
+        log_warning "Icon file not found: $SCRIPT_DIR/icons/com.github.clamui.svg"
+        log_warning "Application will use default icon"
+    fi
+
+    # Install Nemo file manager action
+    log_info "Installing Nemo action to $NEMO_ACTION_DIR..."
+    if [ -f "$SCRIPT_DIR/com.github.clamui.nemo_action" ]; then
+        cp "$SCRIPT_DIR/com.github.clamui.nemo_action" "$NEMO_ACTION_DIR/"
+        log_success "Nemo action installed: $NEMO_ACTION_DIR/com.github.clamui.nemo_action"
+    else
+        log_warning "Nemo action file not found: $SCRIPT_DIR/com.github.clamui.nemo_action"
+        log_warning "Nemo context menu integration will not be available"
+    fi
+
+    # Update desktop database if available
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        log_info "Updating desktop database..."
+        if update-desktop-database "$DESKTOP_DIR" 2>/dev/null; then
+            log_success "Desktop database updated"
+        else
+            log_warning "Could not update desktop database (non-fatal)"
+        fi
+    fi
+
+    # Update icon cache if available
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        log_info "Updating icon cache..."
+        if gtk-update-icon-cache -f -t "$SHARE_DIR/icons/hicolor" 2>/dev/null; then
+            log_success "Icon cache updated"
+        else
+            log_warning "Could not update icon cache (non-fatal)"
+        fi
+    fi
+
+    echo
+    log_success "XDG files installed successfully!"
+    return 0
+}
+
 #
 # Main Execution
 #
@@ -345,8 +411,17 @@ main() {
         exit 1
     fi
 
-    # Placeholder for future subtasks (XDG file installation, etc.)
-    log_info "Python package installation complete. Additional steps will follow."
+    # Install XDG files (desktop entry, icon, nemo action)
+    if ! install_xdg_files; then
+        log_error "XDG file installation failed."
+        exit 1
+    fi
+
+    log_success "=== ClamUI Installation Complete ==="
+    echo
+    log_info "You may need to log out and back in, or run:"
+    log_info "  update-desktop-database $DESKTOP_DIR"
+    log_info "  gtk-update-icon-cache -f -t $SHARE_DIR/icons/hicolor"
 }
 
 main "$@"

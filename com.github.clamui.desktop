@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=ClamUI
+GenericName=Antivirus Scanner
+Comment=A graphical interface for ClamAV antivirus
+Exec=clamui
+Icon=com.github.clamui
+Terminal=false
+Categories=GTK;Utility;Security;
+Keywords=antivirus;virus;scanner;clamav;security;malware;
+StartupNotify=true
+Actions=ScanFile;
+
+[Desktop Action ScanFile]
+Name=Scan with ClamUI
+Exec=clamui %F

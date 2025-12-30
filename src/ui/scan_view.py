@@ -11,7 +11,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GLib, Gdk
 
-from ..core.scanner import Scanner, ScanResult, ScanStatus
+from ..core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail
 from ..core.utils import format_scan_path, check_clamav_installed, validate_dropped_files
 from .fullscreen_dialog import FullscreenLogDialog
 
@@ -84,13 +84,53 @@ class ScanView(Gtk.Box):
         self._setup_drop_target()
 
     def _setup_drop_css(self):
-        """Set up CSS styling for drag-and-drop visual feedback."""
+        """Set up CSS styling for drag-and-drop visual feedback and severity badges."""
         css_provider = Gtk.CssProvider()
         css_provider.load_from_string("""
             .drop-active {
                 border: 2px dashed @accent_color;
                 border-radius: 12px;
                 background-color: alpha(@accent_bg_color, 0.1);
+            }
+
+            /* Severity badge styles */
+            .severity-badge {
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 0.85em;
+                font-weight: bold;
+            }
+
+            .severity-critical {
+                background-color: #e01b24;
+                color: white;
+            }
+
+            .severity-high {
+                background-color: #ff7800;
+                color: white;
+            }
+
+            .severity-medium {
+                background-color: #f5c211;
+                color: #3d3846;
+            }
+
+            .severity-low {
+                background-color: #3584e4;
+                color: white;
+            }
+
+            /* Threat card styling */
+            .threat-card {
+                margin: 4px 0;
+            }
+
+            .recommended-action {
+                padding: 8px 12px;
+                background-color: alpha(@card_bg_color, 0.5);
+                border-radius: 6px;
+                margin: 4px 0;
             }
         """)
         Gtk.StyleContext.add_provider_for_display(
@@ -600,3 +640,181 @@ class ScanView(Gtk.Box):
             text=text
         )
         dialog.present()
+
+    def _create_threat_card(self, threat_detail: ThreatDetail) -> Adw.ExpanderRow:
+        """
+        Create an expandable threat card widget for a detected threat.
+
+        The card displays:
+        - File path as title (with tooltip for long paths)
+        - Threat name and category as subtitle
+        - Color-coded severity badge
+        - Expandable section with recommended actions
+
+        Args:
+            threat_detail: ThreatDetail object containing threat information
+
+        Returns:
+            Adw.ExpanderRow widget configured as a threat card
+        """
+        # Create the expander row
+        expander = Adw.ExpanderRow()
+        expander.add_css_class("threat-card")
+
+        # Format file path for display (truncate if too long)
+        file_path = threat_detail.file_path
+        display_path = file_path
+        if len(file_path) > 60:
+            # Show first 20 and last 35 characters
+            display_path = file_path[:20] + "..." + file_path[-35:]
+
+        expander.set_title(display_path)
+        expander.set_tooltip_text(file_path)  # Full path in tooltip
+
+        # Subtitle with threat name and category
+        subtitle = f"{threat_detail.threat_name} ({threat_detail.category})"
+        expander.set_subtitle(subtitle)
+
+        # Set icon based on severity
+        severity_icons = {
+            "critical": "dialog-error-symbolic",
+            "high": "dialog-warning-symbolic",
+            "medium": "emblem-important-symbolic",
+            "low": "dialog-information-symbolic"
+        }
+        icon_name = severity_icons.get(threat_detail.severity, "emblem-important-symbolic")
+        expander.set_icon_name(icon_name)
+
+        # Create severity badge
+        severity_badge = Gtk.Label()
+        severity_badge.set_label(threat_detail.severity.upper())
+        severity_badge.add_css_class("severity-badge")
+        severity_badge.add_css_class(f"severity-{threat_detail.severity}")
+        severity_badge.set_valign(Gtk.Align.CENTER)
+
+        # Add badge as prefix
+        expander.add_prefix(severity_badge)
+
+        # Create expanded content with recommended actions
+        action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        action_box.set_margin_start(12)
+        action_box.set_margin_end(12)
+        action_box.set_margin_top(8)
+        action_box.set_margin_bottom(8)
+
+        # Recommended action label
+        action_header = Gtk.Label()
+        action_header.set_markup("<b>Recommended Action:</b>")
+        action_header.set_halign(Gtk.Align.START)
+        action_box.append(action_header)
+
+        # Get and display the recommended action
+        recommended_action = self._get_recommended_action(threat_detail)
+        action_label = Gtk.Label()
+        action_label.set_text(recommended_action)
+        action_label.set_wrap(True)
+        action_label.set_halign(Gtk.Align.START)
+        action_label.add_css_class("recommended-action")
+        action_box.append(action_label)
+
+        # Add file path details row
+        path_row = Adw.ActionRow()
+        path_row.set_title("Full Path")
+        path_row.set_subtitle(file_path)
+        path_row.set_subtitle_selectable(True)
+        action_box.append(path_row)
+
+        expander.add_row(action_box)
+
+        return expander
+
+    def _get_recommended_action(self, threat_detail: ThreatDetail) -> str:
+        """
+        Get the recommended action for a threat based on its severity and category.
+
+        Args:
+            threat_detail: ThreatDetail object containing threat information
+
+        Returns:
+            String describing the recommended action for this threat
+        """
+        severity = threat_detail.severity
+        category = threat_detail.category
+
+        # Actions based on category first (more specific)
+        if category == "Test":
+            return (
+                "This is a test file (EICAR) used to verify antivirus functionality. "
+                "It is safe and can be deleted. No action required unless it appeared unexpectedly."
+            )
+
+        if category == "Ransomware":
+            return (
+                "URGENT: Disconnect from network immediately. Do not pay any ransom. "
+                "Delete the infected file, run a full system scan, and restore affected files "
+                "from backup. Consider professional assistance."
+            )
+
+        if category == "Rootkit":
+            return (
+                "CRITICAL: This threat can hide itself and other malware. "
+                "Boot from a clean rescue disk and run a full scan. "
+                "Consider reinstalling the operating system if compromise is confirmed."
+            )
+
+        if category == "Trojan" or category == "Backdoor":
+            return (
+                "Delete the infected file immediately. Run a full system scan to check for "
+                "additional compromises. Change passwords for sensitive accounts and monitor "
+                "for unauthorized access."
+            )
+
+        if category == "Worm":
+            return (
+                "Delete the infected file and run a full system scan. "
+                "Check network-connected devices for infection. "
+                "Update all software and operating system patches."
+            )
+
+        if category == "Exploit":
+            return (
+                "Delete the infected file. Update all software to the latest versions. "
+                "Apply security patches immediately. Check for signs of successful exploitation."
+            )
+
+        if category in ["Adware", "PUA"]:
+            return (
+                "This is a Potentially Unwanted Application. Delete the file if not intentionally "
+                "installed. Review installed programs and browser extensions for unwanted additions."
+            )
+
+        if category == "Spyware":
+            return (
+                "Delete the infected file immediately. Change passwords for all accounts. "
+                "Check for keyloggers and review recent account activity for unauthorized access."
+            )
+
+        # Fall back to severity-based recommendations
+        if severity == "critical":
+            return (
+                "URGENT: Delete the infected file immediately and isolate this system. "
+                "Run a full system scan and consider professional security assistance."
+            )
+
+        if severity == "high":
+            return (
+                "Delete the infected file and run a full system scan. "
+                "Monitor for unusual system behavior and review security logs."
+            )
+
+        if severity == "medium":
+            return (
+                "Delete the infected file if not needed. Run a targeted scan on the affected "
+                "directory. Review how this file arrived on your system."
+            )
+
+        # Low severity or default
+        return (
+            "Review the file and delete if not recognized or needed. "
+            "This is likely a low-risk detection but should still be investigated."
+        )

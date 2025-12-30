@@ -25,6 +25,11 @@ from .fullscreen_dialog import FullscreenLogDialog
 # This is NOT malware - it's a safe test string recognized by all AV software
 EICAR_TEST_STRING = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 
+# Large result set thresholds for pagination
+LARGE_RESULT_THRESHOLD = 50  # Show warning banner above this count
+INITIAL_DISPLAY_LIMIT = 25  # Number of threats to display initially
+LOAD_MORE_BATCH_SIZE = 25  # Number of threats to load per "Show More" click
+
 
 class ScanView(Gtk.Box):
     """
@@ -56,6 +61,11 @@ class ScanView(Gtk.Box):
 
         # Temp file path for EICAR test (for cleanup)
         self._eicar_temp_path: str = ""
+
+        # Pagination state for large result sets
+        self._displayed_threat_count: int = 0
+        self._all_threat_details: list = []
+        self._load_more_row: Gtk.Box | None = None
 
         # Set up the UI
         self._setup_ui()
@@ -137,6 +147,20 @@ class ScanView(Gtk.Box):
                 background-color: alpha(@card_bg_color, 0.5);
                 border-radius: 6px;
                 margin: 4px 0;
+            }
+
+            /* Large result warning banner */
+            .large-result-warning {
+                background-color: alpha(@warning_color, 0.15);
+                border: 1px solid @warning_color;
+                border-radius: 6px;
+                padding: 12px;
+                margin-bottom: 8px;
+            }
+
+            /* Load more button styling */
+            .load-more-row {
+                padding: 12px;
             }
         """)
         Gtk.StyleContext.add_provider_for_display(
@@ -651,6 +675,11 @@ class ScanView(Gtk.Box):
         self._raw_output = ""
         self._current_result = None
 
+        # Reset pagination state
+        self._displayed_threat_count = 0
+        self._all_threat_details = []
+        self._load_more_row = None
+
         # Disable export buttons when no results
         self._copy_button.set_sensitive(False)
         self._export_text_button.set_sensitive(False)
@@ -662,6 +691,11 @@ class ScanView(Gtk.Box):
         """
         Display scan results in the UI.
 
+        For large result sets (100+ threats), displays a warning banner and
+        implements pagination to keep the UI responsive. Initially shows a
+        limited number of threats with a "Show More" button to load additional
+        results in batches.
+
         Args:
             result: The scan result to display
         """
@@ -671,6 +705,11 @@ class ScanView(Gtk.Box):
         # Store the current result for export functionality
         self._current_result = result
 
+        # Store all threat details for pagination
+        self._all_threat_details = result.threat_details if result.threat_details else []
+        self._displayed_threat_count = 0
+        self._load_more_row = None
+
         # Update status banner based on result
         if result.status == ScanStatus.CLEAN:
             self._status_banner.set_title("No threats found")
@@ -678,10 +717,21 @@ class ScanView(Gtk.Box):
             self._status_banner.remove_css_class("error")
             self._status_banner.remove_css_class("warning")
         elif result.status == ScanStatus.INFECTED:
-            self._status_banner.set_title(f"Threats detected: {result.infected_count} infected file(s)")
-            self._status_banner.add_css_class("error")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("warning")
+            threat_count = len(self._all_threat_details)
+            # Show warning for large result sets
+            if threat_count >= LARGE_RESULT_THRESHOLD:
+                self._status_banner.set_title(
+                    f"Large result set: {threat_count} threats detected. "
+                    f"Showing first {INITIAL_DISPLAY_LIMIT} results."
+                )
+                self._status_banner.add_css_class("warning")
+                self._status_banner.remove_css_class("success")
+                self._status_banner.remove_css_class("error")
+            else:
+                self._status_banner.set_title(f"Threats detected: {result.infected_count} infected file(s)")
+                self._status_banner.add_css_class("error")
+                self._status_banner.remove_css_class("success")
+                self._status_banner.remove_css_class("warning")
         else:  # ERROR status
             self._status_banner.set_title(f"Scan error: {result.error_message}")
             self._status_banner.add_css_class("warning")
@@ -699,23 +749,40 @@ class ScanView(Gtk.Box):
             self._threats_listbox.remove(row)
 
         # Display results based on status
-        if result.status == ScanStatus.INFECTED and result.threat_details:
+        if result.status == ScanStatus.INFECTED and self._all_threat_details:
             # Hide placeholder, show ListBox with threat cards
             self._results_placeholder.set_visible(False)
             self._threats_listbox.set_visible(True)
 
-            # Add threat cards for each detected threat
-            for threat_detail in result.threat_details:
-                threat_card = self._create_threat_card(threat_detail)
-                self._threats_listbox.append(threat_card)
+            threat_count = len(self._all_threat_details)
 
-            # Add clean files summary row at the end
-            clean_count = result.scanned_files - result.infected_count
-            if clean_count > 0:
-                summary_row = self._create_clean_files_summary_row(
-                    clean_count, result.scanned_files, result.scanned_dirs
-                )
-                self._threats_listbox.append(summary_row)
+            # For large result sets, show warning banner and paginate
+            if threat_count >= LARGE_RESULT_THRESHOLD:
+                # Add warning info row at the top
+                warning_row = self._create_large_result_warning_row(threat_count)
+                self._threats_listbox.append(warning_row)
+
+                # Display initial batch of threats
+                initial_limit = min(INITIAL_DISPLAY_LIMIT, threat_count)
+                self._display_threat_batch(0, initial_limit)
+
+                # Add "Show More" button if there are more threats
+                if threat_count > INITIAL_DISPLAY_LIMIT:
+                    self._add_load_more_button()
+            else:
+                # For smaller result sets, display all threats
+                for threat_detail in self._all_threat_details:
+                    threat_card = self._create_threat_card(threat_detail)
+                    self._threats_listbox.append(threat_card)
+                self._displayed_threat_count = threat_count
+
+                # Add clean files summary row at the end
+                clean_count = result.scanned_files - result.infected_count
+                if clean_count > 0:
+                    summary_row = self._create_clean_files_summary_row(
+                        clean_count, result.scanned_files, result.scanned_dirs
+                    )
+                    self._threats_listbox.append(summary_row)
 
         elif result.status == ScanStatus.CLEAN:
             # Show ListBox with clean files summary only
@@ -740,6 +807,197 @@ class ScanView(Gtk.Box):
         self._copy_button.set_sensitive(True)
         self._export_text_button.set_sensitive(True)
         self._export_csv_button.set_sensitive(True)
+
+    def _create_large_result_warning_row(self, threat_count: int) -> Gtk.Box:
+        """
+        Create a warning row displayed at the top of large result sets.
+
+        Args:
+            threat_count: Total number of threats detected
+
+        Returns:
+            Gtk.Box widget containing the warning message
+        """
+        warning_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        warning_box.add_css_class("large-result-warning")
+        warning_box.set_margin_start(8)
+        warning_box.set_margin_end(8)
+        warning_box.set_margin_top(8)
+
+        # Warning icon
+        warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+        warning_box.append(warning_icon)
+
+        # Warning text
+        warning_label = Gtk.Label()
+        warning_label.set_markup(
+            f"<b>Large Result Set:</b> {threat_count} threats detected. "
+            f"Results are paginated to maintain UI responsiveness. "
+            f"Use Export to save all results."
+        )
+        warning_label.set_wrap(True)
+        warning_label.set_xalign(0)
+        warning_label.set_hexpand(True)
+        warning_box.append(warning_label)
+
+        return warning_box
+
+    def _display_threat_batch(self, start_index: int, count: int):
+        """
+        Display a batch of threat cards starting from the given index.
+
+        Uses GLib.idle_add to add cards incrementally for better UI responsiveness
+        with very large result sets.
+
+        Args:
+            start_index: Index in _all_threat_details to start from
+            count: Number of threats to display
+        """
+        end_index = min(start_index + count, len(self._all_threat_details))
+
+        for i in range(start_index, end_index):
+            threat_detail = self._all_threat_details[i]
+            threat_card = self._create_threat_card(threat_detail)
+
+            # Insert before the "Load More" button if it exists
+            if self._load_more_row:
+                # Find the index of the load more row
+                row_index = 0
+                while True:
+                    row = self._threats_listbox.get_row_at_index(row_index)
+                    if row is None:
+                        break
+                    row_index += 1
+                # Insert at position just before the last row (load more button)
+                self._threats_listbox.insert(threat_card, row_index - 1)
+            else:
+                self._threats_listbox.append(threat_card)
+
+        self._displayed_threat_count = end_index
+
+    def _add_load_more_button(self):
+        """
+        Add a "Show More" button row to load additional threats.
+        """
+        # Container box for the load more button
+        load_more_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        load_more_box.add_css_class("load-more-row")
+        load_more_box.set_halign(Gtk.Align.CENTER)
+        load_more_box.set_margin_top(12)
+        load_more_box.set_margin_bottom(12)
+
+        # Progress label showing how many are displayed
+        remaining = len(self._all_threat_details) - self._displayed_threat_count
+        progress_label = Gtk.Label()
+        progress_label.set_markup(
+            f"<span size='small'>Showing {self._displayed_threat_count} of "
+            f"{len(self._all_threat_details)} threats</span>"
+        )
+        progress_label.add_css_class("dim-label")
+        load_more_box.append(progress_label)
+
+        # Button row
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        button_box.set_halign(Gtk.Align.CENTER)
+
+        # "Show More" button
+        show_more_btn = Gtk.Button()
+        show_more_btn.set_label(f"Show {min(LOAD_MORE_BATCH_SIZE, remaining)} More")
+        show_more_btn.add_css_class("pill")
+        show_more_btn.connect("clicked", self._on_load_more_clicked)
+        button_box.append(show_more_btn)
+
+        # "Show All" button (only if there are many remaining)
+        if remaining > LOAD_MORE_BATCH_SIZE:
+            show_all_btn = Gtk.Button()
+            show_all_btn.set_label(f"Show All ({remaining} remaining)")
+            show_all_btn.add_css_class("pill")
+            show_all_btn.connect("clicked", self._on_show_all_clicked)
+            button_box.append(show_all_btn)
+
+        load_more_box.append(button_box)
+
+        self._load_more_row = load_more_box
+        self._threats_listbox.append(load_more_box)
+
+    def _on_load_more_clicked(self, button):
+        """
+        Handle "Show More" button click to load the next batch of threats.
+        """
+        # Remove the current load more row
+        if self._load_more_row:
+            self._threats_listbox.remove(self._load_more_row)
+            self._load_more_row = None
+
+        # Display next batch
+        remaining = len(self._all_threat_details) - self._displayed_threat_count
+        batch_size = min(LOAD_MORE_BATCH_SIZE, remaining)
+        self._display_threat_batch(self._displayed_threat_count, batch_size)
+
+        # Add new load more button if there are still more threats
+        if self._displayed_threat_count < len(self._all_threat_details):
+            self._add_load_more_button()
+        else:
+            # All threats displayed, add summary row
+            self._add_final_summary_row()
+
+        # Update status banner
+        self._update_pagination_status()
+
+    def _on_show_all_clicked(self, button):
+        """
+        Handle "Show All" button click to load all remaining threats.
+
+        Uses incremental loading with GLib.idle_add to keep UI responsive.
+        """
+        # Remove the current load more row
+        if self._load_more_row:
+            self._threats_listbox.remove(self._load_more_row)
+            self._load_more_row = None
+
+        # Display all remaining threats
+        remaining = len(self._all_threat_details) - self._displayed_threat_count
+        self._display_threat_batch(self._displayed_threat_count, remaining)
+
+        # Add summary row
+        self._add_final_summary_row()
+
+        # Update status banner
+        self._update_pagination_status()
+
+    def _add_final_summary_row(self):
+        """
+        Add the clean files summary row after all threats are displayed.
+        """
+        if self._current_result:
+            clean_count = self._current_result.scanned_files - self._current_result.infected_count
+            if clean_count > 0:
+                summary_row = self._create_clean_files_summary_row(
+                    clean_count,
+                    self._current_result.scanned_files,
+                    self._current_result.scanned_dirs
+                )
+                self._threats_listbox.append(summary_row)
+
+    def _update_pagination_status(self):
+        """
+        Update the status banner to reflect current pagination state.
+        """
+        total = len(self._all_threat_details)
+        displayed = self._displayed_threat_count
+
+        if displayed >= total:
+            # All threats displayed
+            self._status_banner.set_title(f"Threats detected: {total} infected file(s)")
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("warning")
+            self._status_banner.remove_css_class("success")
+        else:
+            # Still paginated
+            self._status_banner.set_title(
+                f"Large result set: {total} threats detected. "
+                f"Showing {displayed} of {total} results."
+            )
 
     def _create_clean_files_summary_row(
         self, clean_count: int, total_files: int, total_dirs: int

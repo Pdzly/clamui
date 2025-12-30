@@ -76,3 +76,7 @@ worktrees/
 .flatpak-builder/
 build-dir/
 repo/
+
+# Debian packaging
+*.deb
+build-deb-temp/

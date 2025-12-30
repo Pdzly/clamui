@@ -12,7 +12,7 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GLib, Gdk
 
 from ..core.scanner import Scanner, ScanResult, ScanStatus
-from ..core.utils import format_scan_path, check_clamav_installed
+from ..core.utils import format_scan_path, check_clamav_installed, validate_dropped_files
 from .fullscreen_dialog import FullscreenLogDialog
 
 # EICAR test string - industry-standard antivirus test pattern
@@ -90,8 +90,38 @@ class ScanView(Gtk.Box):
         self.add_controller(drop_target)
 
     def _on_drop(self, target, value, x, y) -> bool:
-        """Handle file drop."""
-        # Placeholder - will be implemented in subtask-2-2
+        """
+        Handle file drop.
+
+        Extracts file paths from the dropped Gdk.FileList and sets the first
+        valid path as the scan target.
+
+        Args:
+            target: The DropTarget controller
+            value: The dropped value (Gdk.FileList)
+            x: X coordinate of drop location
+            y: Y coordinate of drop location
+
+        Returns:
+            True if drop was accepted, False otherwise
+        """
+        # Extract files from Gdk.FileList
+        files = value.get_files()
+        if not files:
+            return False
+
+        # Get paths from Gio.File objects (None for remote files)
+        paths = [gio_file.get_path() for gio_file in files]
+
+        # Validate paths using utility function
+        valid_paths, errors = validate_dropped_files(paths)
+
+        if valid_paths:
+            # Use the first valid path
+            self._set_selected_path(valid_paths[0])
+            return True
+
+        # No valid paths - drop rejected
         return False
 
     def _on_drag_enter(self, target, x, y) -> Gdk.DragAction:

@@ -1,0 +1,50 @@
+#!/bin/bash
+# ClamUI pre-removal script
+# Performs cleanup tasks before package removal
+
+set -e
+
+# prerm script for clamui
+#
+# See https://www.debian.org/doc/debian-policy/ for policy details
+#
+# Actions:
+#   remove          - Package is being removed
+#   upgrade         - Package is being upgraded (old version's prerm)
+#   deconfigure     - Package deconfigured due to dependency issue
+#   failed-upgrade  - Upgrade failed, old version's prerm called with this
+
+case "$1" in
+    remove)
+        # ClamUI is a GUI application without background services
+        # No processes to stop or state to save before removal
+        # Icon cache and desktop database updates happen in postrm
+        :
+        ;;
+
+    upgrade)
+        # Package is being upgraded to a new version
+        # No cleanup needed - new version will replace files
+        :
+        ;;
+
+    deconfigure)
+        # Package is being deconfigured due to dependency issues
+        # Nothing to clean up
+        :
+        ;;
+
+    failed-upgrade)
+        # Upgrade to new version failed
+        # Called on old package's prerm after new version's prerm failed
+        # Nothing to do here
+        :
+        ;;
+
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

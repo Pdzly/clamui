@@ -454,6 +454,75 @@ copy_control_files() {
 }
 
 #
+# Package Building Functions
+#
+
+# Build the .deb package using fakeroot and dpkg-deb
+build_package() {
+    log_info "=== Building Debian Package ==="
+    echo
+
+    DEB_OUTPUT="$PROJECT_ROOT/$DEB_FILENAME"
+
+    # Remove any existing package with the same name
+    if [ -f "$DEB_OUTPUT" ]; then
+        log_warning "Removing existing package: $DEB_FILENAME"
+        rm -f "$DEB_OUTPUT"
+    fi
+
+    log_info "Building package: $DEB_FILENAME"
+    log_info "Build directory: $BUILD_DIR"
+    log_info "Output: $DEB_OUTPUT"
+    echo
+
+    # Build the package using fakeroot and dpkg-deb
+    # fakeroot simulates root privileges for file ownership
+    # dpkg-deb --build creates the .deb package
+    log_info "Running: fakeroot dpkg-deb --build $BUILD_DIR $DEB_OUTPUT"
+    echo
+
+    if ! fakeroot dpkg-deb --build "$BUILD_DIR" "$DEB_OUTPUT"; then
+        log_error "Failed to build package with dpkg-deb"
+        return 1
+    fi
+
+    echo
+    log_success "Package built successfully!"
+
+    # Verify the package was created
+    if [ ! -f "$DEB_OUTPUT" ]; then
+        log_error "Package file not found after build: $DEB_OUTPUT"
+        return 1
+    fi
+
+    # Display package info
+    DEB_SIZE=$(du -h "$DEB_OUTPUT" | cut -f1)
+    log_success "Package: $DEB_FILENAME ($DEB_SIZE)"
+
+    return 0
+}
+
+# Display final summary and instructions
+print_summary() {
+    echo
+    log_info "========================================"
+    log_success "   Build Complete!"
+    log_info "========================================"
+    echo
+    log_info "Package created: $DEB_FILENAME"
+    log_info "Location: $PROJECT_ROOT/$DEB_FILENAME"
+    echo
+    log_info "To install the package:"
+    log_info "  sudo dpkg -i $DEB_FILENAME"
+    log_info "  sudo apt install -f  # if there are missing dependencies"
+    echo
+    log_info "To verify the package:"
+    log_info "  dpkg -I $DEB_FILENAME  # show package info"
+    log_info "  dpkg -c $DEB_FILENAME  # list package contents"
+    echo
+}
+
+#
 # Main Execution
 #
 
@@ -520,8 +589,22 @@ main() {
     fi
 
     echo
-    log_success "Package files ready. Ready to build .deb package."
-    log_info "(Package building will be added in subsequent subtask)"
+
+    # Build the .deb package
+    if ! build_package; then
+        log_error "Failed to build .deb package."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    # Clean up the build directory (success case)
+    echo
+    cleanup_build_dir
+
+    # Print final summary
+    print_summary
+
+    log_success "Done!"
 }
 
 main "$@"

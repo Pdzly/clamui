@@ -10,17 +10,59 @@ while the main application uses GTK4. GTK3 code is isolated to this module.
 import logging
 from typing import Callable, Optional
 
-# GTK3 imports for AppIndicator (isolated from GTK4 main app)
-import gi
-
-gi.require_version("Gtk", "3.0")
-gi.require_version("AyatanaAppIndicator3", "0.1")
-
-from gi.repository import AyatanaAppIndicator3 as AppIndicator
-from gi.repository import Gtk as Gtk3
-
-
 logger = logging.getLogger(__name__)
+
+# Track availability of AppIndicator library
+_APPINDICATOR_AVAILABLE = False
+_APPINDICATOR_ERROR: Optional[str] = None
+
+# GTK3 imports for AppIndicator (isolated from GTK4 main app)
+# These imports are wrapped in try/except to handle missing library gracefully
+try:
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator
+    from gi.repository import Gtk as Gtk3
+
+    _APPINDICATOR_AVAILABLE = True
+except ValueError as e:
+    # ValueError is raised when GTK version requirements conflict
+    # (e.g., GTK4 already loaded, or AyatanaAppIndicator3 not installed)
+    _APPINDICATOR_ERROR = f"GTK version conflict: {e}"
+    logger.warning(
+        f"System tray indicator unavailable: {_APPINDICATOR_ERROR}. "
+        "Tray features will be disabled."
+    )
+except ImportError as e:
+    # ImportError when gi or required modules are not installed
+    _APPINDICATOR_ERROR = f"Missing library: {e}"
+    logger.warning(
+        f"System tray indicator unavailable: {_APPINDICATOR_ERROR}. "
+        "Install libayatana-appindicator3-dev for tray support."
+    )
+
+
+def is_available() -> bool:
+    """
+    Check if the AppIndicator library is available.
+
+    Returns:
+        True if AyatanaAppIndicator3 is available, False otherwise
+    """
+    return _APPINDICATOR_AVAILABLE
+
+
+def get_unavailable_reason() -> Optional[str]:
+    """
+    Get the reason why AppIndicator is unavailable.
+
+    Returns:
+        Error message if unavailable, None if available
+    """
+    return _APPINDICATOR_ERROR
 
 
 # Default icon size for theme lookups (standard symbolic icon size)
@@ -86,11 +128,15 @@ class TrayIndicator:
 
         Creates an AppIndicator instance with a basic menu.
         The indicator is not visible until activate() is called.
+
+        If AppIndicator library is not available, creates a stub instance
+        that logs warnings but doesn't crash the application.
         """
-        self._indicator: Optional[AppIndicator.Indicator] = None
-        self._menu: Optional[Gtk3.Menu] = None
+        self._indicator = None
+        self._menu = None
         self._current_status: str = "protected"
-        self._icon_theme: Optional[Gtk3.IconTheme] = None
+        self._icon_theme = None
+        self._available: bool = _APPINDICATOR_AVAILABLE
 
         # Action callbacks (set via set_action_callbacks)
         self._on_quick_scan: Optional[Callable[[], None]] = None
@@ -101,20 +147,27 @@ class TrayIndicator:
         # Window toggle callback (set via set_window_toggle_callback)
         self._on_window_toggle: Optional[Callable[[], None]] = None
         self._get_window_visible: Optional[Callable[[], bool]] = None
-        self._show_window_item: Optional[Gtk3.MenuItem] = None
+        self._show_window_item = None
 
-        # Create the indicator
-        self._create_indicator()
+        # Create the indicator only if library is available
+        if self._available:
+            self._create_indicator()
+        else:
+            logger.info(
+                "TrayIndicator created in stub mode (AppIndicator unavailable)"
+            )
 
-    def _get_icon_theme(self) -> Gtk3.IconTheme:
+    def _get_icon_theme(self):
         """
         Get the current GTK icon theme.
 
         Caches the icon theme instance for efficiency.
 
         Returns:
-            The current Gtk3.IconTheme instance
+            The current Gtk3.IconTheme instance, or None if unavailable
         """
+        if not self._available:
+            return None
         if self._icon_theme is None:
             self._icon_theme = Gtk3.IconTheme.get_default()
         return self._icon_theme
@@ -130,6 +183,8 @@ class TrayIndicator:
             True if icon exists in theme, False otherwise
         """
         theme = self._get_icon_theme()
+        if theme is None:
+            return False
         return theme.has_icon(icon_name)
 
     def _resolve_icon(self, status: str) -> str:
@@ -182,7 +237,11 @@ class TrayIndicator:
         Create and configure the AppIndicator instance.
 
         Uses fallback logic to find the best available icon for initial state.
+        Does nothing if AppIndicator library is not available.
         """
+        if not self._available:
+            return
+
         # Resolve initial icon with fallback support
         initial_icon = self._resolve_icon(self._current_status)
 
@@ -200,13 +259,17 @@ class TrayIndicator:
         self._indicator.set_title("ClamUI")
         logger.debug(f"Tray indicator created with icon: {initial_icon}")
 
-    def _build_menu(self) -> Gtk3.Menu:
+    def _build_menu(self):
         """
         Build the GTK3 context menu for the indicator.
 
         Returns:
-            GTK3 Menu with action items connected to callbacks
+            GTK3 Menu with action items connected to callbacks,
+            or None if AppIndicator is unavailable
         """
+        if not self._available:
+            return None
+
         menu = Gtk3.Menu()
 
         # Show/Hide Window item (at top for easy access)
@@ -430,13 +493,24 @@ class TrayIndicator:
         Check if the indicator is currently visible.
 
         Returns:
-            True if indicator is active, False otherwise
+            True if indicator is active, False otherwise.
+            Always returns False if AppIndicator is unavailable.
         """
-        if self._indicator is None:
+        if not self._available or self._indicator is None:
             return False
         return (
             self._indicator.get_status() == AppIndicator.IndicatorStatus.ACTIVE
         )
+
+    @property
+    def is_library_available(self) -> bool:
+        """
+        Check if the AppIndicator library is available.
+
+        Returns:
+            True if AyatanaAppIndicator3 is available, False otherwise
+        """
+        return self._available
 
     @property
     def current_status(self) -> str:

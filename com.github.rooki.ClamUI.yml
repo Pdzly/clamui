@@ -1,0 +1,45 @@
+app-id: com.github.rooki.ClamUI
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: clamui
+
+finish-args:
+  # Graphics - Wayland and X11 fallback
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+
+  # File access for scanning user files
+  - --filesystem=home
+
+  # Host binary access for ClamAV (flatpak-spawn --host)
+  - --talk-name=org.freedesktop.Flatpak
+
+  # Notifications for scan completion
+  - --socket=session-bus
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.la'
+  - '*.a'
+
+modules:
+  - name: clamui
+    buildsystem: simple
+    build-commands:
+      # Install the Python package
+      - pip3 install --verbose --no-index --no-build-isolation --prefix=/app .
+
+      # Install desktop entry
+      - install -Dm644 com.github.rooki.ClamUI.desktop -t /app/share/applications/
+
+      # Install AppStream metadata
+      - install -Dm644 com.github.rooki.ClamUI.metainfo.xml -t /app/share/metainfo/
+
+    sources:
+      - type: dir
+        path: .

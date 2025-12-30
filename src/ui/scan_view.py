@@ -127,6 +127,11 @@ class ScanView(Gtk.Box):
         # Remove visual feedback (leave signal is not emitted on drop)
         self.remove_css_class('drop-active')
 
+        # Reject drops during active scan
+        if self._is_scanning:
+            self._show_drop_error("Scan in progress - please wait until the current scan completes")
+            return False
+
         # Extract files from Gdk.FileList
         files = value.get_files()
         if not files:

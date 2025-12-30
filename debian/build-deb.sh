@@ -282,6 +282,178 @@ cleanup_build_dir() {
 }
 
 #
+# File Copying Functions
+#
+
+# Copy Python source files (excluding __pycache__)
+copy_python_source() {
+    log_info "=== Copying Python Source Files ==="
+    echo
+
+    SRC_DIR="$PROJECT_ROOT/src"
+    DEST_DIR="$BUILD_DIR/usr/lib/python3/dist-packages/clamui"
+
+    # Check if source directory exists
+    if [ ! -d "$SRC_DIR" ]; then
+        log_error "Source directory not found: $SRC_DIR"
+        return 1
+    fi
+
+    log_info "Copying Python source from src/ to clamui module..."
+
+    # Copy all Python files and subdirectories, excluding __pycache__
+    # Use rsync if available for cleaner exclusion, otherwise use find
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --exclude='__pycache__' --exclude='*.pyc' "$SRC_DIR/" "$DEST_DIR/"
+    else
+        # Fallback: use cp then clean up __pycache__
+        cp -r "$SRC_DIR/"* "$DEST_DIR/"
+        # Remove __pycache__ directories
+        find "$DEST_DIR" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+        # Remove .pyc files
+        find "$DEST_DIR" -type f -name '*.pyc' -delete 2>/dev/null || true
+    fi
+
+    # Verify copy was successful
+    if [ ! -f "$DEST_DIR/main.py" ]; then
+        log_error "Failed to copy Python source files"
+        return 1
+    fi
+
+    # Set proper permissions (644 for .py files)
+    find "$DEST_DIR" -type f -name '*.py' -exec chmod 644 {} +
+
+    log_success "Python source files copied successfully"
+    log_info "Installed to: /usr/lib/python3/dist-packages/clamui/"
+
+    return 0
+}
+
+# Create the launcher script in /usr/bin/
+create_launcher_script() {
+    log_info "=== Creating Launcher Script ==="
+    echo
+
+    LAUNCHER_PATH="$BUILD_DIR/usr/bin/$PACKAGE_NAME"
+
+    log_info "Creating launcher script: $LAUNCHER_PATH"
+
+    # Create the launcher script
+    # Note: Using 'clamui.main' since we install source as /usr/lib/python3/dist-packages/clamui/
+    cat > "$LAUNCHER_PATH" << 'LAUNCHER'
+#!/usr/bin/env python3
+"""ClamUI launcher script for Debian package installation."""
+import sys
+
+from clamui.main import main
+sys.exit(main())
+LAUNCHER
+
+    # Make executable (755)
+    chmod 755 "$LAUNCHER_PATH"
+
+    # Verify launcher was created
+    if [ ! -x "$LAUNCHER_PATH" ]; then
+        log_error "Failed to create launcher script"
+        return 1
+    fi
+
+    log_success "Launcher script created successfully"
+    log_info "Installed to: /usr/bin/$PACKAGE_NAME"
+
+    return 0
+}
+
+# Copy desktop entry, icon, and metainfo files
+copy_desktop_files() {
+    log_info "=== Copying Desktop Integration Files ==="
+    echo
+
+    # Copy desktop entry
+    DESKTOP_FILE="$PROJECT_ROOT/com.github.rooki.ClamUI.desktop"
+    if [ -f "$DESKTOP_FILE" ]; then
+        log_info "Copying desktop entry..."
+        cp "$DESKTOP_FILE" "$BUILD_DIR/usr/share/applications/"
+        chmod 644 "$BUILD_DIR/usr/share/applications/com.github.rooki.ClamUI.desktop"
+        log_success "Desktop entry installed"
+    else
+        log_warning "Desktop file not found: $DESKTOP_FILE"
+        log_warning "Application may not appear in desktop menus"
+    fi
+
+    # Copy icon (gracefully handle if not present)
+    ICON_FILE="$PROJECT_ROOT/icons/com.github.rooki.ClamUI.svg"
+    if [ -f "$ICON_FILE" ]; then
+        log_info "Copying application icon..."
+        cp "$ICON_FILE" "$BUILD_DIR/usr/share/icons/hicolor/scalable/apps/"
+        chmod 644 "$BUILD_DIR/usr/share/icons/hicolor/scalable/apps/com.github.rooki.ClamUI.svg"
+        log_success "Icon installed"
+    else
+        log_warning "Icon file not found: $ICON_FILE"
+        log_warning "Application will use a fallback icon"
+    fi
+
+    # Copy AppStream metainfo
+    METAINFO_FILE="$PROJECT_ROOT/com.github.rooki.ClamUI.metainfo.xml"
+    if [ -f "$METAINFO_FILE" ]; then
+        log_info "Copying AppStream metainfo..."
+        cp "$METAINFO_FILE" "$BUILD_DIR/usr/share/metainfo/"
+        chmod 644 "$BUILD_DIR/usr/share/metainfo/com.github.rooki.ClamUI.metainfo.xml"
+        log_success "AppStream metainfo installed"
+    else
+        log_warning "Metainfo file not found: $METAINFO_FILE"
+        log_warning "Package may not appear in software centers"
+    fi
+
+    echo
+    log_success "Desktop integration files copied successfully"
+
+    return 0
+}
+
+# Copy and process DEBIAN control files
+copy_control_files() {
+    log_info "=== Copying DEBIAN Control Files ==="
+    echo
+
+    DEBIAN_SRC_DIR="$SCRIPT_DIR/DEBIAN"
+    DEBIAN_DEST_DIR="$BUILD_DIR/DEBIAN"
+
+    # Check if source DEBIAN directory exists
+    if [ ! -d "$DEBIAN_SRC_DIR" ]; then
+        log_error "DEBIAN template directory not found: $DEBIAN_SRC_DIR"
+        return 1
+    fi
+
+    # Copy control file with version substitution
+    if [ -f "$DEBIAN_SRC_DIR/control" ]; then
+        log_info "Processing control file (substituting version)..."
+        sed "s/^Version: VERSION$/Version: $VERSION/" "$DEBIAN_SRC_DIR/control" > "$DEBIAN_DEST_DIR/control"
+        chmod 644 "$DEBIAN_DEST_DIR/control"
+        log_success "Control file installed (version: $VERSION)"
+    else
+        log_error "Control file template not found: $DEBIAN_SRC_DIR/control"
+        return 1
+    fi
+
+    # Copy maintainer scripts with executable permissions (755)
+    for script in postinst prerm postrm; do
+        if [ -f "$DEBIAN_SRC_DIR/$script" ]; then
+            log_info "Copying $script script..."
+            cp "$DEBIAN_SRC_DIR/$script" "$DEBIAN_DEST_DIR/"
+            chmod 755 "$DEBIAN_DEST_DIR/$script"
+        else
+            log_warning "Maintainer script not found: $script (optional)"
+        fi
+    done
+
+    echo
+    log_success "DEBIAN control files copied successfully"
+
+    return 0
+}
+
+#
 # Main Execution
 #
 
@@ -312,8 +484,44 @@ main() {
     fi
 
     echo
-    log_success "Package structure ready. Ready to copy files."
-    log_info "(File copying and package building will be added in subsequent subtasks)"
+
+    # Copy Python source files
+    if ! copy_python_source; then
+        log_error "Failed to copy Python source files."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    echo
+
+    # Create the launcher script
+    if ! create_launcher_script; then
+        log_error "Failed to create launcher script."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    echo
+
+    # Copy desktop integration files
+    if ! copy_desktop_files; then
+        log_error "Failed to copy desktop integration files."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    echo
+
+    # Copy DEBIAN control files
+    if ! copy_control_files; then
+        log_error "Failed to copy DEBIAN control files."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    echo
+    log_success "Package files ready. Ready to build .deb package."
+    log_info "(Package building will be added in subsequent subtask)"
 }
 
 main "$@"

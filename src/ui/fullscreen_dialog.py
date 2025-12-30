@@ -1,0 +1,143 @@
+# ClamUI Fullscreen Log Dialog
+"""
+Fullscreen dialog component for displaying log content in an expanded view.
+"""
+
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
+from gi.repository import Gtk, Adw
+
+
+class FullscreenLogDialog(Adw.Dialog):
+    """
+    A maximized dialog for displaying log content in fullscreen.
+
+    Provides a read-only text view with monospace font styling for viewing
+    log content in an expanded, easier-to-read format.
+
+    Usage:
+        dialog = FullscreenLogDialog(
+            title="Scan Results",
+            content="Log content here..."
+        )
+        dialog.present(parent_window)
+    """
+
+    # Placeholder text for empty content
+    EMPTY_PLACEHOLDER = "No content to display"
+
+    def __init__(self, title: str, content: str = "", **kwargs):
+        """
+        Initialize the fullscreen log dialog.
+
+        Args:
+            title: Dialog title shown in header
+            content: Initial text content to display
+            **kwargs: Additional arguments passed to parent
+        """
+        super().__init__(**kwargs)
+
+        # Store the title
+        self._title = title
+
+        # Configure the dialog
+        self._setup_dialog()
+
+        # Set up the UI
+        self._setup_ui()
+
+        # Set initial content
+        self.set_content(content)
+
+    def _setup_dialog(self):
+        """Configure the dialog properties."""
+        # Set dialog title
+        self.set_title(self._title)
+
+        # Make dialog follow content size with reasonable defaults
+        self.set_content_width(900)
+        self.set_content_height(600)
+
+        # Allow the dialog to be closed
+        self.set_can_close(True)
+
+    def _setup_ui(self):
+        """Set up the dialog UI layout."""
+        # Create main container with toolbar view for header bar
+        toolbar_view = Adw.ToolbarView()
+
+        # Create header bar
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        # Create scrolled window for text content
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        scrolled.set_hexpand(True)
+        scrolled.add_css_class("card")
+        scrolled.set_margin_start(12)
+        scrolled.set_margin_end(12)
+        scrolled.set_margin_top(12)
+        scrolled.set_margin_bottom(12)
+
+        # Create text view with monospace styling
+        self._text_view = Gtk.TextView()
+        self._text_view.set_editable(False)
+        self._text_view.set_cursor_visible(False)
+        self._text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self._text_view.set_left_margin(12)
+        self._text_view.set_right_margin(12)
+        self._text_view.set_top_margin(12)
+        self._text_view.set_bottom_margin(12)
+        self._text_view.add_css_class("monospace")
+
+        scrolled.set_child(self._text_view)
+        toolbar_view.set_content(scrolled)
+
+        # Set the toolbar view as the dialog child
+        self.set_child(toolbar_view)
+
+    def set_content(self, content: str) -> None:
+        """
+        Update the displayed content.
+
+        Args:
+            content: The text content to display. If empty, shows placeholder.
+        """
+        buffer = self._text_view.get_buffer()
+
+        if content:
+            buffer.set_text(content)
+        else:
+            buffer.set_text(self.EMPTY_PLACEHOLDER)
+
+    def get_content(self) -> str:
+        """
+        Get the current content.
+
+        Returns:
+            The current text content, or empty string if only placeholder shown.
+        """
+        buffer = self._text_view.get_buffer()
+        start = buffer.get_start_iter()
+        end = buffer.get_end_iter()
+        text = buffer.get_text(start, end, False)
+
+        # Return empty string if only placeholder is shown
+        if text == self.EMPTY_PLACEHOLDER:
+            return ""
+
+        return text
+
+    def get_text_buffer(self) -> Gtk.TextBuffer:
+        """
+        Get the underlying text buffer for live updates.
+
+        This allows external code to connect to the buffer for live
+        content synchronization during active operations like scans.
+
+        Returns:
+            The Gtk.TextBuffer used by the dialog's text view.
+        """
+        return self._text_view.get_buffer()

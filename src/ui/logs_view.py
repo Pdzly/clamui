@@ -471,21 +471,21 @@ class LogsView(Gtk.Box):
         # Guard against callback firing after widget is disposed/unmapped
         # This prevents crashes when navigating away during async load
         if self._is_disposed:
-            # Reset loading flag but don't touch UI widgets
-            self._is_loading = False
+            # Reset loading state - UI may still be valid, try to reset it
+            self._set_loading_state(False)
             return False
 
         # Additional check: verify widget is still in a valid state
         # get_mapped() returns False if widget is not visible/attached
         try:
             if not self.get_mapped():
-                # Widget is not mapped, just reset loading flag
-                # Don't try to manipulate widgets as they may be invalid
-                self._is_loading = False
+                # Widget is not mapped - still need to reset loading UI
+                # so it's not stuck when widget becomes visible again
+                self._set_loading_state(False)
                 return False
         except Exception:
-            # Widget may be in an invalid state, reset loading flag
-            self._is_loading = False
+            # Widget may be in an invalid state, try to reset loading state
+            self._set_loading_state(False)
             return False
 
         # Wrap all UI operations in try/finally to ensure loading state is always reset

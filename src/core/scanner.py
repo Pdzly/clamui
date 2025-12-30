@@ -14,7 +14,7 @@ from typing import Callable, Optional
 from gi.repository import GLib
 
 from .log_manager import LogEntry, LogManager
-from .utils import check_clamav_installed, validate_path, get_clamav_path
+from .utils import check_clamav_installed, validate_path, get_clamav_path, wrap_host_command
 
 
 class ScanStatus(Enum):
@@ -265,12 +265,15 @@ class Scanner:
         """
         Build the clamscan command arguments.
 
+        When running inside a Flatpak sandbox, the command is automatically
+        wrapped with 'flatpak-spawn --host' to execute ClamAV on the host system.
+
         Args:
             path: Path to scan
             recursive: Whether to scan recursively
 
         Returns:
-            List of command arguments
+            List of command arguments (wrapped with flatpak-spawn if in Flatpak)
         """
         clamscan = get_clamav_path() or "clamscan"
         cmd = [clamscan]
@@ -285,7 +288,8 @@ class Scanner:
         # Add the path to scan
         cmd.append(path)
 
-        return cmd
+        # Wrap with flatpak-spawn if running inside Flatpak sandbox
+        return wrap_host_command(cmd)
 
     def _parse_results(
         self,

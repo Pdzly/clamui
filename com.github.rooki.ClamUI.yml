@@ -31,8 +31,8 @@ modules:
   - name: clamui
     buildsystem: simple
     build-commands:
-      # Install the Python package
-      - pip3 install --verbose --no-index --no-build-isolation --prefix=/app .
+      # Install the Python package (--no-deps because PyGObject is provided by SDK)
+      - pip3 install --verbose --no-deps --no-build-isolation --prefix=/app .
 
       # Install desktop entry
       - install -Dm644 com.github.rooki.ClamUI.desktop -t /app/share/applications/

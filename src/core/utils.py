@@ -6,8 +6,17 @@ Utility functions for ClamUI including ClamAV detection and path validation.
 import os
 import shutil
 import subprocess
+from enum import Enum
 from pathlib import Path
 from typing import Tuple, Optional, List
+
+
+class ThreatSeverity(Enum):
+    """Severity level of a detected threat."""
+    CRITICAL = "critical"     # Ransomware, Rootkit, Bootkit
+    HIGH = "high"             # Trojan, Worm, Backdoor, Exploit
+    MEDIUM = "medium"         # Adware, PUA, Spyware, Unknown
+    LOW = "low"               # Test signatures (EICAR), Generic detections
 
 
 # Flatpak detection cache (None = not checked, True/False = result)

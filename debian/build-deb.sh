@@ -209,6 +209,79 @@ check_prerequisites() {
 }
 
 #
+# Directory Structure Creation Functions
+#
+
+# Build directory (temporary, used during package creation)
+BUILD_DIR=""
+
+# Create the FHS-compliant directory structure for the package
+create_package_structure() {
+    log_info "=== Creating Package Directory Structure ==="
+    echo
+
+    # Set build directory path
+    BUILD_DIR="$PROJECT_ROOT/build-deb-temp"
+
+    # Clean up any existing build directory
+    if [ -d "$BUILD_DIR" ]; then
+        log_warning "Removing existing build directory..."
+        rm -rf "$BUILD_DIR"
+    fi
+
+    log_info "Creating build directory: $BUILD_DIR"
+    mkdir -p "$BUILD_DIR"
+
+    # Create DEBIAN directory for control files
+    log_info "Creating DEBIAN/ directory..."
+    mkdir -p "$BUILD_DIR/DEBIAN"
+
+    # Create /usr/bin/ for executable launcher script
+    log_info "Creating usr/bin/ for launcher script..."
+    mkdir -p "$BUILD_DIR/usr/bin"
+
+    # Create /usr/lib/python3/dist-packages/clamui/ for Python modules
+    log_info "Creating usr/lib/python3/dist-packages/clamui/ for Python modules..."
+    mkdir -p "$BUILD_DIR/usr/lib/python3/dist-packages/clamui"
+
+    # Create /usr/share/applications/ for desktop file
+    log_info "Creating usr/share/applications/ for desktop entry..."
+    mkdir -p "$BUILD_DIR/usr/share/applications"
+
+    # Create /usr/share/icons/hicolor/scalable/apps/ for icon
+    log_info "Creating usr/share/icons/hicolor/scalable/apps/ for icon..."
+    mkdir -p "$BUILD_DIR/usr/share/icons/hicolor/scalable/apps"
+
+    # Create /usr/share/metainfo/ for AppStream metadata
+    log_info "Creating usr/share/metainfo/ for AppStream data..."
+    mkdir -p "$BUILD_DIR/usr/share/metainfo"
+
+    echo
+    log_success "Package directory structure created successfully!"
+    log_info "Build directory: $BUILD_DIR"
+
+    # Display the created structure
+    log_info "Created directories:"
+    log_info "  - DEBIAN/"
+    log_info "  - usr/bin/"
+    log_info "  - usr/lib/python3/dist-packages/clamui/"
+    log_info "  - usr/share/applications/"
+    log_info "  - usr/share/icons/hicolor/scalable/apps/"
+    log_info "  - usr/share/metainfo/"
+
+    return 0
+}
+
+# Cleanup build directory
+cleanup_build_dir() {
+    if [ -n "$BUILD_DIR" ] && [ -d "$BUILD_DIR" ]; then
+        log_info "Cleaning up build directory..."
+        rm -rf "$BUILD_DIR"
+        log_success "Build directory cleaned up."
+    fi
+}
+
+#
 # Main Execution
 #
 
@@ -230,8 +303,17 @@ main() {
     fi
 
     echo
-    log_success "Prerequisites check passed. Ready to build package."
-    log_info "(Full build functionality will be added in subsequent subtasks)"
+
+    # Create the package directory structure
+    if ! create_package_structure; then
+        log_error "Failed to create package directory structure."
+        cleanup_build_dir
+        exit 1
+    fi
+
+    echo
+    log_success "Package structure ready. Ready to copy files."
+    log_info "(File copying and package building will be added in subsequent subtasks)"
 }
 
 main "$@"

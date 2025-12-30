@@ -100,11 +100,8 @@ class ComponentsView(Gtk.Box):
         # Create the info section
         self._create_info_section()
 
-        # Create the components status section
+        # Create the components status section (includes refresh button in header)
         self._create_components_section()
-
-        # Create the refresh button section
-        self._create_refresh_section()
 
     def _create_info_section(self):
         """Create the info/description section."""
@@ -123,10 +120,19 @@ class ComponentsView(Gtk.Box):
 
     def _create_components_section(self):
         """Create the components status section with expandable rows."""
+        # Create scrolled window to contain components with max height
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_max_content_height(400)
+        scrolled.set_propagate_natural_height(True)
+
         components_group = Adw.PreferencesGroup()
         components_group.set_title("Components Status")
         components_group.set_description("Expand each component for installation instructions")
         self._components_group = components_group
+
+        # Add refresh button to the header
+        self._create_refresh_header_widget(components_group)
 
         # Create component rows
         self._create_component_row(components_group, "clamscan", "Virus Scanner", "security-high-symbolic")
@@ -134,7 +140,8 @@ class ComponentsView(Gtk.Box):
         self._create_component_row(components_group, "clamdscan", "Daemon Scanner Client", "network-server-symbolic")
         self._create_component_row(components_group, "clamd", "Scanner Daemon", "system-run-symbolic")
 
-        self.append(components_group)
+        scrolled.set_child(components_group)
+        self.append(scrolled)
 
     def _create_component_row(self, group: Adw.PreferencesGroup, component_id: str, title: str, icon_name: str):
         """
@@ -289,11 +296,16 @@ class ComponentsView(Gtk.Box):
         button.set_icon_name("emblem-ok-symbolic")
         GLib.timeout_add(1500, lambda: button.set_icon_name("edit-copy-symbolic"))
 
-    def _create_refresh_section(self):
-        """Create the refresh button section."""
-        refresh_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        refresh_box.set_halign(Gtk.Align.CENTER)
-        refresh_box.set_spacing(12)
+    def _create_refresh_header_widget(self, group: Adw.PreferencesGroup):
+        """
+        Create and add refresh button to the preferences group header.
+
+        Args:
+            group: The PreferencesGroup to add the header widget to
+        """
+        # Create container for refresh button and spinner
+        refresh_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        refresh_box.set_valign(Gtk.Align.CENTER)
 
         # Refresh spinner (hidden by default)
         self._refresh_spinner = Gtk.Spinner()
@@ -302,13 +314,13 @@ class ComponentsView(Gtk.Box):
 
         # Refresh button
         self._refresh_button = Gtk.Button()
-        self._refresh_button.set_label("Refresh Status")
-        self._refresh_button.add_css_class("pill")
-        self._refresh_button.set_size_request(140, 36)
+        self._refresh_button.set_icon_name("view-refresh-symbolic")
+        self._refresh_button.set_tooltip_text("Refresh Status")
+        self._refresh_button.add_css_class("flat")
         self._refresh_button.connect("clicked", self._on_refresh_clicked)
         refresh_box.append(self._refresh_button)
 
-        self.append(refresh_box)
+        group.set_header_suffix(refresh_box)
 
     def _on_refresh_clicked(self, button: Gtk.Button):
         """Handle refresh button click."""
@@ -329,12 +341,10 @@ class ComponentsView(Gtk.Box):
 
         if is_checking:
             self._refresh_button.set_sensitive(False)
-            self._refresh_button.set_label("Checking...")
             self._refresh_spinner.set_visible(True)
             self._refresh_spinner.start()
         else:
             self._refresh_button.set_sensitive(True)
-            self._refresh_button.set_label("Refresh Status")
             self._refresh_spinner.stop()
             self._refresh_spinner.set_visible(False)
 

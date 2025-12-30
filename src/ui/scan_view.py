@@ -9,10 +9,10 @@ import tempfile
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gio, GLib
+from gi.repository import Gtk, Adw, Gio, GLib, Gdk
 
 from ..core.scanner import Scanner, ScanResult, ScanStatus
-from ..core.utils import format_scan_path, check_clamav_installed
+from ..core.utils import format_scan_path, check_clamav_installed, validate_dropped_files
 from .fullscreen_dialog import FullscreenLogDialog
 
 # EICAR test string - industry-standard antivirus test pattern
@@ -65,6 +65,9 @@ class ScanView(Gtk.Box):
         self.set_margin_end(24)
         self.set_spacing(18)
 
+        # Set up CSS for drag-and-drop visual feedback
+        self._setup_drop_css()
+
         # Create the selection section
         self._create_selection_section()
 
@@ -76,6 +79,133 @@ class ScanView(Gtk.Box):
 
         # Create the status bar
         self._create_status_bar()
+
+        # Set up drag-and-drop support
+        self._setup_drop_target()
+
+    def _setup_drop_css(self):
+        """Set up CSS styling for drag-and-drop visual feedback."""
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_string("""
+            .drop-active {
+                border: 2px dashed @accent_color;
+                border-radius: 12px;
+                background-color: alpha(@accent_bg_color, 0.1);
+            }
+        """)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    def _setup_drop_target(self):
+        """Set up drag-and-drop file handling."""
+        drop_target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop_target.connect('drop', self._on_drop)
+        drop_target.connect('enter', self._on_drag_enter)
+        drop_target.connect('leave', self._on_drag_leave)
+        # Set propagation phase to CAPTURE so events are intercepted before
+        # reaching child widgets (like TextView) that might swallow them
+        drop_target.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        # Add drop target to the entire ScanView widget
+        self.add_controller(drop_target)
+
+    def _on_drop(self, target, value, x, y) -> bool:
+        """
+        Handle file drop.
+
+        Extracts file paths from the dropped Gdk.FileList and sets the first
+        valid path as the scan target.
+
+        Args:
+            target: The DropTarget controller
+            value: The dropped value (Gdk.FileList)
+            x: X coordinate of drop location
+            y: Y coordinate of drop location
+
+        Returns:
+            True if drop was accepted, False otherwise
+        """
+        # Remove visual feedback (leave signal is not emitted on drop)
+        self.remove_css_class('drop-active')
+
+        # Reject drops during active scan
+        if self._is_scanning:
+            self._show_drop_error("Scan in progress - please wait until the current scan completes")
+            return False
+
+        # Extract files from Gdk.FileList
+        files = value.get_files()
+        if not files:
+            self._show_drop_error("No files were dropped")
+            return False
+
+        # Get paths from Gio.File objects (None for remote files)
+        paths = [gio_file.get_path() for gio_file in files]
+
+        # Validate paths using utility function
+        valid_paths, errors = validate_dropped_files(paths)
+
+        if valid_paths:
+            # Use the first valid path
+            self._set_selected_path(valid_paths[0])
+            return True
+
+        # No valid paths - show error and reject drop
+        if errors:
+            # Show the first error (most relevant for user)
+            self._show_drop_error(errors[0])
+        else:
+            self._show_drop_error("Unable to accept dropped files")
+        return False
+
+    def _on_drag_enter(self, target, x, y) -> Gdk.DragAction:
+        """
+        Visual feedback when drag enters the drop zone.
+
+        Adds the 'drop-active' CSS class to highlight the widget
+        as a valid drop target.
+
+        Args:
+            target: The DropTarget controller
+            x: X coordinate of drag position
+            y: Y coordinate of drag position
+
+        Returns:
+            Gdk.DragAction.COPY to indicate the drop is accepted
+        """
+        self.add_css_class('drop-active')
+        return Gdk.DragAction.COPY
+
+    def _on_drag_leave(self, target):
+        """
+        Cleanup visual feedback when drag leaves the drop zone.
+
+        Removes the 'drop-active' CSS class to restore normal appearance.
+
+        Args:
+            target: The DropTarget controller
+        """
+        self.remove_css_class('drop-active')
+
+    def _show_drop_error(self, message: str):
+        """
+        Display an error message for invalid file drops.
+
+        Uses the status banner to show a user-friendly error message
+        when dropped files cannot be accepted (remote files, permission
+        errors, non-existent paths, etc.).
+
+        Args:
+            message: The error message to display
+        """
+        self._status_banner.set_title(message)
+        self._status_banner.add_css_class("error")
+        self._status_banner.remove_css_class("success")
+        self._status_banner.remove_css_class("warning")
+        self._status_banner.set_button_label(None)
+        self._status_banner.set_revealed(True)
 
     def _create_selection_section(self):
         """Create the folder/file selection section."""

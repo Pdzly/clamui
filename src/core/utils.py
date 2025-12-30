@@ -7,7 +7,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 
 def check_clamav_installed() -> Tuple[bool, Optional[str]]:
@@ -176,6 +176,55 @@ def validate_path(path: str) -> Tuple[bool, Optional[str]]:
             return (False, f"Error accessing directory: {str(e)}")
 
     return (True, None)
+
+
+def validate_dropped_files(paths: List[Optional[str]]) -> Tuple[List[str], List[str]]:
+    """
+    Validate a batch of paths from dropped files (typically from Gio.File.get_path()).
+
+    Handles:
+    - None paths (remote files where Gio.File.get_path() returns None)
+    - Non-existent paths
+    - Permission errors
+    - Empty path lists
+
+    Args:
+        paths: List of filesystem paths to validate. May contain None values
+               for remote files that cannot be accessed locally.
+
+    Returns:
+        Tuple of (valid_paths, errors):
+        - valid_paths: List of validated, resolved path strings ready for scanning
+        - errors: List of error messages for invalid paths
+    """
+    valid_paths: List[str] = []
+    errors: List[str] = []
+
+    if not paths:
+        errors.append("No files were dropped")
+        return (valid_paths, errors)
+
+    for path in paths:
+        # Handle None paths (remote files)
+        if path is None:
+            errors.append("Remote files cannot be scanned locally")
+            continue
+
+        # Use existing validate_path for individual validation
+        is_valid, error = validate_path(path)
+
+        if is_valid:
+            # Resolve path for consistent handling
+            try:
+                resolved = str(Path(path).resolve())
+                valid_paths.append(resolved)
+            except (OSError, RuntimeError) as e:
+                errors.append(f"Error resolving path: {str(e)}")
+        else:
+            if error:
+                errors.append(error)
+
+    return (valid_paths, errors)
 
 
 def get_clamav_path() -> Optional[str]:

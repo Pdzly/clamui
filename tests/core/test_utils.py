@@ -22,6 +22,7 @@ from src.core.utils import (
     get_clamav_path,
     get_freshclam_path,
     get_path_info,
+    validate_dropped_files,
     validate_path,
 )
 
@@ -283,3 +284,126 @@ class TestGetPathInfo:
         assert info["exists"] is True
         assert info["readable"] is True
         assert info["size"] is None
+
+
+class TestValidateDroppedFiles:
+    """Tests for the validate_dropped_files function."""
+
+    def test_validate_dropped_files_empty_list(self):
+        """Test validate_dropped_files returns error for empty list."""
+        valid_paths, errors = validate_dropped_files([])
+        assert valid_paths == []
+        assert len(errors) == 1
+        assert "no files" in errors[0].lower()
+
+    def test_validate_dropped_files_valid_file(self, tmp_path):
+        """Test validate_dropped_files returns valid path for existing file."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        valid_paths, errors = validate_dropped_files([str(test_file)])
+        assert len(valid_paths) == 1
+        assert str(test_file.resolve()) in valid_paths[0]
+        assert errors == []
+
+    def test_validate_dropped_files_valid_directory(self, tmp_path):
+        """Test validate_dropped_files returns valid path for existing directory."""
+        valid_paths, errors = validate_dropped_files([str(tmp_path)])
+        assert len(valid_paths) == 1
+        assert str(tmp_path.resolve()) in valid_paths[0]
+        assert errors == []
+
+    def test_validate_dropped_files_multiple_valid(self, tmp_path):
+        """Test validate_dropped_files handles multiple valid paths."""
+        file1 = tmp_path / "test1.txt"
+        file1.write_text("content 1")
+        file2 = tmp_path / "test2.txt"
+        file2.write_text("content 2")
+        valid_paths, errors = validate_dropped_files([str(file1), str(file2)])
+        assert len(valid_paths) == 2
+        assert errors == []
+
+    def test_validate_dropped_files_none_path_remote(self):
+        """Test validate_dropped_files handles None paths (remote files)."""
+        valid_paths, errors = validate_dropped_files([None])
+        assert valid_paths == []
+        assert len(errors) == 1
+        assert "remote" in errors[0].lower()
+
+    def test_validate_dropped_files_multiple_none_paths(self):
+        """Test validate_dropped_files handles multiple None paths."""
+        valid_paths, errors = validate_dropped_files([None, None])
+        assert valid_paths == []
+        assert len(errors) == 2
+        assert all("remote" in error.lower() for error in errors)
+
+    def test_validate_dropped_files_mixed_none_and_valid(self, tmp_path):
+        """Test validate_dropped_files handles mixed None and valid paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        valid_paths, errors = validate_dropped_files([None, str(test_file)])
+        assert len(valid_paths) == 1
+        assert len(errors) == 1
+        assert "remote" in errors[0].lower()
+
+    def test_validate_dropped_files_nonexistent_path(self):
+        """Test validate_dropped_files handles non-existent paths."""
+        valid_paths, errors = validate_dropped_files(["/nonexistent/path/that/does/not/exist"])
+        assert valid_paths == []
+        assert len(errors) == 1
+        assert "does not exist" in errors[0].lower()
+
+    def test_validate_dropped_files_mixed_valid_and_invalid(self, tmp_path):
+        """Test validate_dropped_files handles mix of valid and invalid paths."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        valid_paths, errors = validate_dropped_files([
+            str(test_file),
+            "/nonexistent/path",
+            None
+        ])
+        assert len(valid_paths) == 1
+        assert len(errors) == 2
+
+    def test_validate_dropped_files_permission_denied(self, tmp_path):
+        """Test validate_dropped_files handles permission errors."""
+        import os
+        import stat
+
+        # Create a file and remove read permissions
+        test_file = tmp_path / "unreadable.txt"
+        test_file.write_text("test content")
+
+        # Remove read permissions
+        original_mode = test_file.stat().st_mode
+        test_file.chmod(stat.S_IWUSR)  # Write-only
+
+        try:
+            valid_paths, errors = validate_dropped_files([str(test_file)])
+            assert valid_paths == []
+            assert len(errors) == 1
+            assert "permission" in errors[0].lower()
+        finally:
+            # Restore permissions for cleanup
+            test_file.chmod(original_mode)
+
+    def test_validate_dropped_files_unreadable_directory(self, tmp_path):
+        """Test validate_dropped_files handles unreadable directories."""
+        import os
+        import stat
+
+        # Create a directory and remove read permissions
+        test_dir = tmp_path / "unreadable_dir"
+        test_dir.mkdir()
+
+        # Remove read permissions
+        original_mode = test_dir.stat().st_mode
+        test_dir.chmod(stat.S_IWUSR | stat.S_IXUSR)  # Write+Execute only
+
+        try:
+            valid_paths, errors = validate_dropped_files([str(test_dir)])
+            assert valid_paths == []
+            assert len(errors) == 1
+            assert "permission" in errors[0].lower()
+        finally:
+            # Restore permissions for cleanup
+            test_dir.chmod(original_mode)

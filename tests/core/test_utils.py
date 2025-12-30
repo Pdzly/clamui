@@ -21,6 +21,7 @@ from src.core.utils import (
     check_clamdscan_installed,
     check_freshclam_installed,
     classify_threat_severity,
+    format_results_as_csv,
     format_results_as_text,
     format_scan_path,
     get_clamav_path,
@@ -963,3 +964,361 @@ class TestFormatResultsAsText:
         text = format_results_as_text(result, timestamp="2024-01-15 14:30:45")
 
         assert "/home/user/文档/テスト/résumé.pdf" in text
+
+
+class TestFormatResultsAsCsv:
+    """Tests for the format_results_as_csv function."""
+
+    def _create_scan_result(
+        self,
+        status: ScanStatus = ScanStatus.CLEAN,
+        path: str = "/home/user/test",
+        scanned_files: int = 100,
+        scanned_dirs: int = 10,
+        infected_count: int = 0,
+        threat_details: list = None,
+        error_message: str = None,
+    ) -> ScanResult:
+        """Helper method to create a ScanResult for testing."""
+        return ScanResult(
+            status=status,
+            path=path,
+            stdout="",
+            stderr="",
+            exit_code=0 if status == ScanStatus.CLEAN else 1,
+            infected_files=[t.file_path for t in (threat_details or [])],
+            scanned_files=scanned_files,
+            scanned_dirs=scanned_dirs,
+            infected_count=infected_count,
+            error_message=error_message,
+            threat_details=threat_details or [],
+        )
+
+    def test_format_results_as_csv_header_row(self):
+        """Test that CSV output contains proper header row."""
+        result = self._create_scan_result()
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        assert lines[0] == "File Path,Threat Name,Category,Severity,Timestamp"
+
+    def test_format_results_as_csv_clean_scan(self):
+        """Test formatting a clean scan result - only header row."""
+        result = self._create_scan_result(
+            status=ScanStatus.CLEAN,
+            path="/home/user/Documents",
+            scanned_files=150,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        # Should only have header row for clean scan
+        assert len(lines) == 1
+        assert "File Path,Threat Name,Category,Severity,Timestamp" in lines[0]
+
+    def test_format_results_as_csv_with_threats(self):
+        """Test formatting a scan result with detected threats."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/home/user/Downloads/malware.exe",
+                threat_name="Win.Ransomware.Locky",
+                category="Ransomware",
+                severity="critical",
+            ),
+            ThreatDetail(
+                file_path="/home/user/Downloads/suspicious.doc",
+                threat_name="Win.Trojan.Agent",
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=2,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        # Header + 2 threat rows
+        assert len(lines) == 3
+        assert "File Path,Threat Name,Category,Severity,Timestamp" in lines[0]
+        assert "/home/user/Downloads/malware.exe" in lines[1]
+        assert "Win.Ransomware.Locky" in lines[1]
+        assert "Ransomware" in lines[1]
+        assert "critical" in lines[1]
+        assert "2024-01-15 14:30:45" in lines[1]
+        assert "/home/user/Downloads/suspicious.doc" in lines[2]
+        assert "Win.Trojan.Agent" in lines[2]
+
+    def test_format_results_as_csv_auto_timestamp(self):
+        """Test that timestamp is auto-generated when not provided."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/path/to/file.exe",
+                threat_name="Test.Threat",
+                category="Test",
+                severity="low",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result)  # No timestamp provided
+        lines = csv_output.strip().split("\n")
+
+        # Should have a timestamp containing current year
+        assert len(lines) == 2
+        # Should contain a date-like string (20xx)
+        assert "20" in lines[1]
+
+    def test_format_results_as_csv_special_characters_in_path(self):
+        """Test that special characters in paths are properly escaped."""
+        threat_details = [
+            ThreatDetail(
+                file_path='/home/user/My Documents, Files/test "file".exe',
+                threat_name="Win.Trojan.Agent",
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        # Parse using csv module to verify proper escaping
+        import csv
+        import io
+        reader = csv.reader(io.StringIO(csv_output))
+        rows = list(reader)
+
+        assert len(rows) == 2
+        # CSV module should properly handle commas and quotes
+        assert rows[1][0] == '/home/user/My Documents, Files/test "file".exe'
+        assert rows[1][1] == "Win.Trojan.Agent"
+
+    def test_format_results_as_csv_unicode_in_path(self):
+        """Test that unicode characters in paths are handled correctly."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/home/user/文档/テスト/résumé.exe",
+                threat_name="Win.Virus.Unicode",
+                category="Virus",
+                severity="medium",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        # Parse and verify unicode is preserved
+        import csv
+        import io
+        reader = csv.reader(io.StringIO(csv_output))
+        rows = list(reader)
+
+        assert len(rows) == 2
+        assert rows[1][0] == "/home/user/文档/テスト/résumé.exe"
+
+    def test_format_results_as_csv_multiple_threats(self):
+        """Test formatting with many threats."""
+        threat_details = [
+            ThreatDetail(
+                file_path=f"/path/to/file{i}.exe",
+                threat_name=f"Win.Trojan.Agent{i}",
+                category="Trojan",
+                severity="high",
+            )
+            for i in range(1, 6)
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=5,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        # Header + 5 threat rows
+        assert len(lines) == 6
+
+    def test_format_results_as_csv_all_severity_levels(self):
+        """Test that all severity levels are included correctly."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/path/critical.exe",
+                threat_name="Win.Ransomware.Test",
+                category="Ransomware",
+                severity="critical",
+            ),
+            ThreatDetail(
+                file_path="/path/high.exe",
+                threat_name="Win.Trojan.Test",
+                category="Trojan",
+                severity="high",
+            ),
+            ThreatDetail(
+                file_path="/path/medium.exe",
+                threat_name="PUA.Adware.Test",
+                category="Adware",
+                severity="medium",
+            ),
+            ThreatDetail(
+                file_path="/path/low.exe",
+                threat_name="Eicar-Test",
+                category="Test",
+                severity="low",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=4,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        assert "critical" in csv_output
+        assert "high" in csv_output
+        assert "medium" in csv_output
+        assert "low" in csv_output
+
+    def test_format_results_as_csv_valid_csv_format(self):
+        """Test that output is valid CSV parseable by csv module."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/home/user/file.exe",
+                threat_name="Win.Trojan.Agent",
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        # Verify it can be parsed back with csv module
+        import csv
+        import io
+        reader = csv.reader(io.StringIO(csv_output))
+        rows = list(reader)
+
+        # Should have header and one data row
+        assert len(rows) == 2
+        # Header should have 5 columns
+        assert len(rows[0]) == 5
+        assert rows[0] == ["File Path", "Threat Name", "Category", "Severity", "Timestamp"]
+        # Data row should have 5 columns
+        assert len(rows[1]) == 5
+
+    def test_format_results_as_csv_error_status(self):
+        """Test formatting an error scan result - only header row."""
+        result = self._create_scan_result(
+            status=ScanStatus.ERROR,
+            path="/home/user/restricted",
+            error_message="Permission denied",
+            threat_details=[],
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        # Should only have header row for error scan (no threats)
+        assert len(lines) == 1
+
+    def test_format_results_as_csv_cancelled_status(self):
+        """Test formatting a cancelled scan result - only header row."""
+        result = self._create_scan_result(
+            status=ScanStatus.CANCELLED,
+            path="/home/user/large_directory",
+            threat_details=[],
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+        lines = csv_output.strip().split("\n")
+
+        # Should only have header row for cancelled scan (no threats)
+        assert len(lines) == 1
+
+    def test_format_results_as_csv_long_threat_name(self):
+        """Test that long threat names are handled correctly."""
+        long_threat_name = "Win.Trojan.VeryLongThreatNameThatExceedsNormalLength-123456789-0"
+        threat_details = [
+            ThreatDetail(
+                file_path="/path/to/file.exe",
+                threat_name=long_threat_name,
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        # Parse to verify long name is preserved
+        import csv
+        import io
+        reader = csv.reader(io.StringIO(csv_output))
+        rows = list(reader)
+
+        assert rows[1][1] == long_threat_name
+
+    def test_format_results_as_csv_newline_in_path(self):
+        """Test that newline characters in paths are properly escaped."""
+        threat_details = [
+            ThreatDetail(
+                file_path="/home/user/line1\nline2/file.exe",
+                threat_name="Win.Trojan.Agent",
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = self._create_scan_result(
+            status=ScanStatus.INFECTED,
+            infected_count=1,
+            threat_details=threat_details,
+        )
+
+        csv_output = format_results_as_csv(result, timestamp="2024-01-15 14:30:45")
+
+        # Parse to verify newline is properly escaped in CSV
+        import csv
+        import io
+        reader = csv.reader(io.StringIO(csv_output))
+        rows = list(reader)
+
+        assert len(rows) == 2
+        # The newline should be preserved in the parsed value
+        assert "\n" in rows[1][0]

@@ -3,6 +3,8 @@
 Utility functions for ClamUI including ClamAV detection and path validation.
 """
 
+import csv
+import io
 import os
 import shutil
 import subprocess
@@ -672,3 +674,53 @@ def format_results_as_text(result: 'ScanResult', timestamp: Optional[str] = None
     lines.append(header_line)
 
     return "\n".join(lines)
+
+
+def format_results_as_csv(result: 'ScanResult', timestamp: Optional[str] = None) -> str:
+    """
+    Format scan results as CSV for export to spreadsheet applications.
+
+    Creates a CSV formatted string with the following columns:
+    - File Path: The path to the infected file
+    - Threat Name: The name of the detected threat from ClamAV
+    - Category: The threat category (Ransomware, Trojan, etc.)
+    - Severity: The severity level (critical, high, medium, low)
+    - Timestamp: When the scan was performed
+
+    Uses Python's csv module for proper escaping of special characters
+    (commas, quotes, newlines) in file paths and threat names.
+
+    Args:
+        result: The ScanResult object to format
+        timestamp: Optional timestamp string. If not provided, uses current time.
+
+    Returns:
+        CSV formatted string suitable for export to .csv file
+
+    Example output:
+        File Path,Threat Name,Category,Severity,Timestamp
+        /home/user/malware.exe,Win.Ransomware.Locky,Ransomware,critical,2024-01-15 14:30:45
+        /home/user/suspicious.doc,Win.Trojan.Agent,Trojan,high,2024-01-15 14:30:45
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Use StringIO to write CSV to a string
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+    # Write header row
+    writer.writerow(["File Path", "Threat Name", "Category", "Severity", "Timestamp"])
+
+    # Write threat details
+    if result.threat_details:
+        for threat in result.threat_details:
+            writer.writerow([
+                threat.file_path,
+                threat.threat_name,
+                threat.category,
+                threat.severity,
+                timestamp
+            ])
+
+    return output.getvalue()

@@ -9,6 +9,7 @@ from .logs_view import LogsView
 from .fullscreen_dialog import FullscreenLogDialog
 from .components_view import ComponentsView
 from .preferences_dialog import PreferencesDialog
+from .quarantine_view import QuarantineView
 
 __all__ = [
     "UpdateView",
@@ -16,4 +17,5 @@ __all__ = [
     "FullscreenLogDialog",
     "ComponentsView",
     "PreferencesDialog",
+    "QuarantineView",
 ]

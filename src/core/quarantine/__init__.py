@@ -10,6 +10,7 @@ from .file_handler import (
     FileOperationStatus,
     SecureFileHandler,
 )
+from .manager import QuarantineManager, QuarantineResult, QuarantineStatus
 
 __all__ = [
     "QuarantineDatabase",
@@ -17,4 +18,7 @@ __all__ = [
     "FileOperationResult",
     "FileOperationStatus",
     "SecureFileHandler",
+    "QuarantineManager",
+    "QuarantineResult",
+    "QuarantineStatus",
 ]

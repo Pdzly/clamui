@@ -359,6 +359,78 @@ Infected files: 4
 
 
 @pytest.mark.integration
+def test_eicar_detection(eicar_file):
+    """
+    Test EICAR test file detection and classification.
+
+    EICAR (European Institute for Computer Antivirus Research) test file is a
+    standard test file used to verify antivirus detection without using real malware.
+
+    This test verifies that when scanning an EICAR test file:
+    1. The scanner detects it as infected (status=INFECTED)
+    2. The threat is classified with category='Test'
+    3. The threat severity is 'low' (as it's a test file, not real malware)
+    4. The threat details are correctly populated
+
+    Args:
+        eicar_file: pytest fixture that creates a temp EICAR test file
+    """
+    scanner = Scanner()
+
+    # Mock ClamAV output for EICAR detection
+    # ClamAV identifies EICAR with the signature "Eicar-Test-Signature"
+    mock_stdout = f"""
+{eicar_file}: Eicar-Test-Signature FOUND
+
+----------- SCAN SUMMARY -----------
+Known viruses: 8000000
+Engine version: 1.2.3
+Scanned directories: 0
+Scanned files: 1
+Infected files: 1
+Data scanned: 0.01 MB
+Data read: 0.01 MB
+Time: 0.100 sec (0 m 0 s)
+"""
+
+    with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
+        with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+            with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")):
+                with mock.patch("subprocess.Popen") as mock_popen:
+                    mock_process = mock.MagicMock()
+                    mock_process.communicate.return_value = (mock_stdout, "")
+                    mock_process.returncode = 1  # ClamAV exit code 1 = virus found
+                    mock_popen.return_value = mock_process
+
+                    # Execute scan on EICAR file
+                    result = scanner.scan_sync(str(eicar_file))
+
+    # Verify EICAR detection
+    assert result.status == ScanStatus.INFECTED, "EICAR should be detected as infected"
+    assert result.is_clean is False
+    assert result.has_threats is True
+
+    # Verify infected count
+    assert result.infected_count == 1
+    assert len(result.infected_files) == 1
+    assert str(eicar_file) in result.infected_files
+
+    # Verify threat details
+    assert len(result.threat_details) == 1
+    threat = result.threat_details[0]
+    assert isinstance(threat, ThreatDetail)
+    assert threat.file_path == str(eicar_file)
+    assert threat.threat_name == "Eicar-Test-Signature"
+
+    # CRITICAL: Verify EICAR-specific classification
+    # EICAR test files must be classified as:
+    # - category='Test' (not a real threat category)
+    # - severity='low' (minimal risk since it's just a test file)
+    assert threat.category == "Test", f"EICAR category should be 'Test', got '{threat.category}'"
+    assert threat.severity == "low", f"EICAR severity should be 'low', got '{threat.severity}'"
+
+
+@pytest.mark.integration
 class TestScannerAsyncWorkflow:
     """Integration tests for the asynchronous scan workflow with callback verification."""
 

@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 import threading
-from typing import Optional
+from typing import Dict, List, Optional
 
 # Configure logging to stderr (stdout is used for IPC)
 logging.basicConfig(
@@ -106,6 +106,12 @@ class TrayService:
         self._show_window_item: Optional[Gtk3.MenuItem] = None
         self._running = True
 
+        # Profile menu state
+        self._profiles: List[Dict] = []
+        self._profiles_menu: Optional[Gtk3.Menu] = None
+        self._profiles_menu_item: Optional[Gtk3.MenuItem] = None
+        self._current_profile_id: Optional[str] = None
+
         # Create indicator
         self._create_indicator()
 
@@ -167,6 +173,14 @@ class TrayService:
 
         menu.append(Gtk3.SeparatorMenuItem())
 
+        # Profiles submenu
+        self._profiles_menu_item = Gtk3.MenuItem(label="Profiles")
+        self._profiles_menu = self._build_profiles_menu()
+        self._profiles_menu_item.set_submenu(self._profiles_menu)
+        menu.append(self._profiles_menu_item)
+
+        menu.append(Gtk3.SeparatorMenuItem())
+
         # Quick Scan
         quick_scan_item = Gtk3.MenuItem(label="Quick Scan")
         quick_scan_item.connect("activate", lambda w: self._send_action("quick_scan"))
@@ -193,6 +207,70 @@ class TrayService:
 
         menu.show_all()
         return menu
+
+    def _build_profiles_menu(self) -> Gtk3.Menu:
+        """Build the profiles submenu."""
+        menu = Gtk3.Menu()
+
+        if not self._profiles:
+            # Show placeholder when no profiles loaded
+            no_profiles_item = Gtk3.MenuItem(label="(No profiles)")
+            no_profiles_item.set_sensitive(False)
+            menu.append(no_profiles_item)
+        else:
+            # Add each profile as a menu item
+            for profile in self._profiles:
+                profile_id = profile.get("id", "")
+                profile_name = profile.get("name", "Unknown")
+                is_default = profile.get("is_default", False)
+
+                # Add indicator for default profiles
+                label = f"• {profile_name}" if is_default else profile_name
+
+                # Mark currently selected profile
+                if profile_id == self._current_profile_id:
+                    label = f"✓ {profile_name}"
+
+                item = Gtk3.MenuItem(label=label)
+                # Use a closure to capture profile_id properly
+                item.connect(
+                    "activate",
+                    lambda w, pid=profile_id: self._on_profile_selected(pid)
+                )
+                menu.append(item)
+
+        menu.show_all()
+        return menu
+
+    def _on_profile_selected(self, profile_id: str) -> None:
+        """Handle profile selection from menu."""
+        self._current_profile_id = profile_id
+        message = {
+            "event": "menu_action",
+            "action": "select_profile",
+            "profile_id": profile_id
+        }
+        self._send_message(message)
+        # Rebuild menu to update checkmark
+        self._rebuild_profiles_menu()
+
+    def _rebuild_profiles_menu(self) -> None:
+        """Rebuild the profiles submenu to reflect current state."""
+        if self._profiles_menu_item is None:
+            return
+
+        # Build new submenu
+        new_menu = self._build_profiles_menu()
+        self._profiles_menu = new_menu
+        self._profiles_menu_item.set_submenu(new_menu)
+
+    def update_profiles(self, profiles: List[Dict], current_profile_id: Optional[str] = None) -> None:
+        """Update the profiles list in the tray menu."""
+        self._profiles = profiles
+        if current_profile_id is not None:
+            self._current_profile_id = current_profile_id
+        self._rebuild_profiles_menu()
+        logger.debug(f"Updated profiles: {len(profiles)} profiles")
 
     def _on_toggle_window(self, widget) -> None:
         """Handle window toggle menu item."""
@@ -258,6 +336,11 @@ class TrayService:
         elif action == "update_window_visible":
             visible = command.get("visible", True)
             GLib.idle_add(self.update_window_visible, visible)
+
+        elif action == "update_profiles":
+            profiles = command.get("profiles", [])
+            current_profile_id = command.get("current_profile_id")
+            GLib.idle_add(self.update_profiles, profiles, current_profile_id)
 
         elif action == "quit":
             logger.info("Received quit command")

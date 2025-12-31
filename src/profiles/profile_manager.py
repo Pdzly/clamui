@@ -1,0 +1,827 @@
+# ClamUI Profile Manager Module
+"""
+Profile manager module for ClamUI providing scan profile lifecycle management.
+Centralizes all profile operations including CRUD, validation, and import/export.
+"""
+
+import json
+import os
+import tempfile
+import threading
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+from .models import ScanProfile
+from .profile_storage import ProfileStorage
+
+
+# Validation constants
+MAX_PROFILE_NAME_LENGTH = 50
+MIN_PROFILE_NAME_LENGTH = 1
+
+
+class ProfileManager:
+    """
+    Manager for scan profile lifecycle and operations.
+
+    Provides methods for creating, reading, updating, and deleting
+    scan profiles. Uses ProfileStorage for persistence.
+    """
+
+    # Default profile definitions
+    # These are created on first run if not present in storage
+    DEFAULT_PROFILES = [
+        {
+            "name": "Quick Scan",
+            "description": "Fast scan of the Downloads folder for quick threat detection",
+            "targets": ["~/Downloads"],
+            "exclusions": {},
+            "options": {},
+        },
+        {
+            "name": "Full Scan",
+            "description": "Comprehensive system-wide scan of all accessible directories",
+            "targets": ["/"],
+            "exclusions": {
+                "paths": [
+                    "/proc",
+                    "/sys",
+                    "/dev",
+                    "/run",
+                    "/tmp",
+                    "/var/cache",
+                    "/var/tmp",
+                ]
+            },
+            "options": {},
+        },
+        {
+            "name": "Home Folder",
+            "description": "Scan of the user's home directory and personal files",
+            "targets": ["~"],
+            "exclusions": {
+                "paths": [
+                    "~/.cache",
+                    "~/.local/share/Trash",
+                ]
+            },
+            "options": {},
+        },
+    ]
+
+    def __init__(self, config_dir: Path):
+        """
+        Initialize the ProfileManager.
+
+        Args:
+            config_dir: Directory for storing profile data.
+                       Will be created if it doesn't exist.
+        """
+        self._config_dir = Path(config_dir)
+        self._storage = ProfileStorage(self._config_dir / "profiles.json")
+
+        # Thread lock for safe concurrent access
+        self._lock = threading.Lock()
+
+        # In-memory cache of profiles
+        self._profiles: dict[str, ScanProfile] = {}
+
+        # Load profiles on initialization
+        self._load()
+
+        # Ensure default profiles exist
+        self._ensure_default_profiles()
+
+    def _load(self) -> None:
+        """Load profiles from storage into memory."""
+        with self._lock:
+            profiles = self._storage.load_profiles()
+            self._profiles = {p.id: p for p in profiles}
+
+    def _ensure_default_profiles(self) -> None:
+        """
+        Ensure all default profiles exist.
+
+        Creates any missing default profiles from DEFAULT_PROFILES.
+        This is called during initialization to ensure built-in profiles
+        are always available.
+        """
+        # Get names of existing default profiles
+        existing_default_names: set[str] = set()
+        with self._lock:
+            for profile in self._profiles.values():
+                if profile.is_default:
+                    existing_default_names.add(profile.name)
+
+        # Create any missing default profiles
+        profiles_created = False
+        for default_def in self.DEFAULT_PROFILES:
+            if default_def["name"] not in existing_default_names:
+                timestamp = self._get_timestamp()
+                profile = ScanProfile(
+                    id=self._generate_id(),
+                    name=default_def["name"],
+                    targets=list(default_def["targets"]),
+                    exclusions=dict(default_def["exclusions"]),
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                    is_default=True,
+                    description=default_def["description"],
+                    options=dict(default_def["options"]),
+                )
+                with self._lock:
+                    self._profiles[profile.id] = profile
+                profiles_created = True
+
+        # Save if any profiles were created
+        if profiles_created:
+            self._save()
+
+    def _save(self) -> bool:
+        """
+        Save all profiles to storage.
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        with self._lock:
+            profiles = list(self._profiles.values())
+        return self._storage.save_profiles(profiles)
+
+    def _generate_id(self) -> str:
+        """Generate a unique profile ID."""
+        return str(uuid.uuid4())
+
+    def _get_timestamp(self) -> str:
+        """Get current timestamp in ISO 8601 format."""
+        return datetime.now(timezone.utc).isoformat()
+
+    def _validate_name(
+        self, name: str, exclude_id: Optional[str] = None
+    ) -> None:
+        """
+        Validate a profile name.
+
+        Args:
+            name: The profile name to validate
+            exclude_id: Optional profile ID to exclude from uniqueness check
+                       (used when updating an existing profile)
+
+        Raises:
+            ValueError: If name is invalid (empty, too long, or duplicate)
+        """
+        # Check for empty or whitespace-only name
+        if not name or not name.strip():
+            raise ValueError("Profile name cannot be empty")
+
+        stripped_name = name.strip()
+
+        # Check name length
+        if len(stripped_name) < MIN_PROFILE_NAME_LENGTH:
+            raise ValueError("Profile name cannot be empty")
+
+        if len(stripped_name) > MAX_PROFILE_NAME_LENGTH:
+            raise ValueError(
+                f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters"
+            )
+
+        # Check for duplicate name
+        if self.name_exists(stripped_name, exclude_id):
+            raise ValueError(f"Profile name '{stripped_name}' already exists")
+
+    def _validate_path_format(self, path: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate a path format.
+
+        Checks that the path is a valid format (not necessarily existing).
+        Allows ~ for home directory and relative/absolute paths.
+
+        Args:
+            path: The path string to validate
+
+        Returns:
+            Tuple of (is_valid, error_message):
+            - (True, None) if path format is valid
+            - (False, error_message) if path format is invalid
+        """
+        if not path or not path.strip():
+            return (False, "Path cannot be empty")
+
+        stripped_path = path.strip()
+
+        # Check for null bytes (security)
+        if "\x00" in stripped_path:
+            return (False, "Path contains invalid characters")
+
+        # Try to parse the path to check for basic validity
+        try:
+            # Expand ~ but don't require existence
+            if stripped_path.startswith("~"):
+                expanded = Path(stripped_path).expanduser()
+            else:
+                expanded = Path(stripped_path)
+
+            # Check that the path string is reasonable
+            # (Path() can accept almost anything, so we do additional checks)
+
+            # Reject paths with consecutive separators (except for // at start on some systems)
+            if "//" in str(expanded)[1:] or "\\\\" in str(expanded):
+                return (False, f"Invalid path format: {path}")
+
+        except (OSError, RuntimeError, ValueError) as e:
+            return (False, f"Invalid path format: {e}")
+
+        return (True, None)
+
+    def _validate_targets(self, targets: list[str]) -> list[str]:
+        """
+        Validate target paths.
+
+        Validates each target path format. Non-existent paths are allowed
+        as they may become valid later.
+
+        Args:
+            targets: List of target paths to validate
+
+        Returns:
+            List of warning messages (empty if no warnings)
+
+        Raises:
+            ValueError: If targets is not a list or contains invalid path formats
+        """
+        warnings: list[str] = []
+
+        # Validate targets is a list
+        if not isinstance(targets, list):
+            raise ValueError("Targets must be a list of paths")
+
+        # Validate each target path format
+        for i, target in enumerate(targets):
+            if not isinstance(target, str):
+                raise ValueError(f"Target at index {i} must be a string")
+
+            is_valid, error = self._validate_path_format(target)
+            if not is_valid:
+                raise ValueError(f"Invalid target path: {error}")
+
+        return warnings
+
+    def _validate_exclusions(
+        self, exclusions: dict[str, Any], targets: list[str]
+    ) -> list[str]:
+        """
+        Validate exclusion settings.
+
+        Validates exclusion structure and path formats. Also checks for
+        circular exclusions (exclusion is parent of all targets).
+
+        Args:
+            exclusions: Dictionary of exclusion settings
+            targets: List of target paths (for circular exclusion check)
+
+        Returns:
+            List of warning messages (empty if no warnings)
+
+        Raises:
+            ValueError: If exclusions structure is invalid or contains invalid paths
+        """
+        warnings: list[str] = []
+
+        # Validate exclusions is a dict
+        if not isinstance(exclusions, dict):
+            raise ValueError("Exclusions must be a dictionary")
+
+        # If exclusions is empty, it's valid
+        if not exclusions:
+            return warnings
+
+        # Validate 'paths' key if present
+        if "paths" in exclusions:
+            paths = exclusions["paths"]
+
+            if not isinstance(paths, list):
+                raise ValueError("Exclusions 'paths' must be a list")
+
+            for i, path in enumerate(paths):
+                if not isinstance(path, str):
+                    raise ValueError(
+                        f"Exclusion path at index {i} must be a string"
+                    )
+
+                is_valid, error = self._validate_path_format(path)
+                if not is_valid:
+                    raise ValueError(f"Invalid exclusion path: {error}")
+
+            # Check for circular exclusions
+            # (exclusion path that would exclude all targets)
+            self._check_circular_exclusions(paths, targets, warnings)
+
+        # Validate 'patterns' key if present (file patterns like *.tmp)
+        if "patterns" in exclusions:
+            patterns = exclusions["patterns"]
+
+            if not isinstance(patterns, list):
+                raise ValueError("Exclusions 'patterns' must be a list")
+
+            for i, pattern in enumerate(patterns):
+                if not isinstance(pattern, str):
+                    raise ValueError(
+                        f"Exclusion pattern at index {i} must be a string"
+                    )
+
+                if not pattern.strip():
+                    raise ValueError("Exclusion pattern cannot be empty")
+
+        return warnings
+
+    def _check_circular_exclusions(
+        self,
+        exclusion_paths: list[str],
+        targets: list[str],
+        warnings: list[str],
+    ) -> None:
+        """
+        Check for circular exclusions where an exclusion would exclude all targets.
+
+        Args:
+            exclusion_paths: List of exclusion paths
+            targets: List of target paths
+            warnings: List to append warning messages to
+        """
+        if not targets or not exclusion_paths:
+            return
+
+        for exclusion in exclusion_paths:
+            # Normalize the exclusion path
+            try:
+                if exclusion.startswith("~"):
+                    excl_path = Path(exclusion).expanduser().resolve()
+                else:
+                    excl_path = Path(exclusion).resolve()
+            except (OSError, RuntimeError, ValueError):
+                continue
+
+            # Check if all targets are children of this exclusion
+            all_excluded = True
+            for target in targets:
+                try:
+                    if target.startswith("~"):
+                        target_path = Path(target).expanduser().resolve()
+                    else:
+                        target_path = Path(target).resolve()
+
+                    # Check if target is the same as or is a child of exclusion
+                    if not (
+                        target_path == excl_path
+                        or self._is_subpath(target_path, excl_path)
+                    ):
+                        all_excluded = False
+                        break
+                except (OSError, RuntimeError, ValueError):
+                    all_excluded = False
+                    break
+
+            if all_excluded and len(targets) > 0:
+                warnings.append(
+                    f"Exclusion '{exclusion}' would exclude all scan targets"
+                )
+
+    def _is_subpath(self, path: Path, parent: Path) -> bool:
+        """
+        Check if path is a subpath of parent.
+
+        Args:
+            path: The path to check
+            parent: The potential parent path
+
+        Returns:
+            True if path is under parent, False otherwise
+        """
+        try:
+            path.relative_to(parent)
+            return True
+        except ValueError:
+            return False
+
+    def _validate_profile(
+        self,
+        name: str,
+        targets: list[str],
+        exclusions: dict[str, Any],
+        exclude_id: Optional[str] = None,
+    ) -> list[str]:
+        """
+        Validate all profile fields.
+
+        Args:
+            name: Profile name
+            targets: List of target paths
+            exclusions: Dictionary of exclusion settings
+            exclude_id: Optional profile ID to exclude from name uniqueness check
+
+        Returns:
+            List of warning messages (non-fatal issues)
+
+        Raises:
+            ValueError: If validation fails for any required field
+        """
+        warnings: list[str] = []
+
+        # Validate name (raises ValueError if invalid)
+        self._validate_name(name, exclude_id)
+
+        # Validate targets (raises ValueError if invalid format)
+        target_warnings = self._validate_targets(targets)
+        warnings.extend(target_warnings)
+
+        # Validate exclusions (raises ValueError if invalid)
+        exclusion_warnings = self._validate_exclusions(exclusions, targets)
+        warnings.extend(exclusion_warnings)
+
+        return warnings
+
+    def create_profile(
+        self,
+        name: str,
+        targets: list[str],
+        exclusions: dict[str, Any],
+        description: str = "",
+        options: Optional[dict[str, Any]] = None,
+        is_default: bool = False,
+    ) -> ScanProfile:
+        """
+        Create and save a new profile.
+
+        Args:
+            name: User-visible profile name
+            targets: List of directories/files to scan
+            exclusions: Dictionary of exclusion settings
+            description: Optional description of the profile
+            options: Optional scan engine options
+            is_default: Whether this is a built-in profile
+
+        Returns:
+            The newly created ScanProfile
+
+        Raises:
+            ValueError: If validation fails
+        """
+        # Validate profile fields (raises ValueError if invalid)
+        self._validate_profile(name, targets, exclusions or {})
+
+        timestamp = self._get_timestamp()
+
+        profile = ScanProfile(
+            id=self._generate_id(),
+            name=name,
+            targets=list(targets),
+            exclusions=dict(exclusions) if exclusions else {},
+            created_at=timestamp,
+            updated_at=timestamp,
+            is_default=is_default,
+            description=description,
+            options=dict(options) if options else {},
+        )
+
+        with self._lock:
+            self._profiles[profile.id] = profile
+
+        self._save()
+        return profile
+
+    def get_profile(self, profile_id: str) -> Optional[ScanProfile]:
+        """
+        Retrieve a profile by ID.
+
+        Args:
+            profile_id: The unique identifier of the profile
+
+        Returns:
+            The ScanProfile if found, None otherwise
+        """
+        with self._lock:
+            return self._profiles.get(profile_id)
+
+    def get_profile_by_name(self, name: str) -> Optional[ScanProfile]:
+        """
+        Retrieve a profile by name.
+
+        Args:
+            name: The profile name to search for
+
+        Returns:
+            The ScanProfile if found, None otherwise
+        """
+        with self._lock:
+            for profile in self._profiles.values():
+                if profile.name == name:
+                    return profile
+        return None
+
+    def update_profile(self, profile_id: str, **updates: Any) -> Optional[ScanProfile]:
+        """
+        Update an existing profile.
+
+        Args:
+            profile_id: The unique identifier of the profile to update
+            **updates: Keyword arguments for fields to update
+                      (name, targets, exclusions, description, options)
+
+        Returns:
+            The updated ScanProfile if found, None otherwise
+
+        Raises:
+            ValueError: If validation fails or trying to change protected fields
+        """
+        with self._lock:
+            profile = self._profiles.get(profile_id)
+            if profile is None:
+                return None
+
+            # Determine final values (updated or existing)
+            new_name = updates.get("name", profile.name)
+            new_targets = updates.get("targets", profile.targets)
+            new_exclusions = updates.get("exclusions", profile.exclusions)
+
+        # Validate updated fields (raises ValueError if invalid)
+        # Pass profile_id to exclude_id so name uniqueness check excludes this profile
+        self._validate_profile(
+            new_name, new_targets, new_exclusions, exclude_id=profile_id
+        )
+
+        with self._lock:
+            profile = self._profiles.get(profile_id)
+            if profile is None:
+                return None
+
+            # Create updated profile with new values
+            updated_profile = ScanProfile(
+                id=profile.id,
+                name=new_name,
+                targets=new_targets,
+                exclusions=new_exclusions,
+                created_at=profile.created_at,
+                updated_at=self._get_timestamp(),
+                is_default=profile.is_default,  # Cannot change is_default
+                description=updates.get("description", profile.description),
+                options=updates.get("options", profile.options),
+            )
+
+            self._profiles[profile_id] = updated_profile
+
+        self._save()
+        return updated_profile
+
+    def delete_profile(self, profile_id: str) -> bool:
+        """
+        Delete a profile.
+
+        Cannot delete default profiles.
+
+        Args:
+            profile_id: The unique identifier of the profile to delete
+
+        Returns:
+            True if deleted successfully, False if not found or is default
+
+        Raises:
+            ValueError: If attempting to delete a default profile
+        """
+        with self._lock:
+            profile = self._profiles.get(profile_id)
+            if profile is None:
+                return False
+
+            if profile.is_default:
+                raise ValueError("Cannot delete default profile")
+
+            del self._profiles[profile_id]
+
+        self._save()
+        return True
+
+    def list_profiles(self) -> list[ScanProfile]:
+        """
+        Get all available profiles.
+
+        Returns:
+            List of all ScanProfile instances, sorted by name
+        """
+        with self._lock:
+            profiles = list(self._profiles.values())
+        return sorted(profiles, key=lambda p: p.name.lower())
+
+    def get_all_profiles(self) -> dict[str, ScanProfile]:
+        """
+        Get a copy of all profiles as a dictionary.
+
+        Returns:
+            Dictionary mapping profile IDs to ScanProfile instances
+        """
+        with self._lock:
+            return dict(self._profiles)
+
+    def profile_exists(self, profile_id: str) -> bool:
+        """
+        Check if a profile exists.
+
+        Args:
+            profile_id: The unique identifier to check
+
+        Returns:
+            True if profile exists, False otherwise
+        """
+        with self._lock:
+            return profile_id in self._profiles
+
+    def name_exists(self, name: str, exclude_id: Optional[str] = None) -> bool:
+        """
+        Check if a profile name already exists.
+
+        Args:
+            name: The name to check
+            exclude_id: Optional profile ID to exclude from check
+                       (useful when updating a profile's name)
+
+        Returns:
+            True if name exists (excluding the specified ID), False otherwise
+        """
+        with self._lock:
+            for profile in self._profiles.values():
+                if profile.name == name and profile.id != exclude_id:
+                    return True
+        return False
+
+    def reload(self) -> None:
+        """Reload profiles from storage, discarding in-memory changes."""
+        self._load()
+
+    def export_profile(self, profile_id: str, export_path: Path) -> None:
+        """
+        Export a profile to a JSON file.
+
+        Exports a single profile to a standalone JSON file for backup
+        or sharing purposes.
+
+        Args:
+            profile_id: The unique identifier of the profile to export
+            export_path: Path where the JSON file will be saved
+
+        Raises:
+            ValueError: If profile not found
+            OSError: If file cannot be written
+        """
+        profile = self.get_profile(profile_id)
+        if profile is None:
+            raise ValueError(f"Profile with ID '{profile_id}' not found")
+
+        export_path = Path(export_path)
+
+        # Prepare export data
+        # Exclude is_default since imported profiles should not be default
+        profile_data = profile.to_dict()
+        export_data = {
+            "export_version": 1,
+            "profile": profile_data,
+        }
+
+        # Ensure parent directory exists
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Atomic write using temp file + rename pattern
+        fd, temp_path = tempfile.mkstemp(
+            suffix=".json",
+            prefix="profile_export_",
+            dir=export_path.parent,
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2)
+
+            # Atomic rename
+            Path(temp_path).replace(export_path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                Path(temp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+    def import_profile(self, import_path: Path) -> ScanProfile:
+        """
+        Import a profile from a JSON file.
+
+        Imports a profile from a standalone JSON file. The imported
+        profile receives a new unique ID and is never marked as default.
+        Duplicate names are handled by appending a numeric suffix.
+
+        Args:
+            import_path: Path to the JSON file to import
+
+        Returns:
+            The newly imported ScanProfile
+
+        Raises:
+            ValueError: If file format is invalid or required fields are missing
+            OSError: If file cannot be read
+            FileNotFoundError: If file does not exist
+        """
+        import_path = Path(import_path)
+
+        if not import_path.exists():
+            raise FileNotFoundError(f"Import file not found: {import_path}")
+
+        # Read and parse the JSON file
+        try:
+            with open(import_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON format: {e}")
+
+        # Validate export format
+        if not isinstance(data, dict):
+            raise ValueError("Invalid export format: expected JSON object")
+
+        # Support both versioned export format and raw profile format
+        if "profile" in data:
+            profile_data = data["profile"]
+        else:
+            # Assume the entire object is a profile (legacy format)
+            profile_data = data
+
+        if not isinstance(profile_data, dict):
+            raise ValueError("Invalid export format: profile data must be an object")
+
+        # Validate required fields
+        required_fields = ["name"]
+        for field in required_fields:
+            if field not in profile_data:
+                raise ValueError(f"Invalid profile data: missing required field '{field}'")
+
+        # Extract profile data with defaults
+        name = str(profile_data.get("name", ""))
+        targets = profile_data.get("targets", [])
+        exclusions = profile_data.get("exclusions", {})
+        description = str(profile_data.get("description", ""))
+        options = profile_data.get("options", {})
+
+        # Validate types
+        if not isinstance(targets, list):
+            raise ValueError("Invalid profile data: 'targets' must be a list")
+        if not isinstance(exclusions, dict):
+            raise ValueError("Invalid profile data: 'exclusions' must be an object")
+        if not isinstance(options, dict):
+            raise ValueError("Invalid profile data: 'options' must be an object")
+
+        # Handle duplicate names by appending numeric suffix
+        original_name = name
+        final_name = self._make_unique_name(original_name)
+
+        # Create the profile with a new ID
+        # Imported profiles are never default
+        return self.create_profile(
+            name=final_name,
+            targets=targets,
+            exclusions=exclusions,
+            description=description,
+            options=options,
+            is_default=False,
+        )
+
+    def _make_unique_name(self, name: str) -> str:
+        """
+        Ensure a profile name is unique by appending a numeric suffix if needed.
+
+        Args:
+            name: The proposed name
+
+        Returns:
+            A unique name (original if available, or with suffix like " (2)")
+        """
+        if not self.name_exists(name):
+            return name
+
+        # Try appending (2), (3), etc. until we find a unique name
+        counter = 2
+        while True:
+            candidate = f"{name} ({counter})"
+            # Ensure the candidate doesn't exceed max length
+            if len(candidate) > MAX_PROFILE_NAME_LENGTH:
+                # Truncate the base name to make room for suffix
+                suffix = f" ({counter})"
+                max_base = MAX_PROFILE_NAME_LENGTH - len(suffix)
+                candidate = f"{name[:max_base]} ({counter})"
+
+            if not self.name_exists(candidate):
+                return candidate
+
+            counter += 1
+
+            # Safety limit to prevent infinite loop
+            if counter > 1000:
+                raise ValueError(
+                    f"Could not generate unique name for '{name}'"
+                )

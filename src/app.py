@@ -5,6 +5,7 @@ Main Adwaita Application class for ClamUI.
 
 import logging
 import os
+from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -21,6 +22,7 @@ from .ui.statistics_view import StatisticsView
 from .ui.preferences_window import PreferencesWindow
 from .core.settings_manager import SettingsManager
 from .core.notification_manager import NotificationManager
+from .profiles.profile_manager import ProfileManager
 
 # Tray manager - uses subprocess to avoid GTK3/GTK4 version conflict
 from .ui.tray_manager import TrayManager
@@ -51,6 +53,12 @@ class ClamUIApp(Adw.Application):
         # Settings and notification management
         self._settings_manager = SettingsManager()
         self._notification_manager = NotificationManager(self._settings_manager)
+
+        # Profile management
+        # Use XDG config directory (same location as settings)
+        xdg_config_home = os.environ.get("XDG_CONFIG_HOME", "~/.config")
+        config_dir = Path(xdg_config_home).expanduser() / "clamui"
+        self._profile_manager = ProfileManager(config_dir)
 
         # View management
         self._scan_view = None
@@ -86,6 +94,11 @@ class ClamUIApp(Adw.Application):
     def settings_manager(self) -> SettingsManager:
         """Get the settings manager instance."""
         return self._settings_manager
+
+    @property
+    def profile_manager(self) -> ProfileManager:
+        """Get the profile manager instance."""
+        return self._profile_manager
 
     @property
     def tray_indicator(self):
@@ -129,6 +142,9 @@ class ClamUIApp(Adw.Application):
             win.set_content_view(self._scan_view)
             win.set_active_view("scan")
             self._current_view = "scan"
+
+            # Sync profiles to tray menu
+            self._sync_profiles_to_tray()
 
         # Check if we should start minimized (only on first activation)
         start_minimized = (
@@ -229,6 +245,11 @@ class ClamUIApp(Adw.Application):
                 on_toggle=self._on_tray_window_toggle
             )
 
+            # Set profile selection callback
+            self._tray_indicator.set_profile_select_callback(
+                on_select=self._on_tray_profile_select
+            )
+
             # Start the tray subprocess
             if self._tray_indicator.start():
                 logger.info("Tray indicator subprocess started")
@@ -238,6 +259,42 @@ class ClamUIApp(Adw.Application):
         except Exception as e:
             logger.warning(f"Failed to initialize tray indicator: {e}")
             self._tray_indicator = None
+
+    def _sync_profiles_to_tray(self) -> None:
+        """
+        Sync the profile list to the tray menu.
+
+        Retrieves all profiles from the profile manager and sends them
+        to the tray indicator for display in the profiles submenu.
+        """
+        if self._tray_indicator is None:
+            return
+
+        try:
+            profiles = self._profile_manager.list_profiles()
+
+            # Format profiles for tray (list of dicts with id, name, is_default)
+            profile_data = [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "is_default": p.is_default,
+                }
+                for p in profiles
+            ]
+
+            # Get current profile ID from scan view if available
+            current_profile_id = None
+            if self._scan_view:
+                selected_profile = self._scan_view.get_selected_profile()
+                if selected_profile:
+                    current_profile_id = selected_profile.id
+
+            self._tray_indicator.update_profiles(profile_data, current_profile_id)
+            logger.debug(f"Synced {len(profile_data)} profiles to tray menu")
+
+        except Exception as e:
+            logger.warning(f"Failed to sync profiles to tray: {e}")
 
     def _on_quit(self, action, param):
         """Handle quit action."""
@@ -476,6 +533,42 @@ class ClamUIApp(Adw.Application):
             win.present()
             if self._tray_indicator:
                 self._tray_indicator.update_window_menu_label(visible=True)
+
+    def _on_tray_profile_select(self, profile_id: str) -> None:
+        """
+        Handle profile selection from tray menu.
+
+        Shows the main window, switches to scan view, and updates the
+        profile selection to the chosen profile.
+
+        Args:
+            profile_id: The ID of the selected profile
+        """
+        # Use GLib.idle_add to ensure GTK4 operations run on main thread
+        GLib.idle_add(self._do_tray_profile_select, profile_id)
+
+    def _do_tray_profile_select(self, profile_id: str) -> bool:
+        """Execute profile selection on main thread."""
+        # Activate the application (creates window if needed)
+        self.activate()
+
+        win = self.props.active_window
+        if win and self._scan_view:
+            # Switch to scan view
+            win.set_content_view(self._scan_view)
+            win.set_active_view("scan")
+            self._current_view = "scan"
+
+            # Refresh profiles to ensure list is up to date
+            self._scan_view.refresh_profiles()
+
+            # Select the profile by ID
+            if self._scan_view.set_selected_profile(profile_id):
+                logger.info(f"Profile selected from tray menu: {profile_id}")
+            else:
+                logger.warning(f"Failed to select profile from tray: {profile_id}")
+
+        return False  # Don't repeat
 
     # Scan state change handler (for tray integration)
 

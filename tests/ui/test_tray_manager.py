@@ -64,6 +64,7 @@ class TestTrayManagerInit:
         assert manager._on_update is None
         assert manager._on_quit is None
         assert manager._on_window_toggle is None
+        assert manager._on_profile_select is None
 
     def test_init_not_running(self, mock_gtk_modules):
         """Test TrayManager starts as not running."""
@@ -108,6 +109,16 @@ class TestTrayManagerCallbacks:
 
         assert manager._on_window_toggle is toggle_cb
 
+    def test_set_profile_select_callback_stores_callback(self, mock_gtk_modules):
+        """Test set_profile_select_callback stores the callback."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        profile_cb = mock.Mock()
+        manager.set_profile_select_callback(profile_cb)
+
+        assert manager._on_profile_select is profile_cb
+
 
 class TestTrayManagerHandleMenuAction:
     """Tests for TrayManager._handle_menu_action method."""
@@ -120,7 +131,7 @@ class TestTrayManagerHandleMenuAction:
         callback = mock.Mock()
         manager._on_quick_scan = callback
 
-        manager._handle_menu_action("quick_scan")
+        manager._handle_menu_action("quick_scan", {})
 
         callback.assert_called_once()
 
@@ -132,7 +143,7 @@ class TestTrayManagerHandleMenuAction:
         callback = mock.Mock()
         manager._on_full_scan = callback
 
-        manager._handle_menu_action("full_scan")
+        manager._handle_menu_action("full_scan", {})
 
         callback.assert_called_once()
 
@@ -144,7 +155,7 @@ class TestTrayManagerHandleMenuAction:
         callback = mock.Mock()
         manager._on_update = callback
 
-        manager._handle_menu_action("update")
+        manager._handle_menu_action("update", {})
 
         callback.assert_called_once()
 
@@ -156,7 +167,7 @@ class TestTrayManagerHandleMenuAction:
         callback = mock.Mock()
         manager._on_quit = callback
 
-        manager._handle_menu_action("quit")
+        manager._handle_menu_action("quit", {})
 
         callback.assert_called_once()
 
@@ -168,9 +179,50 @@ class TestTrayManagerHandleMenuAction:
         callback = mock.Mock()
         manager._on_window_toggle = callback
 
-        manager._handle_menu_action("toggle_window")
+        manager._handle_menu_action("toggle_window", {})
 
         callback.assert_called_once()
+
+    def test_handle_select_profile_action(self, mock_gtk_modules):
+        """Test handling select_profile action invokes callback with profile_id."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        callback = mock.Mock()
+        manager._on_profile_select = callback
+
+        # Simulate message with profile_id
+        message = {"action": "select_profile", "profile_id": "test-profile-123"}
+        manager._handle_menu_action("select_profile", message)
+
+        callback.assert_called_once_with("test-profile-123")
+
+    def test_handle_select_profile_action_updates_current_profile(self, mock_gtk_modules):
+        """Test handling select_profile updates current_profile_id."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        callback = mock.Mock()
+        manager._on_profile_select = callback
+
+        message = {"action": "select_profile", "profile_id": "new-profile-id"}
+        manager._handle_menu_action("select_profile", message)
+
+        assert manager._current_profile_id == "new-profile-id"
+
+    def test_handle_select_profile_action_no_profile_id(self, mock_gtk_modules):
+        """Test handling select_profile without profile_id doesn't invoke callback."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        callback = mock.Mock()
+        manager._on_profile_select = callback
+
+        # Message without profile_id
+        message = {"action": "select_profile"}
+        manager._handle_menu_action("select_profile", message)
+
+        callback.assert_not_called()
 
     def test_handle_unknown_action_does_not_crash(self, mock_gtk_modules):
         """Test handling unknown action doesn't crash."""
@@ -178,7 +230,7 @@ class TestTrayManagerHandleMenuAction:
         manager = TrayManager()
 
         # Should not raise
-        manager._handle_menu_action("unknown_action")
+        manager._handle_menu_action("unknown_action", {})
 
 
 class TestTrayManagerHandleMessage:
@@ -309,6 +361,37 @@ class TestTrayManagerUpdateMethods:
                 "visible": True
             })
 
+    def test_update_profiles_sends_command(self, mock_gtk_modules):
+        """Test update_profiles sends correct command with profiles list."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        profiles = [
+            {"id": "profile-1", "name": "Quick Scan", "is_default": True},
+            {"id": "profile-2", "name": "Full Scan", "is_default": True},
+        ]
+
+        with mock.patch.object(manager, '_send_command') as mock_send:
+            manager.update_profiles(profiles, "profile-1")
+
+            mock_send.assert_called_once_with({
+                "action": "update_profiles",
+                "profiles": profiles,
+                "current_profile_id": "profile-1"
+            })
+
+    def test_update_profiles_stores_current_profile_id(self, mock_gtk_modules):
+        """Test update_profiles stores current_profile_id."""
+        from src.ui.tray_manager import TrayManager
+        manager = TrayManager()
+
+        profiles = [{"id": "test-id", "name": "Test", "is_default": False}]
+
+        with mock.patch.object(manager, '_send_command'):
+            manager.update_profiles(profiles, "test-id")
+
+        assert manager._current_profile_id == "test-id"
+
 
 class TestTrayManagerProperties:
     """Tests for TrayManager properties."""
@@ -376,6 +459,7 @@ class TestTrayManagerCleanup:
         manager._on_update = mock.Mock()
         manager._on_quit = mock.Mock()
         manager._on_window_toggle = mock.Mock()
+        manager._on_profile_select = mock.Mock()
 
         manager.cleanup()
 
@@ -384,6 +468,7 @@ class TestTrayManagerCleanup:
         assert manager._on_update is None
         assert manager._on_quit is None
         assert manager._on_window_toggle is None
+        assert manager._on_profile_select is None
 
     def test_stop_sends_quit_command(self, mock_gtk_modules):
         """Test stop sends quit command to subprocess."""

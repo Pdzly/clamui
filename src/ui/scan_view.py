@@ -3,8 +3,10 @@
 Scan interface component for ClamUI with folder picker, scan button, and results display.
 """
 
+import logging
 import os
 import tempfile
+from typing import TYPE_CHECKING
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -21,6 +23,13 @@ from ..core.utils import (
 )
 from ..core.quarantine import QuarantineManager, QuarantineStatus
 from .fullscreen_dialog import FullscreenLogDialog
+from .profile_dialogs import ProfileListDialog
+
+if TYPE_CHECKING:
+    from ..profiles.profile_manager import ProfileManager
+    from ..profiles.models import ScanProfile
+
+logger = logging.getLogger(__name__)
 
 # EICAR test string - industry-standard antivirus test pattern
 # This is NOT malware - it's a safe test string recognized by all AV software
@@ -74,6 +83,12 @@ class ScanView(Gtk.Box):
         # Scan state change callback (for tray integration)
         self._on_scan_state_changed = None
 
+        # Profile management state
+        self._selected_profile: "ScanProfile | None" = None
+        self._profile_list: list["ScanProfile"] = []
+        self._profile_string_list: Gtk.StringList | None = None
+        self._profile_dropdown: Gtk.DropDown | None = None
+
         # Set up the UI
         self._setup_ui()
 
@@ -90,6 +105,9 @@ class ScanView(Gtk.Box):
 
         # Set up CSS for drag-and-drop visual feedback
         self._setup_drop_css()
+
+        # Create the profile selector section
+        self._create_profile_section()
 
         # Create the selection section
         self._create_selection_section()
@@ -283,6 +301,287 @@ class ScanView(Gtk.Box):
         self._status_banner.remove_css_class("warning")
         self._status_banner.set_button_label(None)
         self._status_banner.set_revealed(True)
+
+    def _create_profile_section(self):
+        """Create the scan profile selector section."""
+        # Profile selection frame
+        profile_group = Adw.PreferencesGroup()
+        profile_group.set_title("Scan Profile")
+        profile_group.set_description("Select a predefined scan configuration")
+        self._profile_group = profile_group
+
+        # Profile selection row
+        profile_row = Adw.ActionRow()
+        profile_row.set_title("Profile")
+        profile_row.set_subtitle("Choose a scan profile or use manual selection")
+        profile_row.set_icon_name("document-properties-symbolic")
+        self._profile_row = profile_row
+
+        # Create string list for dropdown
+        self._profile_string_list = Gtk.StringList()
+        self._profile_string_list.append("No Profile (Manual)")
+
+        # Create the dropdown
+        self._profile_dropdown = Gtk.DropDown()
+        self._profile_dropdown.set_model(self._profile_string_list)
+        self._profile_dropdown.set_selected(0)  # Default to "No Profile"
+        self._profile_dropdown.set_valign(Gtk.Align.CENTER)
+        self._profile_dropdown.connect("notify::selected", self._on_profile_selected)
+
+        # Create manage profiles button
+        manage_profiles_btn = Gtk.Button()
+        manage_profiles_btn.set_icon_name("emblem-system-symbolic")
+        manage_profiles_btn.set_tooltip_text("Manage profiles")
+        manage_profiles_btn.add_css_class("flat")
+        manage_profiles_btn.set_valign(Gtk.Align.CENTER)
+        manage_profiles_btn.connect("clicked", self._on_manage_profiles_clicked)
+        self._manage_profiles_btn = manage_profiles_btn
+
+        # Button box to contain dropdown and manage button
+        profile_control_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        profile_control_box.set_valign(Gtk.Align.CENTER)
+        profile_control_box.append(self._profile_dropdown)
+        profile_control_box.append(manage_profiles_btn)
+
+        profile_row.add_suffix(profile_control_box)
+        profile_group.add(profile_row)
+
+        self.append(profile_group)
+
+        # Load profiles after widget is realized (to access profile manager)
+        self.connect("realize", self._on_realize_load_profiles)
+
+    def _on_realize_load_profiles(self, widget):
+        """Load profiles when the widget is realized and has access to the application."""
+        self.refresh_profiles()
+
+    def _get_profile_manager(self) -> "ProfileManager | None":
+        """
+        Get the ProfileManager from the application.
+
+        Returns:
+            ProfileManager instance or None if not available
+        """
+        root = self.get_root()
+        if root is None:
+            return None
+
+        app = root.get_application() if hasattr(root, 'get_application') else None
+        if app is None:
+            return None
+
+        if hasattr(app, 'profile_manager'):
+            return app.profile_manager
+
+        return None
+
+    def refresh_profiles(self):
+        """
+        Refresh the profile dropdown with current profiles from ProfileManager.
+
+        This method can be called externally to update the dropdown when
+        profiles are added, edited, or deleted.
+        """
+        profile_manager = self._get_profile_manager()
+        if profile_manager is None:
+            logger.debug("ProfileManager not available, skipping profile refresh")
+            return
+
+        # Store current selection to restore if possible
+        current_selection = self._profile_dropdown.get_selected() if self._profile_dropdown else 0
+        current_profile_id = None
+        if current_selection > 0 and current_selection - 1 < len(self._profile_list):
+            current_profile_id = self._profile_list[current_selection - 1].id
+
+        # Get updated profile list
+        self._profile_list = profile_manager.list_profiles()
+
+        # Clear and rebuild the string list
+        # GTK4 StringList doesn't have a clear method, so rebuild
+        n_items = self._profile_string_list.get_n_items()
+        for _ in range(n_items):
+            self._profile_string_list.remove(0)
+
+        # Add "No Profile" option first
+        self._profile_string_list.append("No Profile (Manual)")
+
+        # Add each profile
+        for profile in self._profile_list:
+            # Format: "Profile Name" or "Profile Name (Default)" for built-in profiles
+            display_name = profile.name
+            if profile.is_default:
+                display_name = f"{profile.name} (Default)"
+            self._profile_string_list.append(display_name)
+
+        # Restore selection if the profile still exists
+        new_selection = 0  # Default to "No Profile"
+        if current_profile_id:
+            for i, profile in enumerate(self._profile_list):
+                if profile.id == current_profile_id:
+                    new_selection = i + 1  # +1 for "No Profile" option
+                    break
+
+        self._profile_dropdown.set_selected(new_selection)
+        logger.debug(f"Profile dropdown refreshed with {len(self._profile_list)} profiles")
+
+    def _on_profile_selected(self, dropdown, pspec):
+        """
+        Handle profile selection from dropdown.
+
+        When a profile is selected, the first target path is populated into
+        the scan target UI, and the profile's exclusions are stored for use
+        during the scan.
+
+        Args:
+            dropdown: The Gtk.DropDown widget
+            pspec: The property specification
+        """
+        selected_index = dropdown.get_selected()
+
+        if selected_index == 0:
+            # "No Profile" selected - clear selected profile
+            self._selected_profile = None
+            self._profile_row.set_subtitle("Choose a scan profile or use manual selection")
+            logger.debug("Profile cleared - using manual selection")
+            # Don't clear path selection - user may have manually selected a path
+        elif selected_index - 1 < len(self._profile_list):
+            # A profile is selected
+            profile = self._profile_list[selected_index - 1]
+            self._selected_profile = profile
+
+            # Update subtitle with profile description or target count
+            if profile.description:
+                subtitle = profile.description
+            else:
+                target_count = len(profile.targets)
+                subtitle = f"{target_count} target(s) configured"
+            self._profile_row.set_subtitle(subtitle)
+
+            # Populate scan target from profile
+            self._apply_profile_targets(profile)
+
+            logger.debug(f"Profile selected: {profile.name} (ID: {profile.id})")
+
+    def _apply_profile_targets(self, profile: "ScanProfile"):
+        """
+        Apply profile targets to the scan target UI.
+
+        Expands the first target path (handling ~ for home directory) and
+        sets it as the current scan target. The profile's exclusions are
+        stored for use during scanning.
+
+        Args:
+            profile: The ScanProfile to apply
+        """
+        if not profile.targets:
+            # Profile has no targets - update UI to indicate this
+            self._path_row.set_title("No targets in profile")
+            self._path_row.set_subtitle("Add targets to this profile or select manually")
+            self._path_row.set_icon_name("dialog-warning-symbolic")
+            self._selected_path = ""
+            self._scan_button.set_sensitive(False)
+            return
+
+        # Use the first target from the profile
+        # Future enhancement: support multiple targets with sequential scanning
+        first_target = profile.targets[0]
+
+        # Expand ~ to home directory
+        expanded_path = self._expand_path(first_target)
+
+        # Check if path exists and is accessible
+        if os.path.exists(expanded_path):
+            self._set_selected_path(expanded_path)
+
+            # Update path row to indicate this came from profile
+            display_path = format_scan_path(expanded_path)
+            self._path_row.set_title(display_path)
+            if len(profile.targets) > 1:
+                self._path_row.set_subtitle(
+                    f"From profile '{profile.name}' ({len(profile.targets)} targets, scanning first)"
+                )
+            else:
+                self._path_row.set_subtitle(f"From profile '{profile.name}'")
+            self._path_row.set_icon_name("folder-symbolic")
+        else:
+            # Path doesn't exist - show warning but still allow selection
+            display_path = format_scan_path(expanded_path)
+            self._path_row.set_title(display_path)
+            self._path_row.set_subtitle(f"Path not found - from profile '{profile.name}'")
+            self._path_row.set_icon_name("dialog-warning-symbolic")
+            self._selected_path = expanded_path
+            # Still enable scan button - path might become available or user can fix
+            self._scan_button.set_sensitive(True)
+
+        logger.debug(f"Applied profile target: {first_target} -> {expanded_path}")
+
+    def _expand_path(self, path: str) -> str:
+        """
+        Expand a path, handling ~ for home directory.
+
+        Args:
+            path: The path string to expand
+
+        Returns:
+            The expanded absolute path
+        """
+        if path.startswith("~"):
+            return os.path.expanduser(path)
+        return os.path.abspath(path)
+
+    def get_selected_profile(self) -> "ScanProfile | None":
+        """
+        Get the currently selected scan profile.
+
+        Returns:
+            The selected ScanProfile or None if no profile is selected
+        """
+        return self._selected_profile
+
+    def set_selected_profile(self, profile_id: str) -> bool:
+        """
+        Set the selected profile by ID.
+
+        Args:
+            profile_id: The profile ID to select
+
+        Returns:
+            True if profile was found and selected, False otherwise
+        """
+        for i, profile in enumerate(self._profile_list):
+            if profile.id == profile_id:
+                self._profile_dropdown.set_selected(i + 1)  # +1 for "No Profile" option
+                return True
+        return False
+
+    def _on_manage_profiles_clicked(self, button):
+        """
+        Handle manage profiles button click.
+
+        Opens the ProfileListDialog for managing profiles. When a profile
+        is selected from the dialog, it updates the dropdown selection.
+        """
+        profile_manager = self._get_profile_manager()
+
+        dialog = ProfileListDialog(profile_manager=profile_manager)
+        dialog.set_on_profile_selected(self._on_dialog_profile_selected)
+        dialog.present(self.get_root())
+
+    def _on_dialog_profile_selected(self, profile: "ScanProfile"):
+        """
+        Handle profile selection from ProfileListDialog.
+
+        Updates the dropdown to select the chosen profile and refreshes
+        the profile list to ensure it's up to date.
+
+        Args:
+            profile: The selected ScanProfile from the dialog
+        """
+        # Refresh profiles in case any were added/modified
+        self.refresh_profiles()
+
+        # Select the chosen profile in the dropdown
+        self.set_selected_profile(profile.id)
 
     def _create_selection_section(self):
         """Create the folder/file selection section."""
@@ -608,10 +907,21 @@ class ScanView(Gtk.Box):
         # Hide any previous status banner
         self._status_banner.set_revealed(False)
 
-        # Start async scan
+        # Get profile exclusions if a profile is selected
+        profile_exclusions = None
+        if self._selected_profile is not None:
+            profile_exclusions = self._selected_profile.exclusions
+            logger.debug(
+                f"Scanning with profile '{self._selected_profile.name}' exclusions: "
+                f"{len(profile_exclusions.get('paths', []))} paths, "
+                f"{len(profile_exclusions.get('patterns', []))} patterns"
+            )
+
+        # Start async scan with profile exclusions
         self._scanner.scan_async(
             self._selected_path,
-            callback=self._on_scan_complete
+            callback=self._on_scan_complete,
+            profile_exclusions=profile_exclusions
         )
 
     def set_scan_state_callback(self, callback):

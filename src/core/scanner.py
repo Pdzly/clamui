@@ -146,7 +146,12 @@ class Scanner:
         """
         return check_clamav_installed()
 
-    def scan_sync(self, path: str, recursive: bool = True) -> ScanResult:
+    def scan_sync(
+        self,
+        path: str,
+        recursive: bool = True,
+        profile_exclusions: dict | None = None
+    ) -> ScanResult:
         """
         Execute a synchronous scan on the given path.
 
@@ -156,6 +161,8 @@ class Scanner:
         Args:
             path: Path to file or directory to scan
             recursive: Whether to scan directories recursively
+            profile_exclusions: Optional exclusions from a scan profile.
+                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
 
         Returns:
             ScanResult with scan details
@@ -203,7 +210,7 @@ class Scanner:
             return result
 
         # Build clamscan command
-        cmd = self._build_command(path, recursive)
+        cmd = self._build_command(path, recursive, profile_exclusions)
 
         try:
             self._scan_cancelled = False
@@ -299,7 +306,8 @@ class Scanner:
         self,
         path: str,
         callback: Callable[[ScanResult], None],
-        recursive: bool = True
+        recursive: bool = True,
+        profile_exclusions: dict | None = None
     ) -> None:
         """
         Execute an asynchronous scan on the given path.
@@ -311,9 +319,11 @@ class Scanner:
             path: Path to file or directory to scan
             callback: Function to call with ScanResult when scan completes
             recursive: Whether to scan directories recursively
+            profile_exclusions: Optional exclusions from a scan profile.
+                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
         """
         def scan_thread():
-            result = self.scan_sync(path, recursive)
+            result = self.scan_sync(path, recursive, profile_exclusions)
             # Schedule callback on main thread
             GLib.idle_add(callback, result)
 
@@ -334,7 +344,12 @@ class Scanner:
             except (OSError, ProcessLookupError):
                 pass
 
-    def _build_command(self, path: str, recursive: bool) -> list[str]:
+    def _build_command(
+        self,
+        path: str,
+        recursive: bool,
+        profile_exclusions: dict | None = None
+    ) -> list[str]:
         """
         Build the clamscan command arguments.
 
@@ -344,6 +359,8 @@ class Scanner:
         Args:
             path: Path to scan
             recursive: Whether to scan recursively
+            profile_exclusions: Optional exclusions from a scan profile.
+                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
 
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
@@ -376,6 +393,26 @@ class Scanner:
                     cmd.extend(['--exclude-dir', regex])
                 else:  # file or pattern
                     cmd.extend(['--exclude', regex])
+
+        # Apply profile exclusions (paths and patterns)
+        if profile_exclusions:
+            # Handle path exclusions (directories)
+            for excl_path in profile_exclusions.get('paths', []):
+                if not excl_path:
+                    continue
+                # Expand ~ in exclusion paths
+                if excl_path.startswith('~'):
+                    excl_path = str(Path(excl_path).expanduser())
+                # Use the path directly for --exclude-dir (ClamAV accepts paths)
+                cmd.extend(['--exclude-dir', excl_path])
+
+            # Handle pattern exclusions (file patterns like *.tmp)
+            for pattern in profile_exclusions.get('patterns', []):
+                if not pattern:
+                    continue
+                # Convert glob pattern to regex for ClamAV
+                regex = glob_to_regex(pattern)
+                cmd.extend(['--exclude', regex])
 
         # Add the path to scan
         cmd.append(path)

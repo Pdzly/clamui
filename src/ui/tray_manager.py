@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from gi.repository import GLib
 
@@ -44,6 +44,10 @@ class TrayManager:
         self._on_update: Optional[Callable[[], None]] = None
         self._on_quit: Optional[Callable[[], None]] = None
         self._on_window_toggle: Optional[Callable[[], None]] = None
+        self._on_profile_select: Optional[Callable[[str], None]] = None
+
+        # Profile state
+        self._current_profile_id: Optional[str] = None
 
     def start(self) -> bool:
         """
@@ -187,12 +191,12 @@ class TrayManager:
 
         elif event == "menu_action":
             action = message.get("action")
-            self._handle_menu_action(action)
+            self._handle_menu_action(action, message)
 
         else:
             logger.warning(f"Unknown event from tray service: {event}")
 
-    def _handle_menu_action(self, action: str) -> None:
+    def _handle_menu_action(self, action: str, message: dict) -> None:
         """Handle a menu action from the tray service."""
         logger.debug(f"Menu action: {action}")
 
@@ -207,6 +211,13 @@ class TrayManager:
             GLib.idle_add(self._on_quit)
         elif action == "toggle_window" and self._on_window_toggle:
             GLib.idle_add(self._on_window_toggle)
+        elif action == "select_profile" and self._on_profile_select:
+            profile_id = message.get("profile_id")
+            if profile_id:
+                self._current_profile_id = profile_id
+                GLib.idle_add(self._on_profile_select, profile_id)
+            else:
+                logger.warning("select_profile action missing profile_id")
         else:
             logger.warning(f"No handler for action: {action}")
 
@@ -261,6 +272,20 @@ class TrayManager:
         self._on_window_toggle = on_toggle
         logger.debug("Window toggle callback configured")
 
+    def set_profile_select_callback(
+        self,
+        on_select: Callable[[str], None]
+    ) -> None:
+        """
+        Set the callback for profile selection from tray menu.
+
+        Args:
+            on_select: Callback to invoke when a profile is selected.
+                       Receives the profile_id as argument.
+        """
+        self._on_profile_select = on_select
+        logger.debug("Profile select callback configured")
+
     def update_status(self, status: str) -> None:
         """
         Update the tray icon based on protection status.
@@ -288,6 +313,27 @@ class TrayManager:
             visible: Whether the window is currently visible
         """
         self._send_command({"action": "update_window_visible", "visible": visible})
+
+    def update_profiles(
+        self,
+        profiles: List[dict],
+        current_profile_id: Optional[str] = None
+    ) -> None:
+        """
+        Update the profiles list in the tray menu.
+
+        Args:
+            profiles: List of profile dictionaries with 'id', 'name', 'is_default' keys
+            current_profile_id: ID of the currently selected profile (optional)
+        """
+        if current_profile_id is not None:
+            self._current_profile_id = current_profile_id
+        self._send_command({
+            "action": "update_profiles",
+            "profiles": profiles,
+            "current_profile_id": self._current_profile_id
+        })
+        logger.debug(f"Updated tray profiles: {len(profiles)} profiles")
 
     def stop(self) -> None:
         """Stop the tray service subprocess."""
@@ -332,6 +378,7 @@ class TrayManager:
         self._on_update = None
         self._on_quit = None
         self._on_window_toggle = None
+        self._on_profile_select = None
 
     @property
     def is_active(self) -> bool:

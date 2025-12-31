@@ -6,6 +6,7 @@ Main Adwaita Application class for ClamUI.
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -23,6 +24,7 @@ from .ui.preferences_window import PreferencesWindow
 from .core.settings_manager import SettingsManager
 from .core.notification_manager import NotificationManager
 from .profiles.profile_manager import ProfileManager
+from .profiles.models import ScanProfile
 
 # Tray manager - uses subprocess to avoid GTK3/GTK4 version conflict
 from .ui.tray_manager import TrayManager
@@ -295,6 +297,18 @@ class ClamUIApp(Adw.Application):
 
         except Exception as e:
             logger.warning(f"Failed to sync profiles to tray: {e}")
+
+    def _get_quick_scan_profile(self) -> Optional[ScanProfile]:
+        """
+        Retrieve the Quick Scan profile by name.
+
+        Returns the Quick Scan profile if it exists, or None if not found.
+        This allows graceful fallback behavior when the profile is unavailable.
+
+        Returns:
+            The Quick Scan ScanProfile if found, None otherwise.
+        """
+        return self._profile_manager.get_profile_by_name("Quick Scan")
 
     def _on_quit(self, action, param):
         """Handle quit action."""

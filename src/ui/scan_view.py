@@ -22,6 +22,7 @@ from ..core.utils import (
     copy_to_clipboard,
 )
 from .fullscreen_dialog import FullscreenLogDialog
+from .profile_dialogs import ProfileListDialog
 
 if TYPE_CHECKING:
     from ..profiles.profile_manager import ProfileManager
@@ -323,7 +324,22 @@ class ScanView(Gtk.Box):
         self._profile_dropdown.set_valign(Gtk.Align.CENTER)
         self._profile_dropdown.connect("notify::selected", self._on_profile_selected)
 
-        profile_row.add_suffix(self._profile_dropdown)
+        # Create manage profiles button
+        manage_profiles_btn = Gtk.Button()
+        manage_profiles_btn.set_icon_name("emblem-system-symbolic")
+        manage_profiles_btn.set_tooltip_text("Manage profiles")
+        manage_profiles_btn.add_css_class("flat")
+        manage_profiles_btn.set_valign(Gtk.Align.CENTER)
+        manage_profiles_btn.connect("clicked", self._on_manage_profiles_clicked)
+        self._manage_profiles_btn = manage_profiles_btn
+
+        # Button box to contain dropdown and manage button
+        profile_control_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        profile_control_box.set_valign(Gtk.Align.CENTER)
+        profile_control_box.append(self._profile_dropdown)
+        profile_control_box.append(manage_profiles_btn)
+
+        profile_row.add_suffix(profile_control_box)
         profile_group.add(profile_row)
 
         self.append(profile_group)
@@ -533,6 +549,35 @@ class ScanView(Gtk.Box):
                 self._profile_dropdown.set_selected(i + 1)  # +1 for "No Profile" option
                 return True
         return False
+
+    def _on_manage_profiles_clicked(self, button):
+        """
+        Handle manage profiles button click.
+
+        Opens the ProfileListDialog for managing profiles. When a profile
+        is selected from the dialog, it updates the dropdown selection.
+        """
+        profile_manager = self._get_profile_manager()
+
+        dialog = ProfileListDialog(profile_manager=profile_manager)
+        dialog.set_on_profile_selected(self._on_dialog_profile_selected)
+        dialog.present(self.get_root())
+
+    def _on_dialog_profile_selected(self, profile: "ScanProfile"):
+        """
+        Handle profile selection from ProfileListDialog.
+
+        Updates the dropdown to select the chosen profile and refreshes
+        the profile list to ensure it's up to date.
+
+        Args:
+            profile: The selected ScanProfile from the dialog
+        """
+        # Refresh profiles in case any were added/modified
+        self.refresh_profiles()
+
+        # Select the chosen profile in the dropdown
+        self.set_selected_profile(profile.id)
 
     def _create_selection_section(self):
         """Create the folder/file selection section."""

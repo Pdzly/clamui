@@ -6,6 +6,7 @@ Main Adwaita Application class for ClamUI.
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -23,6 +24,7 @@ from .ui.preferences_window import PreferencesWindow
 from .core.settings_manager import SettingsManager
 from .core.notification_manager import NotificationManager
 from .profiles.profile_manager import ProfileManager
+from .profiles.models import ScanProfile
 
 # Tray manager - uses subprocess to avoid GTK3/GTK4 version conflict
 from .ui.tray_manager import TrayManager
@@ -296,6 +298,18 @@ class ClamUIApp(Adw.Application):
         except Exception as e:
             logger.warning(f"Failed to sync profiles to tray: {e}")
 
+    def _get_quick_scan_profile(self) -> Optional[ScanProfile]:
+        """
+        Retrieve the Quick Scan profile by name.
+
+        Returns the Quick Scan profile if it exists, or None if not found.
+        This allows graceful fallback behavior when the profile is unavailable.
+
+        Returns:
+            The Quick Scan ScanProfile if found, None otherwise.
+        """
+        return self._profile_manager.get_profile_by_name("Quick Scan")
+
     def _on_quit(self, action, param):
         """Handle quit action."""
         self.quit()
@@ -366,7 +380,8 @@ class ClamUIApp(Adw.Application):
         """
         Handle Quick Scan action from statistics view.
 
-        Switches to scan view and pre-selects the home directory as the scan target.
+        Switches to scan view and applies the Quick Scan profile.
+        Falls back to home directory if the profile is not found.
         Does not automatically start the scan - user must click Start Scan.
         """
         win = self.props.active_window
@@ -376,11 +391,25 @@ class ClamUIApp(Adw.Application):
             win.set_active_view("scan")
             self._current_view = "scan"
 
-            # Pre-select home directory as scan target
-            home_dir = os.path.expanduser("~")
-            self._scan_view._set_selected_path(home_dir)
-
-            logger.info("Quick scan target set to home directory from statistics view")
+            # Try to use Quick Scan profile
+            quick_scan_profile = self._get_quick_scan_profile()
+            if quick_scan_profile:
+                # Refresh profiles to ensure list is up to date
+                self._scan_view.refresh_profiles()
+                # Apply the Quick Scan profile
+                self._scan_view.set_selected_profile(quick_scan_profile.id)
+                logger.info(
+                    f"Quick scan configured with Quick Scan profile from statistics view "
+                    f"(profile_id={quick_scan_profile.id})"
+                )
+            else:
+                # Fallback to home directory if profile not found
+                home_dir = os.path.expanduser("~")
+                self._scan_view._set_selected_path(home_dir)
+                logger.warning(
+                    f"Quick Scan profile not found, falling back to home directory "
+                    f"scan from statistics view (path={home_dir})"
+                )
 
     def _on_show_quarantine(self, action, param):
         """Handle show-quarantine action - switch to quarantine view."""
@@ -412,8 +441,9 @@ class ClamUIApp(Adw.Application):
         """
         Handle Quick Scan action from tray menu.
 
-        Presents the window, switches to scan view, sets the home directory
-        as the scan target, and starts the scan.
+        Presents the window, switches to scan view, applies the Quick Scan
+        profile, and starts the scan. Falls back to home directory if the
+        Quick Scan profile is not found.
         """
         # Use GLib.idle_add to ensure GTK4 operations run on main thread
         GLib.idle_add(self._do_tray_quick_scan)
@@ -430,12 +460,28 @@ class ClamUIApp(Adw.Application):
             win.set_active_view("scan")
             self._current_view = "scan"
 
-            # Set home directory as scan target and start scan
-            home_dir = os.path.expanduser("~")
-            self._scan_view._set_selected_path(home_dir)
-            self._scan_view._start_scan()
-
-            logger.info("Quick scan started from tray menu")
+            # Try to use Quick Scan profile
+            quick_scan_profile = self._get_quick_scan_profile()
+            if quick_scan_profile:
+                # Refresh profiles to ensure list is up to date
+                self._scan_view.refresh_profiles()
+                # Apply the Quick Scan profile
+                self._scan_view.set_selected_profile(quick_scan_profile.id)
+                # Start the scan
+                self._scan_view._start_scan()
+                logger.info(
+                    f"Quick scan started with Quick Scan profile from tray menu "
+                    f"(profile_id={quick_scan_profile.id})"
+                )
+            else:
+                # Fallback to home directory if profile not found
+                home_dir = os.path.expanduser("~")
+                self._scan_view._set_selected_path(home_dir)
+                self._scan_view._start_scan()
+                logger.warning(
+                    f"Quick Scan profile not found, falling back to home directory "
+                    f"scan from tray menu (path={home_dir})"
+                )
 
         return False  # Don't repeat
 

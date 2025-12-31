@@ -1,65 +1,55 @@
 {
-  "spec": "025-file-manager-context-menu-integration",
+  "spec": "019-scan-statistics-dashboard",
   "subtasks": [
     {
       "id": "subtask-1-1",
-      "title": "Create desktop file with context menu action",
+      "title": "Create StatisticsCalculator class with timeframe aggregation",
       "status": "completed"
     },
     {
       "id": "subtask-1-2",
-      "title": "Create Flatpak manifest with filesystem permissions",
+      "title": "Add unit tests for statistics calculation logic",
       "status": "completed"
     },
     {
       "id": "subtask-2-1",
-      "title": "Parse CLI file arguments in main.py",
+      "title": "Create StatisticsView class following existing view patterns",
       "status": "completed"
     },
     {
       "id": "subtask-2-2",
-      "title": "Add file path handling to ClamUIApp",
-      "status": "completed"
-    },
-    {
-      "id": "subtask-2-3",
-      "title": "Add public method to ScanView for queuing files",
+      "title": "Add matplotlib chart visualization for GTK4",
       "status": "completed"
     },
     {
       "id": "subtask-3-1",
-      "title": "Install desktop file to XDG applications directory",
+      "title": "Add statistics navigation button to main window header",
       "status": "completed"
     },
     {
       "id": "subtask-3-2",
-      "title": "Test context menu in Nautilus",
-      "status": "completed"
-    },
-    {
-      "id": "subtask-3-3",
-      "title": "Test edge cases and error handling",
+      "title": "Register statistics view and action in main app",
       "status": "completed"
     },
     {
       "id": "subtask-4-1",
-      "title": "Create CLI argument parsing tests",
+      "title": "Create UI tests for StatisticsView component",
       "status": "completed"
     },
     {
       "id": "subtask-4-2",
-      "title": "Create ScanView queue method tests",
+      "title": "Implement empty state and error handling",
       "status": "completed"
     }
   ],
   "qa_signoff": {
     "status": "fixes_applied",
-    "timestamp": "2025-12-30T15:15:00+00:00",
+    "timestamp": "2025-12-31T15:55:00.000Z",
     "fix_session": 0,
     "issues_fixed": [
       {
-        "title": "Add file manager context menu installation instructions to README.md",
-        "fix_commit": "21c1061"
+        "title": "Quick Scan pre-selects home directory in statistics view",
+        "fix_commit": "be63213"
       }
     ],
     "ready_for_qa_revalidation": true

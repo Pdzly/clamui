@@ -38,4 +38,4 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run tests with pytest
-        run: xvfb-run pytest tests/core tests/ui --ignore=tests/e2e -v
+        run: xvfb-run -a pytest tests/core tests/ui tests/integration --ignore=tests/e2e -v

@@ -408,6 +408,10 @@ class ScanView(Gtk.Box):
         """
         Handle profile selection from dropdown.
 
+        When a profile is selected, the first target path is populated into
+        the scan target UI, and the profile's exclusions are stored for use
+        during the scan.
+
         Args:
             dropdown: The Gtk.DropDown widget
             pspec: The property specification
@@ -419,6 +423,7 @@ class ScanView(Gtk.Box):
             self._selected_profile = None
             self._profile_row.set_subtitle("Choose a scan profile or use manual selection")
             logger.debug("Profile cleared - using manual selection")
+            # Don't clear path selection - user may have manually selected a path
         elif selected_index - 1 < len(self._profile_list):
             # A profile is selected
             profile = self._profile_list[selected_index - 1]
@@ -432,7 +437,77 @@ class ScanView(Gtk.Box):
                 subtitle = f"{target_count} target(s) configured"
             self._profile_row.set_subtitle(subtitle)
 
+            # Populate scan target from profile
+            self._apply_profile_targets(profile)
+
             logger.debug(f"Profile selected: {profile.name} (ID: {profile.id})")
+
+    def _apply_profile_targets(self, profile: "ScanProfile"):
+        """
+        Apply profile targets to the scan target UI.
+
+        Expands the first target path (handling ~ for home directory) and
+        sets it as the current scan target. The profile's exclusions are
+        stored for use during scanning.
+
+        Args:
+            profile: The ScanProfile to apply
+        """
+        if not profile.targets:
+            # Profile has no targets - update UI to indicate this
+            self._path_row.set_title("No targets in profile")
+            self._path_row.set_subtitle("Add targets to this profile or select manually")
+            self._path_row.set_icon_name("dialog-warning-symbolic")
+            self._selected_path = ""
+            self._scan_button.set_sensitive(False)
+            return
+
+        # Use the first target from the profile
+        # Future enhancement: support multiple targets with sequential scanning
+        first_target = profile.targets[0]
+
+        # Expand ~ to home directory
+        expanded_path = self._expand_path(first_target)
+
+        # Check if path exists and is accessible
+        if os.path.exists(expanded_path):
+            self._set_selected_path(expanded_path)
+
+            # Update path row to indicate this came from profile
+            display_path = format_scan_path(expanded_path)
+            self._path_row.set_title(display_path)
+            if len(profile.targets) > 1:
+                self._path_row.set_subtitle(
+                    f"From profile '{profile.name}' ({len(profile.targets)} targets, scanning first)"
+                )
+            else:
+                self._path_row.set_subtitle(f"From profile '{profile.name}'")
+            self._path_row.set_icon_name("folder-symbolic")
+        else:
+            # Path doesn't exist - show warning but still allow selection
+            display_path = format_scan_path(expanded_path)
+            self._path_row.set_title(display_path)
+            self._path_row.set_subtitle(f"Path not found - from profile '{profile.name}'")
+            self._path_row.set_icon_name("dialog-warning-symbolic")
+            self._selected_path = expanded_path
+            # Still enable scan button - path might become available or user can fix
+            self._scan_button.set_sensitive(True)
+
+        logger.debug(f"Applied profile target: {first_target} -> {expanded_path}")
+
+    def _expand_path(self, path: str) -> str:
+        """
+        Expand a path, handling ~ for home directory.
+
+        Args:
+            path: The path string to expand
+
+        Returns:
+            The expanded absolute path
+        """
+        if path.startswith("~"):
+            return os.path.expanduser(path)
+        return os.path.abspath(path)
 
     def get_selected_profile(self) -> "ScanProfile | None":
         """
@@ -783,10 +858,21 @@ class ScanView(Gtk.Box):
         # Hide any previous status banner
         self._status_banner.set_revealed(False)
 
-        # Start async scan
+        # Get profile exclusions if a profile is selected
+        profile_exclusions = None
+        if self._selected_profile is not None:
+            profile_exclusions = self._selected_profile.exclusions
+            logger.debug(
+                f"Scanning with profile '{self._selected_profile.name}' exclusions: "
+                f"{len(profile_exclusions.get('paths', []))} paths, "
+                f"{len(profile_exclusions.get('patterns', []))} patterns"
+            )
+
+        # Start async scan with profile exclusions
         self._scanner.scan_async(
             self._selected_path,
-            callback=self._on_scan_complete
+            callback=self._on_scan_complete,
+            profile_exclusions=profile_exclusions
         )
 
     def set_scan_state_callback(self, callback):

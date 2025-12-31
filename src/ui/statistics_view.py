@@ -315,6 +315,15 @@ class StatisticsView(Gtk.Box):
         self._canvas = FigureCanvas(self._figure)
         self._canvas.set_size_request(-1, 200)  # Set minimum height
 
+        # Create scroll controller to propagate events to parent ScrolledWindow
+        # This prevents the matplotlib canvas from hijacking scroll events
+        scroll_controller = Gtk.EventControllerScroll.new(
+            Gtk.EventControllerScrollFlags.VERTICAL | Gtk.EventControllerScrollFlags.KINETIC
+        )
+        scroll_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        scroll_controller.connect("scroll", self._on_chart_scroll)
+        self._canvas.add_controller(scroll_controller)
+
         # Create a frame for the chart
         chart_frame = Gtk.Frame()
         chart_frame.add_css_class("card")
@@ -495,6 +504,42 @@ class StatisticsView(Gtk.Box):
                 self._chart_group.set_description("Unable to render chart")
             except Exception:
                 pass
+
+    def _on_chart_scroll(self, controller, dx, dy):
+        """
+        Handle scroll events on the chart canvas.
+
+        Intercepts scroll events in the CAPTURE phase before they reach the
+        matplotlib canvas, and forwards them to the parent ScrolledWindow.
+        This prevents the chart from hijacking scroll events.
+
+        Args:
+            controller: The EventControllerScroll that received the event
+            dx: Horizontal scroll delta
+            dy: Vertical scroll delta
+
+        Returns:
+            True to stop event propagation to the matplotlib canvas
+        """
+        # Find the parent ScrolledWindow and scroll it
+        widget = self._canvas.get_parent()
+        while widget is not None:
+            if isinstance(widget, Gtk.ScrolledWindow):
+                # Get the vertical adjustment and scroll it
+                vadj = widget.get_vadjustment()
+                if vadj:
+                    # Scroll by the delta amount (dy is typically -1 or 1)
+                    # Multiply by a scroll step for natural scrolling feel
+                    scroll_step = 50  # pixels per scroll unit
+                    new_value = vadj.get_value() + (dy * scroll_step)
+                    # Clamp to valid range
+                    new_value = max(vadj.get_lower(), min(new_value, vadj.get_upper() - vadj.get_page_size()))
+                    vadj.set_value(new_value)
+                break
+            widget = widget.get_parent()
+
+        # Return True to stop the event from reaching the matplotlib canvas
+        return True
 
     def _create_quick_actions_section(self, parent: Gtk.Box):
         """

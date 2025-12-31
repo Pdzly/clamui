@@ -21,6 +21,7 @@ from ..core.utils import (
     format_results_as_text,
     copy_to_clipboard,
 )
+from ..core.quarantine import QuarantineManager, QuarantineStatus
 from .fullscreen_dialog import FullscreenLogDialog
 from .profile_dialogs import ProfileListDialog
 
@@ -61,6 +62,9 @@ class ScanView(Gtk.Box):
 
         # Initialize scanner
         self._scanner = Scanner()
+
+        # Initialize quarantine manager
+        self._quarantine_manager = QuarantineManager()
 
         # Current selected path
         self._selected_path: str = ""
@@ -1443,6 +1447,19 @@ class ScanView(Gtk.Box):
         # Add badge as prefix
         expander.add_prefix(severity_badge)
 
+        # Create Quarantine button as suffix (visible without expanding)
+        quarantine_btn = Gtk.Button()
+        quarantine_btn.set_label("Quarantine")
+        quarantine_btn.add_css_class("destructive-action")
+        quarantine_btn.set_valign(Gtk.Align.CENTER)
+        quarantine_btn.set_tooltip_text("Move this file to quarantine")
+        # Store threat info on button for callback
+        quarantine_btn._threat_file_path = threat_detail.file_path
+        quarantine_btn._threat_name = threat_detail.threat_name
+        quarantine_btn._parent_expander = expander
+        quarantine_btn.connect("clicked", self._on_quarantine_threat_clicked)
+        expander.add_suffix(quarantine_btn)
+
         # Create expanded content with recommended actions
         action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         action_box.set_margin_start(12)
@@ -1797,3 +1814,86 @@ class ScanView(Gtk.Box):
             self._show_export_error("Permission denied - cannot write to selected location")
         except OSError as e:
             self._show_export_error(f"Error writing file: {str(e)}")
+
+    def _on_quarantine_threat_clicked(self, button):
+        """
+        Handle Quarantine button click on a threat card.
+
+        Moves the detected threat file to quarantine and updates the UI
+        to reflect the quarantine status.
+
+        Args:
+            button: The Quarantine button that was clicked
+        """
+        file_path = button._threat_file_path
+        threat_name = button._threat_name
+        expander = button._parent_expander
+
+        # Disable button to prevent double-clicks
+        button.set_sensitive(False)
+        button.set_label("Quarantining...")
+
+        # Call async quarantine operation
+        self._quarantine_manager.quarantine_file_async(
+            file_path,
+            threat_name,
+            lambda result: self._on_quarantine_complete(result, button, expander)
+        )
+
+    def _on_quarantine_complete(self, result, button, expander):
+        """
+        Handle quarantine operation completion.
+
+        Updates the UI based on the result of the quarantine operation,
+        showing success or error messages in the status banner.
+
+        Args:
+            result: QuarantineResult from the quarantine manager
+            button: The Quarantine button that triggered the operation
+            expander: The parent expander row containing the threat card
+        """
+        if result.is_success:
+            # Update button to show quarantined state
+            button.set_label("Quarantined ✓")
+            button.remove_css_class("destructive-action")
+            button.add_css_class("success")
+            button.set_tooltip_text("File has been moved to quarantine")
+            # Button stays disabled since file is quarantined
+
+            # Show success message
+            self._status_banner.set_title(
+                f"File quarantined successfully: {os.path.basename(result.entry.original_path)}"
+            )
+            self._status_banner.add_css_class("success")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.remove_css_class("warning")
+            self._status_banner.set_button_label(None)
+            self._status_banner.set_revealed(True)
+
+            # Update expander styling to indicate quarantined
+            expander.add_css_class("success")
+
+        else:
+            # Re-enable button for retry
+            button.set_sensitive(True)
+            button.set_label("Quarantine")
+
+            # Show error message based on status
+            error_messages = {
+                QuarantineStatus.FILE_NOT_FOUND: "File not found - it may have been deleted or moved",
+                QuarantineStatus.PERMISSION_DENIED: "Permission denied - cannot access file",
+                QuarantineStatus.DISK_FULL: "Disk full - cannot move file to quarantine",
+                QuarantineStatus.ALREADY_QUARANTINED: "File is already in quarantine",
+                QuarantineStatus.DATABASE_ERROR: "Database error - please try again",
+            }
+            error_msg = error_messages.get(
+                result.status,
+                result.error_message or "Failed to quarantine file"
+            )
+
+            self._status_banner.set_title(f"Quarantine failed: {error_msg}")
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("warning")
+            self._status_banner.set_button_label(None)
+            self._status_banner.set_revealed(True)

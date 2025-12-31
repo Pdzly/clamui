@@ -17,6 +17,8 @@ from .ui.scan_view import ScanView
 from .ui.update_view import UpdateView
 from .ui.logs_view import LogsView
 from .ui.components_view import ComponentsView
+from .ui.quarantine_view import QuarantineView
+from .ui.statistics_view import StatisticsView
 from .ui.preferences_window import PreferencesWindow
 from .core.settings_manager import SettingsManager
 from .core.notification_manager import NotificationManager
@@ -63,6 +65,8 @@ class ClamUIApp(Adw.Application):
         self._update_view = None
         self._logs_view = None
         self._components_view = None
+        self._statistics_view = None
+        self._quarantine_view = None
         self._current_view = None
 
         # Tray indicator (initialized in do_startup if available)
@@ -125,6 +129,11 @@ class ClamUIApp(Adw.Application):
             self._update_view = UpdateView()
             self._logs_view = LogsView()
             self._components_view = ComponentsView()
+            self._statistics_view = StatisticsView()
+
+            # Connect statistics view quick scan callback
+            self._statistics_view.set_quick_scan_callback(self._on_statistics_quick_scan)
+            self._quarantine_view = QuarantineView()
 
             # Connect scan state callback for tray integration
             self._scan_view.set_scan_state_callback(self._on_scan_state_changed)
@@ -209,6 +218,14 @@ class ClamUIApp(Adw.Application):
         show_components_action = Gio.SimpleAction.new("show-components", None)
         show_components_action.connect("activate", self._on_show_components)
         self.add_action(show_components_action)
+
+        show_statistics_action = Gio.SimpleAction.new("show-statistics", None)
+        show_statistics_action.connect("activate", self._on_show_statistics)
+        self.add_action(show_statistics_action)
+
+        show_quarantine_action = Gio.SimpleAction.new("show-quarantine", None)
+        show_quarantine_action.connect("activate", self._on_show_quarantine)
+        self.add_action(show_quarantine_action)
 
     def _setup_tray_indicator(self):
         """Initialize the system tray indicator subprocess."""
@@ -333,6 +350,48 @@ class ClamUIApp(Adw.Application):
             win.set_content_view(self._components_view)
             win.set_active_view("components")
             self._current_view = "components"
+
+    def _on_show_statistics(self, action, param):
+        """Handle show-statistics action - switch to statistics view."""
+        if self._current_view == "statistics":
+            return
+
+        win = self.props.active_window
+        if win and self._statistics_view:
+            win.set_content_view(self._statistics_view)
+            win.set_active_view("statistics")
+            self._current_view = "statistics"
+
+    def _on_statistics_quick_scan(self):
+        """
+        Handle Quick Scan action from statistics view.
+
+        Switches to scan view and pre-selects the home directory as the scan target.
+        Does not automatically start the scan - user must click Start Scan.
+        """
+        win = self.props.active_window
+        if win and self._scan_view:
+            # Switch to scan view
+            win.set_content_view(self._scan_view)
+            win.set_active_view("scan")
+            self._current_view = "scan"
+
+            # Pre-select home directory as scan target
+            home_dir = os.path.expanduser("~")
+            self._scan_view._set_selected_path(home_dir)
+
+            logger.info("Quick scan target set to home directory from statistics view")
+
+    def _on_show_quarantine(self, action, param):
+        """Handle show-quarantine action - switch to quarantine view."""
+        if self._current_view == "quarantine":
+            return
+
+        win = self.props.active_window
+        if win and self._quarantine_view:
+            win.set_content_view(self._quarantine_view)
+            win.set_active_view("quarantine")
+            self._current_view = "quarantine"
 
     def _on_about(self, action, param):
         """Handle about action - show about dialog."""

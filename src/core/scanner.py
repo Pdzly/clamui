@@ -617,11 +617,40 @@ class Scanner:
             result: The scan result
             duration: Scan duration in seconds
         """
-        entry = LogEntry(
-            scan_path=result.path,
-            scan_status=result.status.value,
-            threats_detected=result.infected_count,
-            scan_duration=duration,
-            timestamp=None
+        # Build summary and details from scan result
+        if result.status == ScanStatus.CLEAN:
+            summary = f"Clean scan of {result.path}"
+            status = "clean"
+        elif result.status == ScanStatus.INFECTED:
+            summary = f"Found {result.infected_count} threat(s) in {result.path}"
+            status = "infected"
+        elif result.status == ScanStatus.CANCELLED:
+            summary = f"Scan cancelled: {result.path}"
+            status = "cancelled"
+        else:
+            summary = f"Scan error: {result.path}"
+            status = "error"
+
+        # Build details string with scan output info
+        details_parts = []
+        if result.scanned_files > 0:
+            details_parts.append(f"Scanned: {result.scanned_files} files, {result.scanned_dirs} directories")
+        if result.infected_count > 0:
+            details_parts.append(f"Threats found: {result.infected_count}")
+            for threat in result.threat_details:
+                details_parts.append(f"  - {threat.file_path}: {threat.threat_name}")
+        if result.error_message:
+            details_parts.append(f"Error: {result.error_message}")
+        details = "\n".join(details_parts) if details_parts else result.stdout or ""
+
+        # Use LogEntry.create() factory method for proper id/timestamp generation
+        entry = LogEntry.create(
+            log_type="scan",
+            status=status,
+            summary=summary,
+            details=details,
+            path=result.path,
+            duration=duration,
+            scheduled=False
         )
-        self._log_manager.add_entry(entry)
+        self._log_manager.save_log(entry)

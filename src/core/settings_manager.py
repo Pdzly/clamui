@@ -23,6 +23,8 @@ class SettingsManager:
         "notifications_enabled": True,
         "minimize_to_tray": False,
         "start_minimized": False,
+        # Quarantine settings
+        "quarantine_directory": "",  # Empty string means use default (~/.local/share/clamui/quarantine)
         # Scheduled scan settings
         "scheduled_scans_enabled": False,
         "schedule_frequency": "weekly",  # "daily", "weekly", "monthly"

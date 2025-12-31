@@ -2,6 +2,6 @@
 Name=Scan with ClamUI
 Comment=Scan selected files/folders with ClamUI antivirus
 Exec=clamui %F
-Icon-Name=com.github.clamui
+Icon-Name=com.github.rooki.clamui
 Selection=any
 Extensions=any;

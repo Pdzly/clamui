@@ -1,0 +1,482 @@
+# ClamUI Statistics Calculator Module
+"""
+Statistics calculator module for ClamUI providing scan statistics aggregation.
+Calculates metrics across different timeframes from stored scan logs.
+"""
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Optional
+
+from .log_manager import LogEntry, LogManager
+
+
+class Timeframe(Enum):
+    """Timeframe options for statistics aggregation."""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    ALL = "all"
+
+
+class ProtectionLevel(Enum):
+    """Protection status levels based on scan recency and definition freshness."""
+    PROTECTED = "protected"
+    AT_RISK = "at_risk"
+    UNPROTECTED = "unprotected"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class ScanStatistics:
+    """Aggregated scan statistics for a given timeframe."""
+    timeframe: str
+    total_scans: int
+    files_scanned: int
+    threats_detected: int
+    clean_scans: int
+    infected_scans: int
+    error_scans: int
+    average_duration: float  # in seconds
+    total_duration: float  # in seconds
+    scheduled_scans: int
+    manual_scans: int
+    start_date: Optional[str] = None  # ISO format
+    end_date: Optional[str] = None  # ISO format
+
+    def to_dict(self) -> dict:
+        """Convert ScanStatistics to dictionary."""
+        return {
+            "timeframe": self.timeframe,
+            "total_scans": self.total_scans,
+            "files_scanned": self.files_scanned,
+            "threats_detected": self.threats_detected,
+            "clean_scans": self.clean_scans,
+            "infected_scans": self.infected_scans,
+            "error_scans": self.error_scans,
+            "average_duration": self.average_duration,
+            "total_duration": self.total_duration,
+            "scheduled_scans": self.scheduled_scans,
+            "manual_scans": self.manual_scans,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+        }
+
+
+@dataclass
+class ProtectionStatus:
+    """Protection status indicating system security posture."""
+    level: str  # ProtectionLevel value
+    last_scan_timestamp: Optional[str]  # ISO format
+    last_scan_age_hours: Optional[float]
+    last_definition_update: Optional[str]  # ISO format
+    definition_age_hours: Optional[float]
+    message: str
+    is_protected: bool
+
+    def to_dict(self) -> dict:
+        """Convert ProtectionStatus to dictionary."""
+        return {
+            "level": self.level,
+            "last_scan_timestamp": self.last_scan_timestamp,
+            "last_scan_age_hours": self.last_scan_age_hours,
+            "last_definition_update": self.last_definition_update,
+            "definition_age_hours": self.definition_age_hours,
+            "message": self.message,
+            "is_protected": self.is_protected,
+        }
+
+
+class StatisticsCalculator:
+    """
+    Calculator for scan statistics and protection status.
+
+    Provides methods for aggregating scan data across different timeframes
+    and determining the current protection status of the system.
+    """
+
+    # Thresholds for protection status (in hours)
+    SCAN_WARNING_THRESHOLD_HOURS = 24 * 7  # 7 days
+    SCAN_CRITICAL_THRESHOLD_HOURS = 24 * 30  # 30 days
+    DEFINITION_WARNING_THRESHOLD_HOURS = 24  # 1 day
+    DEFINITION_CRITICAL_THRESHOLD_HOURS = 24 * 7  # 7 days
+
+    def __init__(self, log_manager: Optional[LogManager] = None):
+        """
+        Initialize the StatisticsCalculator.
+
+        Args:
+            log_manager: Optional LogManager instance. Creates a new one if not provided.
+        """
+        self._log_manager = log_manager if log_manager else LogManager()
+
+    def _get_timeframe_range(self, timeframe: str) -> tuple[datetime, datetime]:
+        """
+        Calculate the date range for a given timeframe.
+
+        Args:
+            timeframe: One of 'daily', 'weekly', 'monthly', or 'all'
+
+        Returns:
+            Tuple of (start_datetime, end_datetime)
+        """
+        now = datetime.now()
+
+        if timeframe == Timeframe.DAILY.value:
+            start = now - timedelta(days=1)
+        elif timeframe == Timeframe.WEEKLY.value:
+            start = now - timedelta(weeks=1)
+        elif timeframe == Timeframe.MONTHLY.value:
+            start = now - timedelta(days=30)
+        else:  # 'all' or any other value
+            start = datetime.min
+            # Replace tzinfo-naive datetime.min with a usable minimum
+            start = datetime(1970, 1, 1)
+
+        return (start, now)
+
+    def _parse_timestamp(self, timestamp: str) -> Optional[datetime]:
+        """
+        Parse an ISO format timestamp string to datetime.
+
+        Args:
+            timestamp: ISO format timestamp string
+
+        Returns:
+            datetime object or None if parsing fails
+        """
+        try:
+            # Handle ISO format with or without microseconds
+            if "." in timestamp:
+                return datetime.fromisoformat(timestamp.replace("Z", "+00:00").split("+")[0])
+            return datetime.fromisoformat(timestamp.replace("Z", ""))
+        except (ValueError, AttributeError):
+            return None
+
+    def _filter_entries_by_timeframe(
+        self,
+        entries: list[LogEntry],
+        timeframe: str
+    ) -> list[LogEntry]:
+        """
+        Filter log entries to those within the specified timeframe.
+
+        Args:
+            entries: List of LogEntry objects
+            timeframe: One of 'daily', 'weekly', 'monthly', or 'all'
+
+        Returns:
+            Filtered list of LogEntry objects
+        """
+        if timeframe == Timeframe.ALL.value:
+            return entries
+
+        start_date, end_date = self._get_timeframe_range(timeframe)
+        filtered = []
+
+        for entry in entries:
+            entry_time = self._parse_timestamp(entry.timestamp)
+            if entry_time and start_date <= entry_time <= end_date:
+                filtered.append(entry)
+
+        return filtered
+
+    def _extract_files_scanned(self, entry: LogEntry) -> int:
+        """
+        Extract the number of files scanned from a log entry.
+
+        Parses the summary or details to find file count information.
+
+        Args:
+            entry: LogEntry to extract file count from
+
+        Returns:
+            Number of files scanned, or 0 if not found
+        """
+        # Try to extract from summary or details
+        # Look for patterns like "Scanned X files" or "Files: X"
+        import re
+
+        text = f"{entry.summary} {entry.details}"
+
+        # Pattern: "X files scanned" or "Scanned X files"
+        patterns = [
+            r"(\d+)\s*files?\s*scanned",
+            r"scanned\s*(\d+)\s*files?",
+            r"files[:\s]+(\d+)",
+            r"(\d+)\s*files?",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    return int(match.group(1))
+                except (ValueError, IndexError):
+                    continue
+
+        return 0
+
+    def _extract_threats_found(self, entry: LogEntry) -> int:
+        """
+        Extract the number of threats found from a log entry.
+
+        Args:
+            entry: LogEntry to extract threat count from
+
+        Returns:
+            Number of threats found, or 0 if not found
+        """
+        import re
+
+        # If status indicates infection, try to count
+        if entry.status == "infected":
+            text = f"{entry.summary} {entry.details}"
+
+            # Pattern: "X threats" or "X infected" or "Found X"
+            patterns = [
+                r"(\d+)\s*(?:threats?|infections?|infected)",
+                r"found\s*(\d+)",
+                r"detected\s*(\d+)",
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    try:
+                        return int(match.group(1))
+                    except (ValueError, IndexError):
+                        continue
+
+            # Default to 1 if infected but count not found
+            return 1
+
+        return 0
+
+    def get_statistics(self, timeframe: str = "all") -> ScanStatistics:
+        """
+        Calculate aggregated scan statistics for the specified timeframe.
+
+        Args:
+            timeframe: One of 'daily', 'weekly', 'monthly', or 'all'
+
+        Returns:
+            ScanStatistics dataclass with aggregated metrics
+        """
+        # Get all scan logs (filter by type="scan")
+        all_entries = self._log_manager.get_logs(limit=10000, log_type="scan")
+
+        # Filter by timeframe
+        entries = self._filter_entries_by_timeframe(all_entries, timeframe)
+
+        # Initialize counters
+        total_scans = len(entries)
+        files_scanned = 0
+        threats_detected = 0
+        clean_scans = 0
+        infected_scans = 0
+        error_scans = 0
+        total_duration = 0.0
+        scheduled_scans = 0
+        manual_scans = 0
+
+        # Aggregate metrics
+        for entry in entries:
+            files_scanned += self._extract_files_scanned(entry)
+            threats_detected += self._extract_threats_found(entry)
+
+            if entry.status == "clean":
+                clean_scans += 1
+            elif entry.status == "infected":
+                infected_scans += 1
+            elif entry.status == "error":
+                error_scans += 1
+
+            total_duration += entry.duration
+
+            if entry.scheduled:
+                scheduled_scans += 1
+            else:
+                manual_scans += 1
+
+        # Calculate average duration
+        average_duration = total_duration / total_scans if total_scans > 0 else 0.0
+
+        # Calculate date range
+        start_date, end_date = self._get_timeframe_range(timeframe)
+
+        return ScanStatistics(
+            timeframe=timeframe,
+            total_scans=total_scans,
+            files_scanned=files_scanned,
+            threats_detected=threats_detected,
+            clean_scans=clean_scans,
+            infected_scans=infected_scans,
+            error_scans=error_scans,
+            average_duration=round(average_duration, 2),
+            total_duration=round(total_duration, 2),
+            scheduled_scans=scheduled_scans,
+            manual_scans=manual_scans,
+            start_date=start_date.isoformat() if timeframe != Timeframe.ALL.value else None,
+            end_date=end_date.isoformat(),
+        )
+
+    def calculate_average_duration(self, timeframe: str = "all") -> float:
+        """
+        Calculate the average scan duration for the specified timeframe.
+
+        Args:
+            timeframe: One of 'daily', 'weekly', 'monthly', or 'all'
+
+        Returns:
+            Average duration in seconds, or 0.0 if no scans found
+        """
+        stats = self.get_statistics(timeframe)
+        return stats.average_duration
+
+    def get_protection_status(
+        self,
+        last_definition_update: Optional[str] = None
+    ) -> ProtectionStatus:
+        """
+        Determine the current protection status of the system.
+
+        Evaluates based on:
+        - Time since last scan
+        - Freshness of virus definitions
+
+        Args:
+            last_definition_update: Optional ISO timestamp of last definition update
+
+        Returns:
+            ProtectionStatus dataclass with status details
+        """
+        now = datetime.now()
+
+        # Get the most recent scan
+        recent_logs = self._log_manager.get_logs(limit=1, log_type="scan")
+
+        last_scan_timestamp: Optional[str] = None
+        last_scan_age_hours: Optional[float] = None
+
+        if recent_logs:
+            last_scan_timestamp = recent_logs[0].timestamp
+            last_scan_time = self._parse_timestamp(last_scan_timestamp)
+            if last_scan_time:
+                delta = now - last_scan_time
+                last_scan_age_hours = delta.total_seconds() / 3600
+
+        # Parse definition update time
+        definition_age_hours: Optional[float] = None
+        if last_definition_update:
+            def_time = self._parse_timestamp(last_definition_update)
+            if def_time:
+                delta = now - def_time
+                definition_age_hours = delta.total_seconds() / 3600
+
+        # Determine protection level and message
+        level = ProtectionLevel.UNKNOWN
+        message = "Unable to determine protection status"
+        is_protected = False
+
+        if last_scan_age_hours is None:
+            level = ProtectionLevel.UNPROTECTED
+            message = "No scans performed yet"
+            is_protected = False
+        elif last_scan_age_hours > self.SCAN_CRITICAL_THRESHOLD_HOURS:
+            level = ProtectionLevel.UNPROTECTED
+            message = "Last scan was over 30 days ago"
+            is_protected = False
+        elif last_scan_age_hours > self.SCAN_WARNING_THRESHOLD_HOURS:
+            level = ProtectionLevel.AT_RISK
+            message = "Last scan was over a week ago"
+            is_protected = False
+        elif definition_age_hours is not None:
+            if definition_age_hours > self.DEFINITION_CRITICAL_THRESHOLD_HOURS:
+                level = ProtectionLevel.AT_RISK
+                message = "Virus definitions are outdated (over 7 days old)"
+                is_protected = False
+            elif definition_age_hours > self.DEFINITION_WARNING_THRESHOLD_HOURS:
+                level = ProtectionLevel.PROTECTED
+                message = "System protected, but definitions should be updated"
+                is_protected = True
+            else:
+                level = ProtectionLevel.PROTECTED
+                message = "System is protected"
+                is_protected = True
+        else:
+            # No definition info but scan is recent
+            level = ProtectionLevel.PROTECTED
+            message = "System protected (definition status unknown)"
+            is_protected = True
+
+        return ProtectionStatus(
+            level=level.value,
+            last_scan_timestamp=last_scan_timestamp,
+            last_scan_age_hours=round(last_scan_age_hours, 2) if last_scan_age_hours else None,
+            last_definition_update=last_definition_update,
+            definition_age_hours=round(definition_age_hours, 2) if definition_age_hours else None,
+            message=message,
+            is_protected=is_protected,
+        )
+
+    def get_scan_trend_data(
+        self,
+        timeframe: str = "weekly",
+        data_points: int = 7
+    ) -> list[dict]:
+        """
+        Get scan activity trend data for charting.
+
+        Returns aggregated scan counts grouped by time intervals.
+
+        Args:
+            timeframe: One of 'daily', 'weekly', 'monthly', or 'all'
+            data_points: Number of data points to return
+
+        Returns:
+            List of dicts with 'date', 'scans', 'threats' keys
+        """
+        start_date, end_date = self._get_timeframe_range(timeframe)
+
+        # Calculate interval based on timeframe and data points
+        total_duration = end_date - start_date
+        interval = total_duration / data_points
+
+        # Get all scan logs
+        all_entries = self._log_manager.get_logs(limit=10000, log_type="scan")
+        filtered_entries = self._filter_entries_by_timeframe(all_entries, timeframe)
+
+        # Build data points
+        trend_data = []
+        for i in range(data_points):
+            point_start = start_date + (interval * i)
+            point_end = start_date + (interval * (i + 1))
+
+            scans = 0
+            threats = 0
+
+            for entry in filtered_entries:
+                entry_time = self._parse_timestamp(entry.timestamp)
+                if entry_time and point_start <= entry_time < point_end:
+                    scans += 1
+                    threats += self._extract_threats_found(entry)
+
+            trend_data.append({
+                "date": point_start.isoformat(),
+                "scans": scans,
+                "threats": threats,
+            })
+
+        return trend_data
+
+    def has_scan_history(self) -> bool:
+        """
+        Check if any scan history exists.
+
+        Returns:
+            True if at least one scan log exists, False otherwise
+        """
+        logs = self._log_manager.get_logs(limit=1, log_type="scan")
+        return len(logs) > 0

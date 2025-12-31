@@ -3,10 +3,18 @@
 Statistics dashboard component for ClamUI displaying scan metrics and protection status.
 """
 
+from datetime import datetime
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
+
+# Import matplotlib with GTK4 backend for chart visualization
+import matplotlib
+matplotlib.use('GTK4Agg')
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_gtk4agg import FigureCanvasGTK4Agg as FigureCanvas
 
 from ..core.statistics_calculator import (
     StatisticsCalculator,
@@ -87,6 +95,9 @@ class StatisticsView(Gtk.Box):
 
         # Create the statistics cards section
         self._create_statistics_section(content_box)
+
+        # Create the chart visualization section
+        self._create_chart_section(content_box)
 
         # Create the quick actions section
         self._create_quick_actions_section(content_box)
@@ -279,6 +290,191 @@ class StatisticsView(Gtk.Box):
 
         parent.append(stats_group)
 
+    def _create_chart_section(self, parent: Gtk.Box):
+        """
+        Create the scan activity chart section.
+
+        Uses matplotlib with GTK4 backend to render a bar chart showing
+        scan activity trends over time.
+
+        Args:
+            parent: The parent container to add the section to
+        """
+        # Chart group
+        chart_group = Adw.PreferencesGroup()
+        chart_group.set_title("Scan Activity")
+        chart_group.set_description("Scan trends over the selected timeframe")
+        self._chart_group = chart_group
+
+        # Create matplotlib figure and canvas
+        # Use appropriate figure size for the container
+        self._figure = Figure(figsize=(8, 3), dpi=72)
+        self._figure.set_facecolor('none')  # Transparent background
+
+        # Create canvas for GTK4 embedding
+        self._canvas = FigureCanvas(self._figure)
+        self._canvas.set_size_request(-1, 200)  # Set minimum height
+
+        # Create a frame for the chart
+        chart_frame = Gtk.Frame()
+        chart_frame.add_css_class("card")
+        chart_frame.set_child(self._canvas)
+
+        chart_group.add(chart_frame)
+
+        # Create empty state placeholder (shown when no data)
+        self._chart_empty_state = self._create_chart_empty_state()
+        self._chart_empty_state.set_visible(False)
+        chart_group.add(self._chart_empty_state)
+
+        parent.append(chart_group)
+
+        # Initialize with empty chart
+        self._update_chart([])
+
+    def _create_chart_empty_state(self) -> Gtk.Box:
+        """
+        Create the empty state widget for the chart section.
+
+        Returns:
+            Gtk.Box containing empty state UI
+        """
+        empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        empty_box.set_valign(Gtk.Align.CENTER)
+        empty_box.set_halign(Gtk.Align.CENTER)
+        empty_box.set_margin_top(24)
+        empty_box.set_margin_bottom(24)
+        empty_box.set_spacing(12)
+
+        # Empty state icon
+        icon = Gtk.Image()
+        icon.set_from_icon_name("chart-line-symbolic")
+        icon.set_pixel_size(48)
+        icon.add_css_class("dim-label")
+        empty_box.append(icon)
+
+        # Empty state message
+        label = Gtk.Label()
+        label.set_label("No scan data available")
+        label.add_css_class("dim-label")
+        empty_box.append(label)
+
+        sublabel = Gtk.Label()
+        sublabel.set_label("Run some scans to see activity trends here")
+        sublabel.add_css_class("dim-label")
+        sublabel.add_css_class("caption")
+        empty_box.append(sublabel)
+
+        return empty_box
+
+    def _update_chart(self, trend_data: list[dict]):
+        """
+        Update the chart with new trend data.
+
+        Args:
+            trend_data: List of dicts with 'date', 'scans', 'threats' keys
+        """
+        # Clear the previous plot
+        self._figure.clear()
+
+        # Check if we have any data
+        has_data = trend_data and any(d.get('scans', 0) > 0 for d in trend_data)
+
+        if not has_data:
+            # Show empty state, hide canvas
+            self._canvas.set_visible(False)
+            self._chart_empty_state.set_visible(True)
+            self._chart_group.set_description("No scan activity recorded")
+            return
+
+        # Hide empty state, show canvas
+        self._canvas.set_visible(True)
+        self._chart_empty_state.set_visible(False)
+        self._chart_group.set_description("Scan trends over the selected timeframe")
+
+        # Create subplot for the chart
+        ax = self._figure.add_subplot(111)
+
+        # Prepare data for plotting
+        dates = []
+        scans = []
+        threats = []
+
+        for point in trend_data:
+            try:
+                # Parse ISO date and format for display
+                dt = datetime.fromisoformat(point['date'].replace('Z', '+00:00').split('+')[0])
+                dates.append(dt.strftime('%m/%d'))
+            except (ValueError, KeyError):
+                dates.append('?')
+
+            scans.append(point.get('scans', 0))
+            threats.append(point.get('threats', 0))
+
+        x_positions = range(len(dates))
+        bar_width = 0.35
+
+        # Create grouped bar chart
+        ax.bar(
+            [x - bar_width / 2 for x in x_positions],
+            scans,
+            bar_width,
+            label='Scans',
+            color='#3584e4',  # GNOME blue
+            alpha=0.8
+        )
+        ax.bar(
+            [x + bar_width / 2 for x in x_positions],
+            threats,
+            bar_width,
+            label='Threats',
+            color='#e01b24',  # GNOME red
+            alpha=0.8
+        )
+
+        # Configure chart appearance
+        ax.set_xlabel('Date', fontsize=9)
+        ax.set_ylabel('Count', fontsize=9)
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(dates, fontsize=8)
+        ax.legend(fontsize=8, loc='upper right')
+
+        # Style adjustments for GNOME/Adwaita compatibility
+        ax.set_facecolor('none')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Detect dark mode by checking if the default text color is light
+        # This is a simple heuristic - in dark mode, we need light text
+        try:
+            # Get the canvas background color from style context
+            style_context = self._canvas.get_style_context()
+            color = style_context.get_color()
+            # If text color is light (sum of RGB > 1.5), we're in dark mode
+            is_dark = (color.red + color.green + color.blue) > 1.5
+
+            text_color = '#ffffff' if is_dark else '#2e3436'
+            spine_color = '#808080' if is_dark else '#d3d7cf'
+        except Exception:
+            # Fallback to light theme colors
+            text_color = '#2e3436'
+            spine_color = '#d3d7cf'
+
+        ax.tick_params(colors=text_color, labelsize=8)
+        ax.xaxis.label.set_color(text_color)
+        ax.yaxis.label.set_color(text_color)
+        ax.spines['bottom'].set_color(spine_color)
+        ax.spines['left'].set_color(spine_color)
+
+        # Ensure integer y-axis ticks
+        ax.yaxis.get_major_locator().set_params(integer=True)
+
+        # Adjust layout to prevent label cutoff
+        self._figure.tight_layout(pad=0.5)
+
+        # Redraw the canvas
+        self._canvas.draw()
+
     def _create_quick_actions_section(self, parent: Gtk.Box):
         """
         Create the quick actions section.
@@ -353,17 +549,46 @@ class StatisticsView(Gtk.Box):
             # Get protection status
             self._current_protection = self._calculator.get_protection_status()
 
+            # Get trend data for chart
+            # Use appropriate number of data points based on timeframe
+            data_points = self._get_data_points_for_timeframe(self._current_timeframe)
+            trend_data = self._calculator.get_scan_trend_data(
+                self._current_timeframe,
+                data_points
+            )
+
             # Update UI with loaded data
             self._update_statistics_display()
             self._update_protection_display()
+            self._update_chart(trend_data)
 
         except Exception:
             # Handle errors gracefully
             self._show_empty_state()
+            self._update_chart([])
         finally:
             self._set_loading_state(False)
 
         return False
+
+    def _get_data_points_for_timeframe(self, timeframe: str) -> int:
+        """
+        Get the appropriate number of chart data points for a timeframe.
+
+        Args:
+            timeframe: The timeframe value ('daily', 'weekly', 'monthly', 'all')
+
+        Returns:
+            Number of data points to display
+        """
+        if timeframe == Timeframe.DAILY.value:
+            return 6  # Hourly intervals for a day (4-hour blocks)
+        elif timeframe == Timeframe.WEEKLY.value:
+            return 7  # Daily intervals for a week
+        elif timeframe == Timeframe.MONTHLY.value:
+            return 10  # 3-day intervals for a month
+        else:  # ALL
+            return 12  # Monthly intervals for all-time
 
     def _update_statistics_display(self):
         """Update the statistics display with current data."""

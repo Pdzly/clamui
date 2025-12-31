@@ -36,6 +36,8 @@ def mock_gtk_modules():
 
     # Set up the gi mock
     mock_gi = mock.MagicMock()
+    mock_gi.version_info = (3, 48, 0)  # Required for matplotlib backend_gtk4.py comparison
+    mock_gi.require_version = mock.MagicMock()
     mock_gi_repository = mock.MagicMock()
     mock_gi_repository.GLib = mock_glib
     mock_gi_repository.Gio = mock_gio
@@ -52,16 +54,22 @@ def mock_gtk_modules():
         "GLib": mock_glib,
     }
 
+    # Mock matplotlib gtk backend to avoid import issues
+    mock_backend = mock.MagicMock()
+
     # Patch modules
     with mock.patch.dict(sys.modules, {
         "gi": mock_gi,
         "gi.repository": mock_gi_repository,
+        "matplotlib.backends.backend_gtk4": mock_backend,
+        "matplotlib.backends.backend_gtk4agg": mock_backend,
         "src.ui.window": mock.MagicMock(),
         "src.ui.scan_view": mock.MagicMock(),
         "src.ui.update_view": mock.MagicMock(),
         "src.ui.logs_view": mock.MagicMock(),
         "src.ui.components_view": mock.MagicMock(),
         "src.ui.preferences_window": mock.MagicMock(),
+        "src.ui.statistics_view": mock.MagicMock(),
     }):
         # Need to remove and reimport the app module for fresh mocks
         if "src.app" in sys.modules:

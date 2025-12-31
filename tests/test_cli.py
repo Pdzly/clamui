@@ -23,37 +23,76 @@ from unittest import mock
 
 import pytest
 
-# Store original gi modules to restore later (if they exist)
-_original_gi = sys.modules.get("gi")
-_original_gi_repository = sys.modules.get("gi.repository")
 
-# Mock gi module before importing src modules to avoid GTK dependencies in tests
-sys.modules["gi"] = mock.MagicMock()
-sys.modules["gi.repository"] = mock.MagicMock()
+@pytest.fixture
+def parse_file_arguments():
+    """Import parse_file_arguments with proper GTK mocking.
 
-from src.main import parse_file_arguments
+    This fixture handles the complex mocking required to import src.main
+    without requiring GTK/GI runtime dependencies.
+    """
+    # Create comprehensive mocks
+    mock_gi = mock.MagicMock()
+    mock_gi.version_info = (3, 48, 0)
+    mock_gi.require_version = mock.MagicMock()
 
-# Restore original gi modules after imports are done
-if _original_gi is not None:
-    sys.modules["gi"] = _original_gi
-else:
-    del sys.modules["gi"]
-if _original_gi_repository is not None:
-    sys.modules["gi.repository"] = _original_gi_repository
-else:
-    del sys.modules["gi.repository"]
+    mock_gi_repository = mock.MagicMock()
+
+    # Mock the matplotlib GTK backend to avoid metaclass conflicts
+    mock_backend = mock.MagicMock()
+
+    # Store original modules
+    original_modules = {}
+    modules_to_mock = [
+        "gi", "gi.repository",
+        "matplotlib.backends.backend_gtk4",
+        "matplotlib.backends.backend_gtk4agg",
+        "src.ui.statistics_view",
+        "src.ui.window",
+        "src.ui.scan_view",
+        "src.ui.update_view",
+        "src.ui.logs_view",
+        "src.ui.components_view",
+        "src.ui.preferences_window",
+        "src.app",
+    ]
+
+    for mod in modules_to_mock:
+        original_modules[mod] = sys.modules.get(mod)
+
+    # Set up mocks
+    sys.modules["gi"] = mock_gi
+    sys.modules["gi.repository"] = mock_gi_repository
+    sys.modules["matplotlib.backends.backend_gtk4"] = mock_backend
+    sys.modules["matplotlib.backends.backend_gtk4agg"] = mock_backend
+
+    # Clear cached modules that might have been imported
+    for mod in list(sys.modules.keys()):
+        if mod.startswith("src."):
+            del sys.modules[mod]
+
+    try:
+        from src.main import parse_file_arguments as func
+        yield func
+    finally:
+        # Restore original modules
+        for mod, original in original_modules.items():
+            if original is not None:
+                sys.modules[mod] = original
+            elif mod in sys.modules:
+                del sys.modules[mod]
 
 
 class TestParseFileArguments:
     """Tests for the parse_file_arguments function."""
 
-    def test_empty_arguments(self):
+    def test_empty_arguments(self, parse_file_arguments):
         """Test parse_file_arguments with no file arguments (normal launch)."""
         argv = ["clamui"]
         result = parse_file_arguments(argv)
         assert result == []
 
-    def test_single_file_argument(self, tmp_path):
+    def test_single_file_argument(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with a single file path."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
@@ -62,14 +101,14 @@ class TestParseFileArguments:
         assert len(result) == 1
         assert result[0] == str(test_file)
 
-    def test_single_folder_argument(self, tmp_path):
+    def test_single_folder_argument(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with a single folder path."""
         argv = ["clamui", str(tmp_path)]
         result = parse_file_arguments(argv)
         assert len(result) == 1
         assert result[0] == str(tmp_path)
 
-    def test_multiple_file_arguments(self, tmp_path):
+    def test_multiple_file_arguments(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with multiple file paths."""
         file1 = tmp_path / "file1.txt"
         file2 = tmp_path / "file2.txt"
@@ -85,7 +124,7 @@ class TestParseFileArguments:
         assert str(file2) in result
         assert str(file3) in result
 
-    def test_mixed_files_and_folders(self, tmp_path):
+    def test_mixed_files_and_folders(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with both files and folders."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
@@ -103,7 +142,7 @@ class TestParseFileArguments:
 class TestPathWithSpaces:
     """Tests for handling paths with spaces and special characters."""
 
-    def test_path_with_spaces(self, tmp_path):
+    def test_path_with_spaces(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with paths containing spaces."""
         space_dir = tmp_path / "folder with spaces"
         space_dir.mkdir()
@@ -116,7 +155,7 @@ class TestPathWithSpaces:
         assert result[0] == str(space_file)
         assert " " in result[0]
 
-    def test_path_with_special_characters(self, tmp_path):
+    def test_path_with_special_characters(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with paths containing special characters."""
         # Test various special characters that are valid in filenames
         special_chars = ["test-file", "test_file", "test.file.txt", "test(1).txt"]
@@ -129,7 +168,7 @@ class TestPathWithSpaces:
             assert len(result) == 1
             assert result[0] == str(special_file)
 
-    def test_path_with_unicode(self, tmp_path):
+    def test_path_with_unicode(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with paths containing unicode characters."""
         unicode_file = tmp_path / "test_файл_文件.txt"
         unicode_file.write_text("unicode content")
@@ -139,7 +178,7 @@ class TestPathWithSpaces:
         assert len(result) == 1
         assert result[0] == str(unicode_file)
 
-    def test_path_with_quotes_in_name(self, tmp_path):
+    def test_path_with_quotes_in_name(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with paths containing quotes."""
         # Single quotes in filename
         quoted_file = tmp_path / "test'file.txt"
@@ -154,7 +193,7 @@ class TestPathWithSpaces:
 class TestNonExistentPaths:
     """Tests for handling non-existent paths."""
 
-    def test_nonexistent_path_returned(self):
+    def test_nonexistent_path_returned(self, parse_file_arguments):
         """Test that non-existent paths are still returned by parse_file_arguments.
 
         Note: parse_file_arguments returns all paths; validation happens later
@@ -167,7 +206,7 @@ class TestNonExistentPaths:
         assert len(result) == 1
         assert result[0] == nonexistent
 
-    def test_mixed_existent_and_nonexistent(self, tmp_path):
+    def test_mixed_existent_and_nonexistent(self, parse_file_arguments, tmp_path):
         """Test with mix of existing and non-existing paths."""
         existing_file = tmp_path / "exists.txt"
         existing_file.write_text("content")
@@ -186,7 +225,7 @@ class TestSymlinks:
         os.name == "nt",
         reason="Symlinks require special permissions on Windows"
     )
-    def test_symlink_to_file(self, tmp_path):
+    def test_symlink_to_file(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a file."""
         target_file = tmp_path / "target.txt"
         target_file.write_text("target content")
@@ -204,7 +243,7 @@ class TestSymlinks:
         os.name == "nt",
         reason="Symlinks require special permissions on Windows"
     )
-    def test_symlink_to_directory(self, tmp_path):
+    def test_symlink_to_directory(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a directory."""
         target_dir = tmp_path / "target_dir"
         target_dir.mkdir()
@@ -222,7 +261,7 @@ class TestSymlinks:
         os.name == "nt",
         reason="Symlinks require special permissions on Windows"
     )
-    def test_broken_symlink(self, tmp_path):
+    def test_broken_symlink(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with broken symlink."""
         target = tmp_path / "target_that_will_be_deleted.txt"
         target.write_text("content")
@@ -245,33 +284,26 @@ class TestPathValidationInApp:
     """Tests for path validation in ClamUIApp.set_initial_scan_paths."""
 
     def test_set_initial_scan_paths_filters_nonexistent(self, tmp_path):
-        """Test that set_initial_scan_paths filters out non-existent paths."""
-        # Import with mocked gi
-        sys.modules["gi"] = mock.MagicMock()
-        sys.modules["gi.repository"] = mock.MagicMock()
+        """Test that set_initial_scan_paths filters out non-existent paths.
 
-        from src.app import ClamUIApp
+        Note: This test verifies the filtering logic without importing the actual
+        ClamUIApp class, which requires GTK dependencies.
+        """
+        existing_file = tmp_path / "exists.txt"
+        existing_file.write_text("content")
+        nonexistent = "/nonexistent/path.txt"
 
-        # Create mock app
-        with mock.patch.object(ClamUIApp, '__init__', lambda x: None):
-            app = ClamUIApp()
-            app._initial_scan_paths = []
+        # Replicate the path filtering logic from ClamUIApp.set_initial_scan_paths
+        paths = [str(existing_file), nonexistent]
+        valid_paths = []
+        for path in paths:
+            if os.path.exists(path):
+                valid_paths.append(path)
 
-            existing_file = tmp_path / "exists.txt"
-            existing_file.write_text("content")
-            nonexistent = "/nonexistent/path.txt"
-
-            # Call the method directly
-            paths = [str(existing_file), nonexistent]
-            valid_paths = []
-            for path in paths:
-                if os.path.exists(path):
-                    valid_paths.append(path)
-
-            # Verify filtering logic
-            assert len(valid_paths) == 1
-            assert str(existing_file) in valid_paths
-            assert nonexistent not in valid_paths
+        # Verify filtering logic
+        assert len(valid_paths) == 1
+        assert str(existing_file) in valid_paths
+        assert nonexistent not in valid_paths
 
     def test_set_initial_scan_paths_all_nonexistent(self):
         """Test set_initial_scan_paths with all non-existent paths."""
@@ -321,7 +353,7 @@ class TestQueueFilesForScan:
 class TestLargeDirectories:
     """Tests for handling large directories."""
 
-    def test_large_directory_with_many_files(self, tmp_path):
+    def test_large_directory_with_many_files(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with directory containing many files."""
         # Create a directory with many files
         large_dir = tmp_path / "large_dir"
@@ -342,7 +374,7 @@ class TestLargeDirectories:
         files = list(large_dir.iterdir())
         assert len(files) == 100
 
-    def test_deeply_nested_directory(self, tmp_path):
+    def test_deeply_nested_directory(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with deeply nested directory structure."""
         # Create nested structure
         current = tmp_path
@@ -369,7 +401,7 @@ class TestPermissionScenarios:
         os.name == "nt" or os.geteuid() == 0,
         reason="Permission tests not applicable on Windows or when running as root"
     )
-    def test_unreadable_file_path_returned(self, tmp_path):
+    def test_unreadable_file_path_returned(self, parse_file_arguments, tmp_path):
         """Test that paths to unreadable files are still returned by parser.
 
         Note: The parser returns paths; permission checks happen during scan.
@@ -396,7 +428,7 @@ class TestPermissionScenarios:
         os.name == "nt" or os.geteuid() == 0,
         reason="Permission tests not applicable on Windows or when running as root"
     )
-    def test_unreadable_directory_path_returned(self, tmp_path):
+    def test_unreadable_directory_path_returned(self, parse_file_arguments, tmp_path):
         """Test that paths to unreadable directories are still returned."""
         unreadable_dir = tmp_path / "unreadable_dir"
         unreadable_dir.mkdir()
@@ -418,14 +450,14 @@ class TestPermissionScenarios:
 class TestEdgeCasePathFormats:
     """Tests for edge case path formats."""
 
-    def test_relative_path_argument(self):
+    def test_relative_path_argument(self, parse_file_arguments):
         """Test parse_file_arguments with relative path."""
         argv = ["clamui", "./relative/path.txt"]
         result = parse_file_arguments(argv)
         assert len(result) == 1
         assert result[0] == "./relative/path.txt"
 
-    def test_home_tilde_path(self):
+    def test_home_tilde_path(self, parse_file_arguments):
         """Test parse_file_arguments with ~ home directory path."""
         argv = ["clamui", "~/Documents/test.txt"]
         result = parse_file_arguments(argv)
@@ -433,21 +465,21 @@ class TestEdgeCasePathFormats:
         # Tilde is passed as-is; expansion happens in shell before Python
         assert result[0] == "~/Documents/test.txt"
 
-    def test_dot_path(self):
+    def test_dot_path(self, parse_file_arguments):
         """Test parse_file_arguments with . (current directory)."""
         argv = ["clamui", "."]
         result = parse_file_arguments(argv)
         assert len(result) == 1
         assert result[0] == "."
 
-    def test_double_dot_path(self):
+    def test_double_dot_path(self, parse_file_arguments):
         """Test parse_file_arguments with .. (parent directory)."""
         argv = ["clamui", ".."]
         result = parse_file_arguments(argv)
         assert len(result) == 1
         assert result[0] == ".."
 
-    def test_trailing_slash_directory(self, tmp_path):
+    def test_trailing_slash_directory(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with trailing slash on directory."""
         argv = ["clamui", str(tmp_path) + "/"]
         result = parse_file_arguments(argv)
@@ -455,7 +487,7 @@ class TestEdgeCasePathFormats:
         # Trailing slash is preserved
         assert result[0].endswith("/")
 
-    def test_multiple_slashes_path(self):
+    def test_multiple_slashes_path(self, parse_file_arguments):
         """Test parse_file_arguments with multiple consecutive slashes."""
         argv = ["clamui", "/tmp//double//slashes/path"]
         result = parse_file_arguments(argv)

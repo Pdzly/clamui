@@ -16,6 +16,7 @@ from .ui.scan_view import ScanView
 from .ui.update_view import UpdateView
 from .ui.logs_view import LogsView
 from .ui.components_view import ComponentsView
+from .ui.statistics_view import StatisticsView
 from .ui.preferences_window import PreferencesWindow
 from .core.settings_manager import SettingsManager
 from .core.notification_manager import NotificationManager
@@ -55,6 +56,7 @@ class ClamUIApp(Adw.Application):
         self._update_view = None
         self._logs_view = None
         self._components_view = None
+        self._statistics_view = None
         self._current_view = None
 
         # Tray indicator (initialized in do_startup if available)
@@ -112,6 +114,7 @@ class ClamUIApp(Adw.Application):
             self._update_view = UpdateView()
             self._logs_view = LogsView()
             self._components_view = ComponentsView()
+            self._statistics_view = StatisticsView()
 
             # Connect scan state callback for tray integration
             self._scan_view.set_scan_state_callback(self._on_scan_state_changed)
@@ -193,6 +196,10 @@ class ClamUIApp(Adw.Application):
         show_components_action = Gio.SimpleAction.new("show-components", None)
         show_components_action.connect("activate", self._on_show_components)
         self.add_action(show_components_action)
+
+        show_statistics_action = Gio.SimpleAction.new("show-statistics", None)
+        show_statistics_action.connect("activate", self._on_show_statistics)
+        self.add_action(show_statistics_action)
 
     def _setup_tray_indicator(self):
         """Initialize the system tray indicator subprocess."""
@@ -276,6 +283,17 @@ class ClamUIApp(Adw.Application):
             win.set_content_view(self._components_view)
             win.set_active_view("components")
             self._current_view = "components"
+
+    def _on_show_statistics(self, action, param):
+        """Handle show-statistics action - switch to statistics view."""
+        if self._current_view == "statistics":
+            return
+
+        win = self.props.active_window
+        if win and self._statistics_view:
+            win.set_content_view(self._statistics_view)
+            win.set_active_view("statistics")
+            self._current_view = "statistics"
 
     def _on_about(self, action, param):
         """Handle about action - show about dialog."""

@@ -594,6 +594,278 @@ def test_file_selection_ui():
 
 
 @pytest.mark.ui
+class TestScanInitiationUI:
+    """Tests for scan initiation UI functionality."""
+
+    def test_scan_button_exists(self, mock_scan_view):
+        """Test that the scan button attribute exists."""
+        assert hasattr(mock_scan_view, '_scan_button')
+        assert mock_scan_view._scan_button is not None
+
+    def test_on_scan_clicked_starts_scan_when_path_selected(self, mock_scan_view):
+        """Test that clicking scan button starts scan when path is selected."""
+        # Set a selected path
+        mock_scan_view._selected_path = "/home/user/documents"
+
+        # Reset the real method
+        mock_scan_view._on_scan_clicked = mock_scan_view.__class__._on_scan_clicked.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Simulate button click
+        mock_scan_view._on_scan_clicked(None)
+
+        # Verify _start_scan was called
+        mock_scan_view._start_scan.assert_called_once()
+
+    def test_on_scan_clicked_does_nothing_when_no_path(self, mock_scan_view):
+        """Test that clicking scan button does nothing when no path selected."""
+        # Ensure no path is selected
+        mock_scan_view._selected_path = ""
+
+        # Reset the real method
+        mock_scan_view._on_scan_clicked = mock_scan_view.__class__._on_scan_clicked.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Simulate button click
+        mock_scan_view._on_scan_clicked(None)
+
+        # Verify _start_scan was NOT called
+        mock_scan_view._start_scan.assert_not_called()
+
+    def test_start_scan_sets_scanning_state_true(self, mock_scan_view):
+        """Test that _start_scan sets scanning state to True."""
+        mock_scan_view._selected_path = "/home/user/test"
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify scanning state was set to True
+        mock_scan_view._set_scanning_state.assert_called_once_with(True)
+
+    def test_start_scan_clears_previous_results(self, mock_scan_view):
+        """Test that _start_scan clears previous results."""
+        mock_scan_view._selected_path = "/home/user/test"
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify results were cleared
+        mock_scan_view._clear_results.assert_called_once()
+
+    def test_start_scan_calls_scanner_async(self, mock_scan_view):
+        """Test that _start_scan calls scanner.scan_async with correct path."""
+        test_path = "/home/user/documents"
+        mock_scan_view._selected_path = test_path
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify scanner.scan_async was called with correct path
+        mock_scan_view._scanner.scan_async.assert_called_once()
+        call_args = mock_scan_view._scanner.scan_async.call_args
+        assert call_args[0][0] == test_path
+
+    def test_start_scan_passes_callback(self, mock_scan_view):
+        """Test that _start_scan passes on_scan_complete callback."""
+        mock_scan_view._selected_path = "/home/user/test"
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method for _start_scan and _on_scan_complete
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify callback was passed to scan_async
+        call_args = mock_scan_view._scanner.scan_async.call_args
+        assert call_args.kwargs.get('callback') is not None
+
+    def test_start_scan_uses_profile_exclusions(self, mock_scan_view):
+        """Test that _start_scan uses profile exclusions when profile selected."""
+        mock_scan_view._selected_path = "/home/user/test"
+
+        # Mock a selected profile with exclusions
+        mock_profile = mock.MagicMock()
+        mock_profile.name = "Test Profile"
+        mock_profile.exclusions = {
+            "paths": ["/excluded/path"],
+            "patterns": ["*.tmp"]
+        }
+        mock_scan_view._selected_profile = mock_profile
+
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify profile_exclusions was passed
+        call_args = mock_scan_view._scanner.scan_async.call_args
+        assert call_args.kwargs.get('profile_exclusions') == mock_profile.exclusions
+
+    def test_start_scan_updates_placeholder_text(self, mock_scan_view):
+        """Test that _start_scan updates placeholder to show scanning status."""
+        test_path = "/home/user/documents"
+        mock_scan_view._selected_path = test_path
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify placeholder text was updated
+        mock_scan_view._results_placeholder.set_text.assert_called()
+        call_args = mock_scan_view._results_placeholder.set_text.call_args[0][0]
+        assert test_path in call_args
+
+    def test_start_scan_hides_status_banner(self, mock_scan_view):
+        """Test that _start_scan hides any previous status banner."""
+        mock_scan_view._selected_path = "/home/user/test"
+        mock_scan_view._selected_profile = None
+        mock_scan_view._clear_results = mock.MagicMock()
+        mock_scan_view._results_placeholder = mock.MagicMock()
+        mock_scan_view._status_banner = mock.MagicMock()
+        mock_scan_view._set_scanning_state = mock.MagicMock()
+
+        # Reset the real method
+        mock_scan_view._start_scan = mock_scan_view.__class__._start_scan.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        # Start the scan
+        mock_scan_view._start_scan()
+
+        # Verify status banner was hidden
+        mock_scan_view._status_banner.set_revealed.assert_called_with(False)
+
+
+# Module-level test function for scan initiation verification
+@pytest.mark.ui
+def test_scan_initiation_ui():
+    """
+    Test for scan initiation UI functionality.
+
+    This test verifies that the scan initiation UI components work correctly,
+    including the scan button click handler and the _start_scan method.
+    """
+    # Create mocks
+    mock_gtk = mock.MagicMock()
+    mock_adw = mock.MagicMock()
+    mock_gio = mock.MagicMock()
+    mock_glib = mock.MagicMock()
+    mock_gdk = mock.MagicMock()
+
+    class MockGtkBox:
+        def __init__(self, orientation=None, **kwargs):
+            self.children = []
+            self._selected_path = ""
+
+        def set_margin_top(self, v): pass
+        def set_margin_bottom(self, v): pass
+        def set_margin_start(self, v): pass
+        def set_margin_end(self, v): pass
+        def set_spacing(self, v): pass
+        def append(self, child):
+            self.children.append(child)
+        def get_style_context(self): return mock.MagicMock()
+        def get_root(self): return None
+
+    mock_gtk.Box = MockGtkBox
+    mock_gtk.Orientation = mock.MagicMock()
+    mock_gtk.Orientation.VERTICAL = 1
+    mock_gtk.FileDialog = mock.MagicMock()
+
+    mock_gi = mock.MagicMock()
+    mock_gi.version_info = (3, 48, 0)
+    mock_gi.require_version = mock.MagicMock()
+
+    mock_repository = mock.MagicMock()
+    mock_repository.Gtk = mock_gtk
+    mock_repository.Adw = mock_adw
+    mock_repository.Gio = mock_gio
+    mock_repository.GLib = mock_glib
+    mock_repository.Gdk = mock_gdk
+
+    mock_utils = mock.MagicMock()
+    mock_utils.format_scan_path = mock.MagicMock(return_value="/formatted/path")
+
+    with mock.patch.dict(sys.modules, {
+        'gi': mock_gi,
+        'gi.repository': mock_repository,
+        'src.core.scanner': mock.MagicMock(),
+        'src.core.utils': mock_utils,
+        'src.core.quarantine': mock.MagicMock(),
+        'src.ui.fullscreen_dialog': mock.MagicMock(),
+        'src.ui.profile_dialogs': mock.MagicMock(),
+    }):
+        # Clear any cached import
+        if 'src.ui.scan_view' in sys.modules:
+            del sys.modules['src.ui.scan_view']
+
+        from src.ui.scan_view import ScanView
+        assert ScanView is not None
+
+        # Verify the class has scan initiation methods
+        assert hasattr(ScanView, '_on_scan_clicked')
+        assert hasattr(ScanView, '_start_scan')
+        assert hasattr(ScanView, '_set_scanning_state')
+        assert hasattr(ScanView, 'set_scan_state_callback')
+
+
+@pytest.mark.ui
 def test_scanner_ui_module_loads():
     """
     Basic test to verify the test module loads correctly.

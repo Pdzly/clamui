@@ -11,15 +11,34 @@ from unittest import mock
 
 import pytest
 
+# Store original gi modules to restore later (if they exist)
+_original_gi = sys.modules.get("gi")
+_original_gi_repository = sys.modules.get("gi.repository")
+
 # Mock gi module before importing to avoid GTK dependencies in tests
 sys.modules["gi"] = mock.MagicMock()
 sys.modules["gi.repository"] = mock.MagicMock()
 
 from src.core.battery_manager import BatteryManager
 from src.core.log_manager import LogEntry, LogManager
+from src.core.quarantine.manager import (
+    QuarantineManager,
+    QuarantineResult,
+    QuarantineStatus,
+)
 from src.core.scanner import Scanner
 from src.core.scheduler import Scheduler, SchedulerBackend, ScheduleFrequency
 from src.core.settings_manager import SettingsManager
+
+# Restore original gi modules after imports are done
+if _original_gi is not None:
+    sys.modules["gi"] = _original_gi
+else:
+    del sys.modules["gi"]
+if _original_gi_repository is not None:
+    sys.modules["gi.repository"] = _original_gi_repository
+else:
+    del sys.modules["gi.repository"]
 
 
 class TestScheduleSettingsPersistence:
@@ -268,106 +287,179 @@ class TestBatteryAwareScanning:
 
 
 class TestQuarantineFunctionality:
-    """Integration tests for quarantine functionality."""
+    """Integration tests for quarantine functionality using QuarantineManager."""
 
     @pytest.fixture
-    def temp_dirs(self):
+    def temp_environment(self):
         """Create temporary directories for testing."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            scan_dir = Path(tmpdir) / "scan"
-            scan_dir.mkdir()
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
             quarantine_dir = Path(tmpdir) / "quarantine"
-            quarantine_dir.mkdir()
-            yield scan_dir, quarantine_dir
+            db_path = Path(tmpdir) / "quarantine.db"
 
-    def test_quarantine_moves_files(self, temp_dirs):
-        """Test quarantine_infected moves files correctly."""
-        scan_dir, quarantine_dir = temp_dirs
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
+            yield {
+                "tmpdir": tmpdir,
+                "source_dir": source_dir,
+                "quarantine_dir": quarantine_dir,
+                "db_path": db_path,
+            }
 
-        # Create test files
-        test_file1 = scan_dir / "infected1.txt"
-        test_file1.write_text("test content 1")
-        test_file2 = scan_dir / "infected2.txt"
-        test_file2.write_text("test content 2")
-
-        # Quarantine
-        quarantined, failed = scanner.quarantine_infected(
-            [str(test_file1), str(test_file2)],
-            quarantine_dir=str(quarantine_dir)
+    @pytest.fixture
+    def manager(self, temp_environment):
+        """Create a QuarantineManager for testing."""
+        return QuarantineManager(
+            quarantine_directory=str(temp_environment["quarantine_dir"]),
+            database_path=str(temp_environment["db_path"]),
         )
 
+    def create_test_file(self, source_dir: Path, name: str = "test_threat.exe", content: bytes = b"malware content"):
+        """Helper to create a test file for quarantine testing."""
+        file_path = source_dir / name
+        file_path.write_bytes(content)
+        return file_path
+
+    def test_quarantine_moves_files(self, temp_environment, manager):
+        """Test QuarantineManager.quarantine_file moves files correctly."""
+        # Create test files
+        test_file1 = self.create_test_file(
+            temp_environment["source_dir"], "infected1.txt", b"test content 1"
+        )
+        test_file2 = self.create_test_file(
+            temp_environment["source_dir"], "infected2.txt", b"test content 2"
+        )
+
+        # Quarantine files using QuarantineManager
+        result1 = manager.quarantine_file(str(test_file1), "Threat.Test1")
+        result2 = manager.quarantine_file(str(test_file2), "Threat.Test2")
+
         # Check results
-        assert len(quarantined) == 2
-        assert len(failed) == 0
+        assert result1.is_success is True
+        assert result1.status == QuarantineStatus.SUCCESS
+        assert result1.entry is not None
+
+        assert result2.is_success is True
+        assert result2.status == QuarantineStatus.SUCCESS
+        assert result2.entry is not None
 
         # Original files should not exist
         assert not test_file1.exists()
         assert not test_file2.exists()
 
-        # Quarantine directory should have files
-        quarantine_files = list(quarantine_dir.glob("*.quarantined.*"))
-        assert len(quarantine_files) == 2
+        # Verify files are in quarantine directory
+        assert Path(result1.entry.quarantine_path).exists()
+        assert Path(result2.entry.quarantine_path).exists()
+        assert Path(result1.entry.quarantine_path).parent == temp_environment["quarantine_dir"]
+        assert Path(result2.entry.quarantine_path).parent == temp_environment["quarantine_dir"]
 
-    def test_quarantine_handles_missing_file(self, temp_dirs):
+        # Verify database entries were created
+        assert manager.get_entry_count() == 2
+
+    def test_quarantine_handles_missing_file(self, temp_environment, manager):
         """Test quarantine handles missing files gracefully."""
-        scan_dir, quarantine_dir = temp_dirs
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
-
         # Try to quarantine non-existent file
-        quarantined, failed = scanner.quarantine_infected(
-            [str(scan_dir / "nonexistent.txt")],
-            quarantine_dir=str(quarantine_dir)
-        )
+        nonexistent_path = str(temp_environment["source_dir"] / "nonexistent.txt")
+        result = manager.quarantine_file(nonexistent_path, "Threat.Missing")
 
-        assert len(quarantined) == 0
-        assert len(failed) == 1
-        assert "does not exist" in failed[0][1]
+        assert result.is_success is False
+        assert result.status == QuarantineStatus.FILE_NOT_FOUND
+        assert result.entry is None
+        assert result.error_message is not None
 
-    def test_quarantine_creates_directory(self, temp_dirs):
+    def test_quarantine_creates_directory(self, temp_environment):
         """Test quarantine creates directory if it doesn't exist."""
-        scan_dir, _ = temp_dirs
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
-
         # Use non-existent quarantine directory
-        new_quarantine = scan_dir / "new_quarantine"
+        new_quarantine = temp_environment["source_dir"] / "new_quarantine"
+        db_path = Path(temp_environment["tmpdir"]) / "new_quarantine.db"
+
+        # Create manager with new directory (should be created automatically)
+        manager = QuarantineManager(
+            quarantine_directory=str(new_quarantine),
+            database_path=str(db_path),
+        )
 
         # Create test file
-        test_file = scan_dir / "test.txt"
-        test_file.write_text("content")
-
-        quarantined, failed = scanner.quarantine_infected(
-            [str(test_file)],
-            quarantine_dir=str(new_quarantine)
+        test_file = self.create_test_file(
+            temp_environment["source_dir"], "test.txt", b"content"
         )
 
-        assert len(quarantined) == 1
+        result = manager.quarantine_file(str(test_file), "Threat.Test")
+
+        assert result.is_success is True
         assert new_quarantine.exists()
 
-    def test_quarantine_directory_permissions(self, temp_dirs):
+    def test_quarantine_directory_permissions(self, temp_environment):
         """Test quarantine directory has restricted permissions."""
-        scan_dir, _ = temp_dirs
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
-
         # Use non-existent quarantine directory
-        new_quarantine = scan_dir / "secure_quarantine"
+        new_quarantine = temp_environment["source_dir"] / "secure_quarantine"
+        db_path = Path(temp_environment["tmpdir"]) / "secure_quarantine.db"
+
+        # Create manager with new directory
+        manager = QuarantineManager(
+            quarantine_directory=str(new_quarantine),
+            database_path=str(db_path),
+        )
 
         # Create test file
-        test_file = scan_dir / "test.txt"
-        test_file.write_text("content")
-
-        scanner.quarantine_infected(
-            [str(test_file)],
-            quarantine_dir=str(new_quarantine)
+        test_file = self.create_test_file(
+            temp_environment["source_dir"], "test.txt", b"content"
         )
+
+        result = manager.quarantine_file(str(test_file), "Threat.Test")
+        assert result.is_success is True
 
         # Check directory permissions (0700)
         mode = new_quarantine.stat().st_mode & 0o777
         assert mode == 0o700
+
+    def test_quarantine_file_permissions(self, temp_environment, manager):
+        """Test quarantined files have restricted permissions."""
+        test_file = self.create_test_file(
+            temp_environment["source_dir"], "test.exe", b"malware content"
+        )
+
+        result = manager.quarantine_file(str(test_file), "Win.Trojan.Test")
+        assert result.is_success is True
+
+        # Check quarantined file permissions (0400 - read-only for owner)
+        quarantine_path = Path(result.entry.quarantine_path)
+        mode = quarantine_path.stat().st_mode & 0o777
+        assert mode == 0o400
+
+    def test_quarantine_records_metadata(self, temp_environment, manager):
+        """Test quarantine records correct metadata in database."""
+        test_file = self.create_test_file(
+            temp_environment["source_dir"], "infected.exe", b"test malware content"
+        )
+        original_path = str(test_file.resolve())
+        original_size = test_file.stat().st_size
+
+        result = manager.quarantine_file(str(test_file), "Win.Trojan.Test")
+
+        assert result.is_success is True
+        assert result.entry is not None
+        assert result.entry.original_path == original_path
+        assert result.entry.threat_name == "Win.Trojan.Test"
+        assert result.entry.file_size == original_size
+        assert len(result.entry.file_hash) == 64  # SHA256
+
+    def test_quarantine_prevents_duplicates(self, temp_environment, manager):
+        """Test that quarantining already quarantined file path is handled."""
+        # Create and quarantine a file
+        test_file = self.create_test_file(
+            temp_environment["source_dir"], "duplicate.exe", b"content"
+        )
+        result1 = manager.quarantine_file(str(test_file), "FirstThreat")
+        assert result1.is_success
+
+        # Restore the file to original location
+        result2 = manager.restore_file(result1.entry.id)
+        assert result2.is_success
+
+        # Re-quarantine should work since entry was removed
+        result3 = manager.quarantine_file(str(test_file), "SecondThreat")
+        assert result3.is_success
+        assert manager.get_entry_count() == 1
 
 
 class TestCLIWrapperIntegration:

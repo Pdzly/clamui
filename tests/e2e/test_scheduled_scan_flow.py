@@ -19,15 +19,33 @@ from unittest import mock
 
 import pytest
 
+# Store original gi modules to restore later (if they exist)
+_original_gi = sys.modules.get("gi")
+_original_gi_repository = sys.modules.get("gi.repository")
+
 # Mock gi module before importing to avoid GTK dependencies in tests
 sys.modules["gi"] = mock.MagicMock()
 sys.modules["gi.repository"] = mock.MagicMock()
 
 from src.core.battery_manager import BatteryManager, BatteryStatus
 from src.core.log_manager import LogEntry, LogManager
-from src.core.scanner import Scanner
+from src.core.quarantine.manager import (
+    QuarantineManager,
+    QuarantineResult,
+    QuarantineStatus,
+)
 from src.core.scheduler import Scheduler, SchedulerBackend, ScheduleFrequency
 from src.core.settings_manager import SettingsManager
+
+# Restore original gi modules after imports are done
+if _original_gi is not None:
+    sys.modules["gi"] = _original_gi
+else:
+    del sys.modules["gi"]
+if _original_gi_repository is not None:
+    sys.modules["gi.repository"] = _original_gi_repository
+else:
+    del sys.modules["gi.repository"]
 
 
 class TestE2EScheduleConfiguration:
@@ -317,7 +335,7 @@ class TestE2EBatterySkip:
 
 
 class TestE2EQuarantine:
-    """E2E tests for automatic quarantine."""
+    """E2E tests for automatic quarantine using QuarantineManager."""
 
     @pytest.fixture
     def quarantine_test_env(self):
@@ -327,43 +345,53 @@ class TestE2EQuarantine:
 
             scan_dir = base / "infected_files"
             quarantine_dir = base / "quarantine"
+            db_path = base / "quarantine.db"
             scan_dir.mkdir(parents=True)
 
             # Create "infected" test files
             infected_files = []
             for i in range(3):
                 f = scan_dir / f"infected_{i}.exe"
-                f.write_text(f"malware content {i}")
+                f.write_bytes(f"malware content {i}".encode())
                 infected_files.append(str(f))
 
             yield {
                 "base": base,
                 "scan_dir": scan_dir,
                 "quarantine_dir": quarantine_dir,
+                "db_path": db_path,
                 "infected_files": infected_files
             }
 
-    def test_e2e_quarantine_infected_files(self, quarantine_test_env):
+    @pytest.fixture
+    def manager(self, quarantine_test_env):
+        """Create a QuarantineManager for testing."""
+        return QuarantineManager(
+            quarantine_directory=str(quarantine_test_env["quarantine_dir"]),
+            database_path=str(quarantine_test_env["db_path"]),
+        )
+
+    def test_e2e_quarantine_infected_files(self, quarantine_test_env, manager):
         """
-        E2E Test: Quarantine moves infected files.
+        E2E Test: QuarantineManager moves infected files.
 
         Steps:
-        1. Enable quarantine option
-        2. Scan infected test files
-        3. Verify files moved to quarantine
+        1. Use QuarantineManager to quarantine detected threats
+        2. Verify files moved to quarantine
+        3. Verify database entries created
         """
-        scan_dir = quarantine_test_env["scan_dir"]
         quarantine_dir = quarantine_test_env["quarantine_dir"]
         infected_files = quarantine_test_env["infected_files"]
 
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
-
-        # Quarantine the files
-        quarantined, failed = scanner.quarantine_infected(
-            infected_files,
-            quarantine_dir=str(quarantine_dir)
-        )
+        # Quarantine each file using QuarantineManager
+        quarantined = []
+        failed = []
+        for file_path in infected_files:
+            result = manager.quarantine_file(file_path, f"Win.Trojan.Test-{Path(file_path).name}")
+            if result.is_success:
+                quarantined.append(result.entry)
+            else:
+                failed.append((file_path, result.error_message))
 
         # Verify all files were quarantined
         assert len(quarantined) == 3
@@ -375,40 +403,96 @@ class TestE2EQuarantine:
 
         # Verify quarantine directory has files
         assert quarantine_dir.exists()
-        quarantine_files = list(quarantine_dir.glob("*.quarantined.*"))
-        assert len(quarantine_files) == 3
+        assert manager.get_entry_count() == 3
+
+        # Verify each quarantined file exists
+        for entry in quarantined:
+            assert Path(entry.quarantine_path).exists()
+            assert entry.quarantine_path.startswith(str(quarantine_dir))
 
         # Verify quarantine directory permissions
         mode = quarantine_dir.stat().st_mode & 0o777
         assert mode == 0o700
 
-    def test_e2e_quarantine_file_permissions(self, quarantine_test_env):
+    def test_e2e_quarantine_file_permissions(self, quarantine_test_env, manager):
         """
         E2E Test: Quarantined files have restricted permissions.
 
         Steps:
-        1. Quarantine a file
+        1. Quarantine a file using QuarantineManager
         2. Verify file has read-only permissions (0400)
         """
-        scan_dir = quarantine_test_env["scan_dir"]
-        quarantine_dir = quarantine_test_env["quarantine_dir"]
         infected_files = quarantine_test_env["infected_files"][:1]  # Just one file
 
-        log_manager = LogManager()
-        scanner = Scanner(log_manager=log_manager)
-
-        scanner.quarantine_infected(
-            infected_files,
-            quarantine_dir=str(quarantine_dir)
-        )
-
-        # Find the quarantined file
-        quarantine_files = list(quarantine_dir.glob("*.quarantined.*"))
-        assert len(quarantine_files) == 1
+        # Quarantine using QuarantineManager
+        result = manager.quarantine_file(infected_files[0], "Win.Trojan.Test")
+        assert result.is_success is True
+        assert result.status == QuarantineStatus.SUCCESS
+        assert result.entry is not None
 
         # Check file permissions (should be 0400 - read-only for owner)
-        mode = quarantine_files[0].stat().st_mode & 0o777
+        quarantine_path = Path(result.entry.quarantine_path)
+        assert quarantine_path.exists()
+        mode = quarantine_path.stat().st_mode & 0o777
         assert mode == 0o400
+
+    def test_e2e_quarantine_database_integration(self, quarantine_test_env, manager):
+        """
+        E2E Test: QuarantineManager records entries in database.
+
+        Steps:
+        1. Quarantine files
+        2. Verify database entries match quarantined files
+        3. Verify entry metadata is correct
+        """
+        infected_files = quarantine_test_env["infected_files"]
+
+        # Quarantine files
+        entries = []
+        for i, file_path in enumerate(infected_files):
+            threat_name = f"Win.Trojan.Variant{i}"
+            result = manager.quarantine_file(file_path, threat_name)
+            assert result.is_success
+            entries.append(result.entry)
+
+        # Verify database entries
+        all_entries = manager.get_all_entries()
+        assert len(all_entries) == 3
+
+        # Verify entry metadata
+        for entry in entries:
+            retrieved = manager.get_entry(entry.id)
+            assert retrieved is not None
+            assert retrieved.original_path == entry.original_path
+            assert retrieved.threat_name == entry.threat_name
+            assert len(retrieved.file_hash) == 64  # SHA256 hash
+
+    def test_e2e_quarantine_total_size_tracking(self, quarantine_test_env, manager):
+        """
+        E2E Test: QuarantineManager tracks total quarantine size.
+
+        Steps:
+        1. Get initial total size (should be 0)
+        2. Quarantine files
+        3. Verify total size updated correctly
+        """
+        infected_files = quarantine_test_env["infected_files"]
+
+        # Initial state
+        assert manager.get_total_size() == 0
+        assert manager.get_entry_count() == 0
+
+        # Get expected total size before quarantining
+        expected_total = sum(Path(f).stat().st_size for f in infected_files)
+
+        # Quarantine all files
+        for file_path in infected_files:
+            result = manager.quarantine_file(file_path, "TestThreat")
+            assert result.is_success
+
+        # Verify total size matches
+        assert manager.get_total_size() == expected_total
+        assert manager.get_entry_count() == 3
 
 
 class TestE2EFullWorkflow:
@@ -424,6 +508,7 @@ class TestE2EFullWorkflow:
             log_dir = base / "logs"
             scan_dir = base / "scan_target"
             quarantine_dir = base / "quarantine"
+            db_path = base / "quarantine.db"
 
             for d in [config_dir, log_dir, scan_dir]:
                 d.mkdir(parents=True)
@@ -437,7 +522,8 @@ class TestE2EFullWorkflow:
                 "config_dir": config_dir,
                 "log_dir": log_dir,
                 "scan_dir": scan_dir,
-                "quarantine_dir": quarantine_dir
+                "quarantine_dir": quarantine_dir,
+                "db_path": db_path
             }
 
     def test_e2e_complete_workflow(self, complete_env):
@@ -520,28 +606,38 @@ class TestE2EFullWorkflow:
         Steps:
         1. Create "infected" files
         2. Simulate scan finding threats
-        3. Quarantine files
+        3. Quarantine files using QuarantineManager
         4. Verify log shows quarantine count
         """
         log_dir = complete_env["log_dir"]
         scan_dir = complete_env["scan_dir"]
         quarantine_dir = complete_env["quarantine_dir"]
+        db_path = complete_env["db_path"]
 
         # Create "infected" files
         infected_files = []
         for i in range(2):
             f = scan_dir / f"malware_{i}.exe"
-            f.write_text(f"malware content {i}")
+            f.write_bytes(f"malware content {i}".encode())
             infected_files.append(str(f))
 
-        # Quarantine files
+        # Quarantine files using QuarantineManager
         log_manager = LogManager(log_dir=log_dir)
-        scanner = Scanner(log_manager=log_manager)
-
-        quarantined, failed = scanner.quarantine_infected(
-            infected_files,
-            quarantine_dir=str(quarantine_dir)
+        quarantine_manager = QuarantineManager(
+            quarantine_directory=str(quarantine_dir),
+            database_path=str(db_path),
         )
+
+        quarantined = []
+        failed = []
+        for file_path in infected_files:
+            result = quarantine_manager.quarantine_file(
+                file_path, f"Win.Trojan.Test-{Path(file_path).name}"
+            )
+            if result.is_success:
+                quarantined.append(result.entry)
+            else:
+                failed.append((file_path, result.error_message))
 
         # Create log entry as scheduled scan would
         entry = LogEntry.create(
@@ -569,7 +665,12 @@ class TestE2EFullWorkflow:
         assert "2 threat(s)" in logs[0].summary
         assert "quarantined" in logs[0].summary.lower()
 
-        # Verify quarantine worked
+        # Verify quarantine worked using QuarantineManager
         assert len(quarantined) == 2
-        quarantine_files = list(quarantine_dir.glob("*.quarantined.*"))
-        assert len(quarantine_files) == 2
+        assert len(failed) == 0
+        assert quarantine_manager.get_entry_count() == 2
+
+        # Verify files are in quarantine directory
+        for entry in quarantined:
+            assert Path(entry.quarantine_path).exists()
+            assert entry.quarantine_path.startswith(str(quarantine_dir))

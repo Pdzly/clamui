@@ -41,6 +41,7 @@ from typing import List, Optional, Tuple
 
 from src.core.battery_manager import BatteryManager
 from src.core.log_manager import LogEntry, LogManager
+from src.core.quarantine import QuarantineManager
 from src.core.scanner import Scanner, ScanResult, ScanStatus
 from src.core.settings_manager import SettingsManager
 
@@ -311,15 +312,32 @@ def run_scheduled_scan(
 
     if all_infected_files and auto_quarantine:
         log_message(f"Quarantining {len(all_infected_files)} infected file(s)...", verbose)
-        quarantined, failed = scanner.quarantine_infected(all_infected_files)
-        quarantined_count = len(quarantined)
-        quarantine_failed = failed
 
-        if quarantined:
+        # Initialize QuarantineManager and process each threat
+        quarantine_manager = QuarantineManager()
+
+        # Collect all threat details from scan results
+        all_threat_details = []
+        for result in all_results:
+            all_threat_details.extend(result.threat_details)
+
+        # Quarantine each infected file with its threat name
+        for threat in all_threat_details:
+            quarantine_result = quarantine_manager.quarantine_file(
+                threat.file_path,
+                threat.threat_name
+            )
+            if quarantine_result.is_success:
+                quarantined_count += 1
+            else:
+                error_msg = quarantine_result.error_message or str(quarantine_result.status.value)
+                quarantine_failed.append((threat.file_path, error_msg))
+
+        if quarantined_count > 0:
             log_message(f"  Successfully quarantined: {quarantined_count} file(s)", verbose)
-        if failed:
-            log_message(f"  Failed to quarantine: {len(failed)} file(s)", verbose)
-            for file_path, error in failed:
+        if quarantine_failed:
+            log_message(f"  Failed to quarantine: {len(quarantine_failed)} file(s)", verbose)
+            for file_path, error in quarantine_failed:
                 log_message(f"    - {file_path}: {error}", verbose, is_verbose=True)
 
     # Build summary and details for logging

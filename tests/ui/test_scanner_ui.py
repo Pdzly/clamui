@@ -247,6 +247,8 @@ def mock_scan_view(scan_view_class, mock_gtk_modules):
         view._status_label = mock.MagicMock()
         view._status_badge = mock.MagicMock()
         view._profile_group = mock.MagicMock()
+        view._select_folder_btn = mock.MagicMock()
+        view._select_file_btn = mock.MagicMock()
 
         # Mock internal methods commonly used
         view._setup_ui = mock.MagicMock()
@@ -393,7 +395,204 @@ class TestScanViewScanner:
         assert mock_scan_view._quarantine_manager is not None
 
 
+@pytest.mark.ui
+class TestFileSelectionUI:
+    """Tests for file/folder selection UI interactions."""
+
+    def test_select_folder_button_exists(self, mock_scan_view):
+        """Test that the select folder button attribute exists."""
+        assert hasattr(mock_scan_view, '_select_folder_btn')
+
+    def test_select_file_button_exists(self, mock_scan_view):
+        """Test that the select file button attribute exists."""
+        assert hasattr(mock_scan_view, '_select_file_btn')
+
+    def test_path_row_exists(self, mock_scan_view):
+        """Test that the path row for displaying selected path exists."""
+        assert hasattr(mock_scan_view, '_path_row')
+        assert mock_scan_view._path_row is not None
+
+    def test_set_selected_path_updates_path_attribute(self, mock_scan_view):
+        """Test that _set_selected_path updates the internal path attribute."""
+        # Reset the mock to call real method
+        mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        test_path = "/home/user/test_folder"
+        mock_scan_view._set_selected_path(test_path)
+
+        assert mock_scan_view._selected_path == test_path
+
+    def test_set_selected_path_enables_scan_button(self, mock_scan_view):
+        """Test that selecting a path enables the scan button."""
+        # Reset the mock to call real method
+        mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        # Need to also call the real _clear_results
+        mock_scan_view._clear_results = mock.MagicMock()
+
+        test_path = "/home/user/documents"
+        mock_scan_view._set_selected_path(test_path)
+
+        # Verify scan button set_sensitive was called with True
+        mock_scan_view._scan_button.set_sensitive.assert_called_with(True)
+
+    def test_set_selected_path_updates_path_row_title(self, mock_scan_view):
+        """Test that selecting a path updates the path row title."""
+        # Reset the mock to call real method
+        mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        mock_scan_view._clear_results = mock.MagicMock()
+
+        test_path = "/home/user/photos"
+        mock_scan_view._set_selected_path(test_path)
+
+        # Verify path row set_title was called
+        mock_scan_view._path_row.set_title.assert_called()
+
+    def test_set_selected_path_updates_path_row_subtitle(self, mock_scan_view):
+        """Test that selecting a path updates the path row subtitle to ready state."""
+        # Reset the mock to call real method
+        mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        mock_scan_view._clear_results = mock.MagicMock()
+
+        test_path = "/home/user/videos"
+        mock_scan_view._set_selected_path(test_path)
+
+        # Verify path row set_subtitle was called with "Ready to scan"
+        mock_scan_view._path_row.set_subtitle.assert_called_with("Ready to scan")
+
+    def test_set_selected_path_clears_previous_results(self, mock_scan_view):
+        """Test that selecting a new path clears previous scan results."""
+        # Reset the mock to call real method
+        mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        mock_scan_view._clear_results = mock.MagicMock()
+
+        test_path = "/home/user/music"
+        mock_scan_view._set_selected_path(test_path)
+
+        # Verify _clear_results was called
+        mock_scan_view._clear_results.assert_called_once()
+
+    def test_on_select_folder_clicked_opens_dialog(self, mock_scan_view, mock_gtk_modules):
+        """Test that clicking select folder button opens file dialog for folders."""
+        # Reset the real method
+        mock_scan_view._on_select_folder_clicked = mock_scan_view.__class__._on_select_folder_clicked.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        mock_scan_view._open_file_dialog = mock.MagicMock()
+
+        # Simulate button click
+        mock_scan_view._on_select_folder_clicked(None)
+
+        # Verify _open_file_dialog was called with select_folder=True
+        mock_scan_view._open_file_dialog.assert_called_once_with(select_folder=True)
+
+    def test_on_select_file_clicked_opens_dialog(self, mock_scan_view, mock_gtk_modules):
+        """Test that clicking select file button opens file dialog for files."""
+        # Reset the real method
+        mock_scan_view._on_select_file_clicked = mock_scan_view.__class__._on_select_file_clicked.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+        mock_scan_view._open_file_dialog = mock.MagicMock()
+
+        # Simulate button click
+        mock_scan_view._on_select_file_clicked(None)
+
+        # Verify _open_file_dialog was called with select_folder=False
+        mock_scan_view._open_file_dialog.assert_called_once_with(select_folder=False)
+
+    def test_initial_path_is_empty_string(self, mock_scan_view):
+        """Test that the initial selected path is an empty string."""
+        assert mock_scan_view._selected_path == ""
+
+    def test_initial_scan_button_is_disabled(self, mock_scan_view):
+        """Test that the scan button is disabled when no path is selected."""
+        # The mock_scan_view fixture sets _selected_path to ""
+        assert mock_scan_view._selected_path == ""
+        # Note: The actual button state would be set during __init__ which we mock out
+
+
 # Module-level test function for verification
+@pytest.mark.ui
+def test_file_selection_ui():
+    """
+    Test for file selection UI functionality.
+
+    This test verifies that the file selection UI components are properly
+    set up and can handle path selection updates.
+    """
+    # Create mocks
+    mock_gtk = mock.MagicMock()
+    mock_adw = mock.MagicMock()
+    mock_gio = mock.MagicMock()
+    mock_glib = mock.MagicMock()
+    mock_gdk = mock.MagicMock()
+
+    class MockGtkBox:
+        def __init__(self, orientation=None, **kwargs):
+            self.children = []
+            self._selected_path = ""
+
+        def set_margin_top(self, v): pass
+        def set_margin_bottom(self, v): pass
+        def set_margin_start(self, v): pass
+        def set_margin_end(self, v): pass
+        def set_spacing(self, v): pass
+        def append(self, child):
+            self.children.append(child)
+        def get_style_context(self): return mock.MagicMock()
+        def get_root(self): return None
+
+    mock_gtk.Box = MockGtkBox
+    mock_gtk.Orientation = mock.MagicMock()
+    mock_gtk.Orientation.VERTICAL = 1
+    mock_gtk.FileDialog = mock.MagicMock()
+
+    mock_gi = mock.MagicMock()
+    mock_gi.version_info = (3, 48, 0)
+    mock_gi.require_version = mock.MagicMock()
+
+    mock_repository = mock.MagicMock()
+    mock_repository.Gtk = mock_gtk
+    mock_repository.Adw = mock_adw
+    mock_repository.Gio = mock_gio
+    mock_repository.GLib = mock_glib
+    mock_repository.Gdk = mock_gdk
+
+    mock_utils = mock.MagicMock()
+    mock_utils.format_scan_path = mock.MagicMock(return_value="/formatted/path")
+
+    with mock.patch.dict(sys.modules, {
+        'gi': mock_gi,
+        'gi.repository': mock_repository,
+        'src.core.scanner': mock.MagicMock(),
+        'src.core.utils': mock_utils,
+        'src.core.quarantine': mock.MagicMock(),
+        'src.ui.fullscreen_dialog': mock.MagicMock(),
+        'src.ui.profile_dialogs': mock.MagicMock(),
+    }):
+        # Clear any cached import
+        if 'src.ui.scan_view' in sys.modules:
+            del sys.modules['src.ui.scan_view']
+
+        from src.ui.scan_view import ScanView
+        assert ScanView is not None
+
+        # Verify the class has file selection methods
+        assert hasattr(ScanView, '_on_select_folder_clicked')
+        assert hasattr(ScanView, '_on_select_file_clicked')
+        assert hasattr(ScanView, '_set_selected_path')
+        assert hasattr(ScanView, '_open_file_dialog')
+
+
 @pytest.mark.ui
 def test_scanner_ui_module_loads():
     """

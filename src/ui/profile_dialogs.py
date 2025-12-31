@@ -706,3 +706,434 @@ class DeleteProfileDialog(Adw.AlertDialog):
         self.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         self.set_default_response("cancel")
         self.set_close_response("cancel")
+
+
+class ProfileListDialog(Adw.Dialog):
+    """
+    A dialog for managing scan profiles.
+
+    Displays a list of all profiles with options to create, edit, and delete profiles.
+
+    Usage:
+        dialog = ProfileListDialog(profile_manager=app.profile_manager)
+        dialog.present(parent_window)
+    """
+
+    def __init__(
+        self,
+        profile_manager: "ProfileManager" = None,
+        **kwargs
+    ):
+        """
+        Initialize the profile list dialog.
+
+        Args:
+            profile_manager: The ProfileManager instance for profile operations.
+            **kwargs: Additional arguments passed to parent
+        """
+        super().__init__(**kwargs)
+
+        self._profile_manager = profile_manager
+
+        # Callback for when a profile is selected for use
+        self._on_profile_selected = None
+
+        # Configure the dialog
+        self._setup_dialog()
+
+        # Set up the UI
+        self._setup_ui()
+
+        # Load profiles
+        self._refresh_profile_list()
+
+    def _setup_dialog(self):
+        """Configure the dialog properties."""
+        self.set_title("Manage Profiles")
+        self.set_content_width(500)
+        self.set_content_height(500)
+        self.set_can_close(True)
+
+    def _setup_ui(self):
+        """Set up the dialog UI layout."""
+        # Create main container with toolbar view for header bar
+        toolbar_view = Adw.ToolbarView()
+
+        # Create header bar with new profile button
+        header_bar = Adw.HeaderBar()
+
+        # Close button
+        close_button = Gtk.Button()
+        close_button.set_label("Close")
+        close_button.connect("clicked", self._on_close_clicked)
+        header_bar.pack_start(close_button)
+
+        # Import profile button
+        import_button = Gtk.Button()
+        import_button.set_icon_name("document-open-symbolic")
+        import_button.set_tooltip_text("Import profile from file")
+        import_button.connect("clicked", self._on_import_clicked)
+        header_bar.pack_end(import_button)
+
+        # New profile button
+        new_profile_button = Gtk.Button()
+        new_profile_button.set_icon_name("list-add-symbolic")
+        new_profile_button.set_tooltip_text("Create new profile")
+        new_profile_button.add_css_class("suggested-action")
+        new_profile_button.connect("clicked", self._on_new_profile_clicked)
+        header_bar.pack_end(new_profile_button)
+
+        toolbar_view.add_top_bar(header_bar)
+
+        # Create scrolled window for content
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        scrolled.set_hexpand(True)
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        # Create preferences page using Adwaita patterns
+        preferences_page = Adw.PreferencesPage()
+
+        # Profiles group
+        self._profiles_group = Adw.PreferencesGroup()
+        self._profiles_group.set_title("Scan Profiles")
+        self._profiles_group.set_description("Select a profile to edit or use for scanning")
+
+        # Profiles list box
+        self._profiles_listbox = Gtk.ListBox()
+        self._profiles_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._profiles_listbox.add_css_class("boxed-list")
+
+        # Placeholder for empty list
+        self._profiles_placeholder = Adw.ActionRow()
+        self._profiles_placeholder.set_title("No profiles available")
+        self._profiles_placeholder.set_subtitle("Click the + button to create a new profile")
+        self._profiles_placeholder.set_icon_name("document-new-symbolic")
+        self._profiles_placeholder.add_css_class("dim-label")
+
+        self._profiles_group.add(self._profiles_listbox)
+        preferences_page.add(self._profiles_group)
+
+        scrolled.set_child(preferences_page)
+        toolbar_view.set_content(scrolled)
+
+        # Set the toolbar view as the dialog child
+        self.set_child(toolbar_view)
+
+    def _refresh_profile_list(self):
+        """Refresh the profile list from the profile manager."""
+        # Clear existing rows
+        while True:
+            row = self._profiles_listbox.get_row_at_index(0)
+            if row is None:
+                break
+            self._profiles_listbox.remove(row)
+
+        # Get profiles from manager
+        if self._profile_manager is None:
+            self._profiles_listbox.append(self._profiles_placeholder)
+            return
+
+        profiles = self._profile_manager.list_profiles()
+
+        if not profiles:
+            self._profiles_listbox.append(self._profiles_placeholder)
+            return
+
+        # Add profile rows
+        for profile in profiles:
+            row = self._create_profile_row(profile)
+            self._profiles_listbox.append(row)
+
+    def _create_profile_row(self, profile: "ScanProfile") -> Adw.ActionRow:
+        """
+        Create a row for displaying a profile with action buttons.
+
+        Args:
+            profile: The ScanProfile to display
+
+        Returns:
+            Configured Adw.ActionRow
+        """
+        row = Adw.ActionRow()
+        row.set_title(profile.name)
+
+        # Build subtitle with profile details
+        subtitle_parts = []
+        if profile.description:
+            subtitle_parts.append(profile.description)
+        target_count = len(profile.targets) if profile.targets else 0
+        if target_count > 0:
+            subtitle_parts.append(f"{target_count} target(s)")
+        if profile.is_default:
+            subtitle_parts.append("Default profile")
+
+        if subtitle_parts:
+            row.set_subtitle(" • ".join(subtitle_parts))
+
+        # Set icon based on profile type
+        if profile.is_default:
+            row.set_icon_name("emblem-default-symbolic")
+        else:
+            row.set_icon_name("document-properties-symbolic")
+
+        # Action buttons container
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.set_valign(Gtk.Align.CENTER)
+
+        # Use profile button
+        use_button = Gtk.Button()
+        use_button.set_icon_name("media-playback-start-symbolic")
+        use_button.set_tooltip_text("Use this profile")
+        use_button.add_css_class("flat")
+        use_button.add_css_class("success")
+        use_button.connect("clicked", lambda btn, p=profile: self._on_use_profile_clicked(p))
+        button_box.append(use_button)
+
+        # Edit button
+        edit_button = Gtk.Button()
+        edit_button.set_icon_name("document-edit-symbolic")
+        edit_button.set_tooltip_text("Edit profile")
+        edit_button.add_css_class("flat")
+        edit_button.connect("clicked", lambda btn, p=profile: self._on_edit_profile_clicked(p))
+        button_box.append(edit_button)
+
+        # Delete button (disabled for default profiles)
+        delete_button = Gtk.Button()
+        delete_button.set_icon_name("user-trash-symbolic")
+        delete_button.set_tooltip_text("Delete profile")
+        delete_button.add_css_class("flat")
+        if profile.is_default:
+            delete_button.set_sensitive(False)
+            delete_button.set_tooltip_text("Cannot delete default profile")
+        else:
+            delete_button.add_css_class("error")
+            delete_button.connect(
+                "clicked", lambda btn, p=profile: self._on_delete_profile_clicked(p)
+            )
+        button_box.append(delete_button)
+
+        # Export button
+        export_button = Gtk.Button()
+        export_button.set_icon_name("document-save-symbolic")
+        export_button.set_tooltip_text("Export profile")
+        export_button.add_css_class("flat")
+        export_button.connect("clicked", lambda btn, p=profile: self._on_export_profile_clicked(p))
+        button_box.append(export_button)
+
+        row.add_suffix(button_box)
+        row.set_activatable(True)
+        row.connect("activated", lambda r, p=profile: self._on_use_profile_clicked(p))
+
+        return row
+
+    def _on_close_clicked(self, button):
+        """Handle close button click."""
+        self.close()
+
+    def _on_import_clicked(self, button):
+        """Handle import button click."""
+        self.import_profile()
+
+    def _on_new_profile_clicked(self, button):
+        """Handle new profile button click."""
+        dialog = ProfileDialog(profile_manager=self._profile_manager)
+        dialog.set_on_profile_saved(self._on_profile_saved)
+        dialog.present(self.get_root())
+
+    def _on_edit_profile_clicked(self, profile: "ScanProfile"):
+        """
+        Handle edit profile button click.
+
+        Args:
+            profile: The profile to edit
+        """
+        dialog = ProfileDialog(profile_manager=self._profile_manager, profile=profile)
+        dialog.set_on_profile_saved(self._on_profile_saved)
+        dialog.present(self.get_root())
+
+    def _on_delete_profile_clicked(self, profile: "ScanProfile"):
+        """
+        Handle delete profile button click.
+
+        Args:
+            profile: The profile to delete
+        """
+        dialog = DeleteProfileDialog(profile_name=profile.name)
+        dialog.connect("response", lambda d, r, p=profile: self._on_delete_response(r, p))
+        dialog.present(self.get_root())
+
+    def _on_delete_response(self, response: str, profile: "ScanProfile"):
+        """
+        Handle delete confirmation dialog response.
+
+        Args:
+            response: The dialog response ("delete" or "cancel")
+            profile: The profile to delete
+        """
+        if response == "delete" and self._profile_manager is not None:
+            try:
+                self._profile_manager.delete_profile(profile.id)
+                self._refresh_profile_list()
+            except ValueError:
+                # Cannot delete default profile - should not happen since button is disabled
+                pass
+
+    def _on_use_profile_clicked(self, profile: "ScanProfile"):
+        """
+        Handle use profile button click.
+
+        Args:
+            profile: The profile to use
+        """
+        if self._on_profile_selected:
+            self._on_profile_selected(profile)
+        self.close()
+
+    def _on_export_profile_clicked(self, profile: "ScanProfile"):
+        """
+        Handle export profile button click.
+
+        Args:
+            profile: The profile to export
+        """
+        if self._profile_manager is None:
+            return
+
+        # Create save dialog
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Export Profile")
+
+        # Generate default filename from profile name
+        safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in profile.name)
+        dialog.set_initial_name(f"{safe_name}.json")
+
+        # Set up file filter for JSON files
+        json_filter = Gtk.FileFilter()
+        json_filter.set_name("JSON Files")
+        json_filter.add_mime_type("application/json")
+        json_filter.add_pattern("*.json")
+
+        from gi.repository import Gio
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(json_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(json_filter)
+
+        # Get the parent window
+        window = self.get_root()
+
+        # Store profile ID for callback
+        self._exporting_profile_id = profile.id
+
+        # Open save dialog
+        dialog.save(window, None, self._on_export_file_selected)
+
+    def _on_export_file_selected(self, dialog, result):
+        """
+        Handle export file selection result.
+
+        Args:
+            dialog: The FileDialog that was used
+            result: The async result from the save dialog
+        """
+        try:
+            file = dialog.save_finish(result)
+            if file is None:
+                return  # User cancelled
+
+            file_path = file.get_path()
+            if file_path is None:
+                return
+
+            # Ensure .json extension
+            if not file_path.endswith('.json'):
+                file_path += '.json'
+
+            # Export the profile
+            from pathlib import Path
+            self._profile_manager.export_profile(
+                self._exporting_profile_id,
+                Path(file_path)
+            )
+
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
+        except (ValueError, OSError):
+            # Export failed - could show an error dialog
+            pass
+
+    def _on_profile_saved(self, profile: "ScanProfile"):
+        """
+        Handle profile saved callback from ProfileDialog.
+
+        Args:
+            profile: The saved profile
+        """
+        self._refresh_profile_list()
+
+    def set_on_profile_selected(self, callback):
+        """
+        Set callback for when a profile is selected for use.
+
+        Args:
+            callback: Callable that receives the selected ScanProfile
+        """
+        self._on_profile_selected = callback
+
+    def import_profile(self):
+        """Open file dialog to import a profile."""
+        if self._profile_manager is None:
+            return
+
+        # Create open dialog
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Import Profile")
+
+        # Set up file filter for JSON files
+        json_filter = Gtk.FileFilter()
+        json_filter.set_name("JSON Files")
+        json_filter.add_mime_type("application/json")
+        json_filter.add_pattern("*.json")
+
+        from gi.repository import Gio
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(json_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(json_filter)
+
+        # Get the parent window
+        window = self.get_root()
+
+        # Open file dialog
+        dialog.open(window, None, self._on_import_file_selected)
+
+    def _on_import_file_selected(self, dialog, result):
+        """
+        Handle import file selection result.
+
+        Args:
+            dialog: The FileDialog that was used
+            result: The async result from the open dialog
+        """
+        try:
+            file = dialog.open_finish(result)
+            if file is None:
+                return  # User cancelled
+
+            file_path = file.get_path()
+            if file_path is None:
+                return
+
+            # Import the profile
+            from pathlib import Path
+            self._profile_manager.import_profile(Path(file_path))
+            self._refresh_profile_list()
+
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
+        except (ValueError, OSError):
+            # Import failed - could show an error dialog
+            pass

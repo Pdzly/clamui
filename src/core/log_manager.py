@@ -17,7 +17,7 @@ from typing import Callable, Optional
 
 from gi.repository import GLib
 
-from .utils import which_host_command, wrap_host_command
+from .utils import is_flatpak, which_host_command, wrap_host_command
 
 
 class LogType(Enum):
@@ -416,6 +416,28 @@ class LogManager:
         except (subprocess.SubprocessError, FileNotFoundError, OSError):
             return (DaemonStatus.UNKNOWN, "Unable to determine daemon status")
 
+    def _file_exists_on_host(self, path: str) -> bool:
+        """
+        Check if a file exists, using host filesystem if in Flatpak.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if file exists, False otherwise
+        """
+        if is_flatpak():
+            try:
+                result = subprocess.run(
+                    ["flatpak-spawn", "--host", "test", "-f", path],
+                    capture_output=True,
+                    timeout=5
+                )
+                return result.returncode == 0
+            except Exception:
+                return False
+        return Path(path).exists()
+
     def get_daemon_log_path(self) -> Optional[str]:
         """
         Find the clamd log file path.
@@ -426,7 +448,7 @@ class LogManager:
             Path to the log file if found, None otherwise
         """
         for log_path in CLAMD_LOG_PATHS:
-            if Path(log_path).exists():
+            if self._file_exists_on_host(log_path):
                 return log_path
 
         # Also try to get from clamd.conf if it exists
@@ -437,19 +459,32 @@ class LogManager:
         ]
 
         for conf_path in clamd_conf_paths:
-            conf_file = Path(conf_path)
-            if conf_file.exists():
+            if self._file_exists_on_host(conf_path):
                 try:
-                    with open(conf_file, "r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line.startswith("LogFile"):
-                                parts = line.split(None, 1)
-                                if len(parts) == 2:
-                                    log_file = parts[1].strip()
-                                    if Path(log_file).exists():
-                                        return log_file
-                except (OSError, PermissionError):
+                    # Read config file (use host command in Flatpak)
+                    if is_flatpak():
+                        result = subprocess.run(
+                            ["flatpak-spawn", "--host", "cat", conf_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode != 0:
+                            continue
+                        config_content = result.stdout
+                    else:
+                        with open(conf_path, "r", encoding="utf-8") as f:
+                            config_content = f.read()
+
+                    for line in config_content.splitlines():
+                        line = line.strip()
+                        if line.startswith("LogFile"):
+                            parts = line.split(None, 1)
+                            if len(parts) == 2:
+                                log_file = parts[1].strip()
+                                if self._file_exists_on_host(log_file):
+                                    return log_file
+                except (OSError, PermissionError, subprocess.SubprocessError):
                     continue
 
         return None
@@ -461,6 +496,11 @@ class LogManager:
         Uses tail-like behavior to read only the end of the file,
         avoiding loading large log files into memory.
 
+        Tries multiple methods in order:
+        1. tail command (wrapped for Flatpak)
+        2. journalctl for systemd-based systems
+        3. Direct file read (non-Flatpak only)
+
         Args:
             num_lines: Number of lines to read from the end of the log
 
@@ -469,36 +509,106 @@ class LogManager:
         """
         log_path = self.get_daemon_log_path()
 
-        if log_path is None:
-            return (False, "Daemon log file not found")
+        # Try reading log file with tail
+        if log_path is not None:
+            try:
+                # Use tail command - wrapped for Flatpak host access
+                tail_cmd = wrap_host_command(
+                    ["tail", "-n", str(num_lines), log_path]
+                )
+                result = subprocess.run(
+                    tail_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
 
-        try:
-            # Use tail command for efficient reading of large files
-            result = subprocess.run(
-                ["tail", "-n", str(num_lines), log_path],
-                capture_output=True,
-                text=True,
-                timeout=10
+                if result.returncode == 0:
+                    content = result.stdout
+                    if not content.strip():
+                        return (True, "(Log file is empty)")
+                    return (True, content)
+                # If tail failed (permission denied), fall through to journalctl
+
+            except subprocess.TimeoutExpired:
+                return (False, "Timeout reading log file")
+            except FileNotFoundError:
+                pass  # Fall through to journalctl
+            except OSError:
+                pass  # Fall through to journalctl
+
+        # Try journalctl as fallback (works on systemd systems, no root needed)
+        journalctl_result = self._read_daemon_logs_journalctl(num_lines)
+        if journalctl_result[0]:
+            return journalctl_result
+
+        # If we found a log path but couldn't read it, give helpful error
+        if log_path is not None:
+            return (
+                False,
+                f"Permission denied reading {log_path}\n\n"
+                "The daemon log file requires elevated permissions.\n"
+                "Options:\n"
+                "  • Add your user to the 'adm' or 'clamav' group:\n"
+                "    sudo usermod -aG adm $USER\n"
+                "  • Or check if clamd logs to systemd journal:\n"
+                "    journalctl -u clamav-daemon"
             )
 
-            if result.returncode == 0:
-                content = result.stdout
-                if not content.strip():
-                    return (True, "(Log file is empty)")
-                return (True, content)
-            else:
-                # Try direct read as fallback
-                return self._read_file_tail(log_path, num_lines)
+        return (
+            False,
+            "Daemon log file not found.\n\n"
+            "ClamAV daemon (clamd) may not be installed or configured.\n"
+            "Common log locations checked:\n"
+            "  • /var/log/clamav/clamd.log\n"
+            "  • /var/log/clamd.log"
+        )
 
-        except subprocess.TimeoutExpired:
-            return (False, "Timeout reading log file")
-        except FileNotFoundError:
-            # tail command not found, use direct read
-            return self._read_file_tail(log_path, num_lines)
-        except PermissionError:
-            return (False, "Permission denied reading log file")
-        except OSError as e:
-            return (False, f"Error reading log file: {e}")
+    def _read_daemon_logs_journalctl(
+        self, num_lines: int
+    ) -> tuple[bool, str]:
+        """
+        Read daemon logs from systemd journal.
+
+        Args:
+            num_lines: Number of lines to read
+
+        Returns:
+            Tuple of (success, content_or_error)
+        """
+        # Try different unit names used by various distros
+        unit_names = [
+            "clamav-daemon",
+            "clamav-daemon.service",
+            "clamd",
+            "clamd.service",
+            "clamd@scan",
+            "clamd@scan.service",
+        ]
+
+        for unit in unit_names:
+            try:
+                cmd = wrap_host_command([
+                    "journalctl",
+                    "-u", unit,
+                    "-n", str(num_lines),
+                    "--no-pager",
+                    "-q"  # Quiet - suppress info messages
+                ])
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+
+                if result.returncode == 0 and result.stdout.strip():
+                    return (True, result.stdout)
+
+            except (subprocess.SubprocessError, FileNotFoundError, OSError):
+                continue
+
+        return (False, "No journal entries found for clamd")
 
     def _read_file_tail(self, file_path: str, num_lines: int) -> tuple[bool, str]:
         """

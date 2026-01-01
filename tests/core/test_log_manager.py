@@ -463,9 +463,14 @@ class TestLogManagerDaemonLogs:
     def test_read_daemon_logs_file_not_found(self, log_manager):
         """Test read_daemon_logs when log file doesn't exist."""
         with mock.patch.object(log_manager, "get_daemon_log_path", return_value=None):
-            success, content = log_manager.read_daemon_logs()
-            assert success is False
-            assert "not found" in content.lower()
+            # Also mock journalctl fallback to return failure
+            with mock.patch.object(
+                log_manager, "_read_daemon_logs_journalctl",
+                return_value=(False, "No journal entries found")
+            ):
+                success, content = log_manager.read_daemon_logs()
+                assert success is False
+                assert "not found" in content.lower()
 
     def test_read_daemon_logs_success(self, log_manager):
         """Test read_daemon_logs successfully reads log content."""

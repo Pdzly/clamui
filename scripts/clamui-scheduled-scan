@@ -167,7 +167,7 @@ def send_notification(
 
         # Add icon if available
         icon_paths = [
-            "/usr/share/icons/hicolor/scalable/apps/com.github.clamui.ClamUI.svg",
+            "/usr/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.svg",
             "/usr/share/icons/hicolor/48x48/apps/com.github.clamui.ClamUI.png",
             "dialog-warning",  # Fallback system icon
         ]

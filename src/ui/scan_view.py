@@ -441,7 +441,7 @@ class ScanView(Gtk.Box):
         Handle profile selection from dropdown.
 
         When a profile is selected, the first target path is populated into
-        the scan target UI, and the profile's exclusion patterns are configured.
+        the scan target UI. Profile exclusions are passed to the scanner at scan time.
 
         Args:
             dropdown: The DropDown widget
@@ -452,21 +452,15 @@ class ScanView(Gtk.Box):
         if selected_index == 0:
             # "No Profile" selected - clear selected profile
             self._selected_profile = None
-            self._scanner.reset_exclusion_patterns()
             logger.debug("No profile selected")
         else:
-            # Profile selected - configure scanner with profile settings
+            # Profile selected - store profile for use at scan time
             profile_idx = selected_index - 1  # -1 for "No Profile" option
             if 0 <= profile_idx < len(self._profile_list):
                 self._selected_profile = self._profile_list[profile_idx]
-                # Configure scanner with profile's exclusion patterns
-                if self._selected_profile.exclusion_patterns:
-                    self._scanner.set_exclusion_patterns(
-                        self._selected_profile.exclusion_patterns
-                    )
                 # Set first target path if available
-                if self._selected_profile.target_paths:
-                    first_target = self._selected_profile.target_paths[0]
+                if self._selected_profile.targets:
+                    first_target = self._selected_profile.targets[0]
                     self._set_selected_path(first_target)
                 logger.debug(f"Profile selected: {self._selected_profile.name}")
 
@@ -683,7 +677,7 @@ class ScanView(Gtk.Box):
 
     def _run_scan(self, path: str):
         """
-        Run the scan operation asynchronously.
+        Run the scan operation.
 
         Performs the actual scan and updates results display.
 
@@ -695,7 +689,11 @@ class ScanView(Gtk.Box):
         """
         try:
             logger.info(f"Starting scan of: {path}")
-            result = self._scanner.scan(path)
+            # Get profile exclusions if a profile is selected
+            profile_exclusions = None
+            if self._selected_profile and self._selected_profile.exclusions:
+                profile_exclusions = self._selected_profile.exclusions
+            result = self._scanner.scan_sync(path, profile_exclusions=profile_exclusions)
 
             # Process scan results
             self._display_scan_results(result)
@@ -1040,6 +1038,15 @@ class ScanView(Gtk.Box):
             callback: Function to call with (is_scanning: bool) when state changes
         """
         self._on_scan_state_changed = callback
+
+    def get_selected_profile(self):
+        """
+        Get the currently selected scan profile.
+
+        Returns:
+            The selected ScanProfile, or None if no profile is selected.
+        """
+        return self._selected_profile
 
     def get_scan_results_text(self) -> str:
         """

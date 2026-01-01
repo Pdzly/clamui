@@ -162,7 +162,7 @@ class ClamUIApp(Adw.Application):
             self._quarantine_view = QuarantineView()
 
             # Connect scan state callback for tray integration
-            self._scan_view.set_scan_state_callback(self._on_scan_state_changed)
+            self._scan_view.set_scan_state_changed_callback(self._on_scan_state_changed)
 
             # Set the scan view as the default content
             win.set_content_view(self._scan_view)

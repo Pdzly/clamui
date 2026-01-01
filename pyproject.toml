@@ -104,7 +104,7 @@ markers = [
 ]
 filterwarnings = [
 ]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=src --cov-report=term-missing  --cov-fail-under=50"
 
 [tool.coverage.run]
 source = ["src"]

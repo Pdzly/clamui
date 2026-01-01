@@ -57,7 +57,8 @@ class LogsView(Gtk.Box):
         # Pagination state for log entries
         self._displayed_log_count: int = 0
         self._all_log_entries: list[LogEntry] = []
-        self._load_more_row: Gtk.Box | None = None
+        self._load_more_row: Gtk.ListBoxRow | None = None
+        self._logs_scrolled: Gtk.ScrolledWindow | None = None
 
         # Set up the UI
         self._setup_ui()
@@ -186,11 +187,11 @@ class LogsView(Gtk.Box):
         logs_group.set_header_suffix(header_box)
 
         # Scrolled window for log entries
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_min_content_height(150)
-        scrolled.set_max_content_height(250)
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.add_css_class("card")
+        self._logs_scrolled = Gtk.ScrolledWindow()
+        self._logs_scrolled.set_min_content_height(150)
+        self._logs_scrolled.set_max_content_height(250)
+        self._logs_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._logs_scrolled.add_css_class("card")
 
         # ListBox for log entries
         self._logs_listbox = Gtk.ListBox()
@@ -199,9 +200,9 @@ class LogsView(Gtk.Box):
         self._logs_listbox.connect("row-selected", self._on_log_selected)
         self._logs_listbox.set_placeholder(self._create_empty_state())
 
-        scrolled.set_child(self._logs_listbox)
+        self._logs_scrolled.set_child(self._logs_listbox)
 
-        logs_group.add(scrolled)
+        logs_group.add(self._logs_scrolled)
         parent.append(logs_group)
 
     def _create_empty_state(self) -> Gtk.Widget:
@@ -567,11 +568,22 @@ class LogsView(Gtk.Box):
 
         load_more_box.append(button_box)
 
-        self._load_more_row = load_more_box
-        self._logs_listbox.append(load_more_box)
+        # Wrap in ListBoxRow to ensure proper parent-child relationship
+        load_more_row = Gtk.ListBoxRow()
+        load_more_row.set_child(load_more_box)
+        load_more_row.set_activatable(False)
+        load_more_row.set_selectable(False)
+        self._load_more_row = load_more_row
+        self._logs_listbox.append(load_more_row)
 
     def _on_load_more_logs_clicked(self, button):
         """Handle 'Show More' button click."""
+        # Preserve scroll position
+        scroll_pos = None
+        if self._logs_scrolled:
+            vadj = self._logs_scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         if self._load_more_row:
             self._logs_listbox.remove(self._load_more_row)
             self._load_more_row = None
@@ -583,14 +595,28 @@ class LogsView(Gtk.Box):
         if self._displayed_log_count < len(self._all_log_entries):
             self._add_load_more_button()
 
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+
     def _on_show_all_logs_clicked(self, button):
         """Handle 'Show All' button click."""
+        # Preserve scroll position
+        scroll_pos = None
+        if self._logs_scrolled:
+            vadj = self._logs_scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         if self._load_more_row:
             self._logs_listbox.remove(self._load_more_row)
             self._load_more_row = None
 
         remaining = len(self._all_log_entries) - self._displayed_log_count
         self._display_log_batch(self._displayed_log_count, remaining)
+
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
 
     def _create_log_row(self, entry: LogEntry) -> Adw.ActionRow:
         """

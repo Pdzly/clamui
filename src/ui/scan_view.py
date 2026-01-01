@@ -79,7 +79,8 @@ class ScanView(Gtk.Box):
         # Pagination state for large result sets
         self._displayed_threat_count: int = 0
         self._all_threat_details: list = []
-        self._load_more_row: Gtk.Box | None = None
+        self._load_more_row: Gtk.ListBoxRow | None = None
+        self._threats_scrolled: Gtk.ScrolledWindow | None = None
 
         # Scan state change callback (for tray integration)
         self._on_scan_state_changed = None
@@ -736,10 +737,10 @@ class ScanView(Gtk.Box):
         results_box.append(self._status_banner)
 
         # Scrolled window for threat cards ListBox
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_min_content_height(200)
-        scrolled.set_vexpand(True)
-        scrolled.add_css_class("card")
+        self._threats_scrolled = Gtk.ScrolledWindow()
+        self._threats_scrolled.set_min_content_height(200)
+        self._threats_scrolled.set_vexpand(True)
+        self._threats_scrolled.add_css_class("card")
 
         # Container for ListBox and placeholder
         self._results_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -771,8 +772,8 @@ class ScanView(Gtk.Box):
         # Store current result for export functionality
         self._current_result: ScanResult | None = None
 
-        scrolled.set_child(self._results_container)
-        results_box.append(scrolled)
+        self._threats_scrolled.set_child(self._results_container)
+        results_box.append(self._threats_scrolled)
 
         results_group.add(results_box)
         self.append(results_group)
@@ -1257,13 +1258,24 @@ class ScanView(Gtk.Box):
 
         load_more_box.append(button_box)
 
-        self._load_more_row = load_more_box
-        self._threats_listbox.append(load_more_box)
+        # Wrap in ListBoxRow to ensure proper parent-child relationship
+        load_more_row = Gtk.ListBoxRow()
+        load_more_row.set_child(load_more_box)
+        load_more_row.set_activatable(False)
+        load_more_row.set_selectable(False)
+        self._load_more_row = load_more_row
+        self._threats_listbox.append(load_more_row)
 
     def _on_load_more_clicked(self, button):
         """
         Handle "Show More" button click to load the next batch of threats.
         """
+        # Preserve scroll position
+        scroll_pos = None
+        if self._threats_scrolled:
+            vadj = self._threats_scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         # Remove the current load more row
         if self._load_more_row:
             self._threats_listbox.remove(self._load_more_row)
@@ -1284,12 +1296,22 @@ class ScanView(Gtk.Box):
         # Update status banner
         self._update_pagination_status()
 
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+
     def _on_show_all_clicked(self, button):
         """
         Handle "Show All" button click to load all remaining threats.
 
         Uses incremental loading with GLib.idle_add to keep UI responsive.
         """
+        # Preserve scroll position
+        scroll_pos = None
+        if self._threats_scrolled:
+            vadj = self._threats_scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         # Remove the current load more row
         if self._load_more_row:
             self._threats_listbox.remove(self._load_more_row)
@@ -1304,6 +1326,10 @@ class ScanView(Gtk.Box):
 
         # Update status banner
         self._update_pagination_status()
+
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
 
     def _add_final_summary_row(self):
         """

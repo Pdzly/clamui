@@ -80,7 +80,8 @@ class QuarantineView(Gtk.Box):
         # Pagination state
         self._displayed_count: int = 0
         self._all_entries: list[QuarantineEntry] = []
-        self._load_more_row: Gtk.Box | None = None
+        self._load_more_row: Gtk.ListBoxRow | None = None
+        self._scrolled: Gtk.ScrolledWindow | None = None
 
         # Callback for quarantine content changes (for external notification)
         self._on_quarantine_changed = None
@@ -178,11 +179,11 @@ class QuarantineView(Gtk.Box):
         list_group.set_header_suffix(header_box)
 
         # Scrolled window for quarantine entries
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_min_content_height(300)
-        scrolled.set_vexpand(True)
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.add_css_class("card")
+        self._scrolled = Gtk.ScrolledWindow()
+        self._scrolled.set_min_content_height(300)
+        self._scrolled.set_vexpand(True)
+        self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._scrolled.add_css_class("card")
 
         # ListBox for quarantine entries
         self._listbox = Gtk.ListBox()
@@ -190,8 +191,8 @@ class QuarantineView(Gtk.Box):
         self._listbox.add_css_class("boxed-list")
         self._listbox.set_placeholder(self._create_empty_state())
 
-        scrolled.set_child(self._listbox)
-        list_group.add(scrolled)
+        self._scrolled.set_child(self._listbox)
+        list_group.add(self._scrolled)
         self.append(list_group)
 
     def _create_empty_state(self) -> Gtk.Widget:
@@ -389,11 +390,22 @@ class QuarantineView(Gtk.Box):
 
         load_more_box.append(button_box)
 
-        self._load_more_row = load_more_box
-        self._listbox.append(load_more_box)
+        # Wrap in ListBoxRow to ensure proper parent-child relationship
+        load_more_row = Gtk.ListBoxRow()
+        load_more_row.set_child(load_more_box)
+        load_more_row.set_activatable(False)
+        load_more_row.set_selectable(False)
+        self._load_more_row = load_more_row
+        self._listbox.append(load_more_row)
 
     def _on_load_more_clicked(self, button):
         """Handle 'Show More' button click."""
+        # Preserve scroll position
+        scroll_pos = None
+        if self._scrolled:
+            vadj = self._scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         if self._load_more_row:
             self._listbox.remove(self._load_more_row)
             self._load_more_row = None
@@ -405,14 +417,28 @@ class QuarantineView(Gtk.Box):
         if self._displayed_count < len(self._all_entries):
             self._add_load_more_button()
 
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+
     def _on_show_all_clicked(self, button):
         """Handle 'Show All' button click."""
+        # Preserve scroll position
+        scroll_pos = None
+        if self._scrolled:
+            vadj = self._scrolled.get_vadjustment()
+            scroll_pos = vadj.get_value()
+
         if self._load_more_row:
             self._listbox.remove(self._load_more_row)
             self._load_more_row = None
 
         remaining = len(self._all_entries) - self._displayed_count
         self._display_entry_batch(self._displayed_count, remaining)
+
+        # Restore scroll position after layout
+        if scroll_pos is not None:
+            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
 
     def _create_entry_row(self, entry: QuarantineEntry) -> Adw.ExpanderRow:
         """

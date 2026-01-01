@@ -35,6 +35,9 @@ class SettingsManager:
         "schedule_day_of_week": 0,  # 0=Monday, 6=Sunday (for weekly scans)
         "schedule_day_of_month": 1,  # 1-28 (for monthly scans)
         "exclusion_patterns": [],
+        # Scan backend settings
+        "scan_backend": "auto",  # "auto", "daemon", "clamscan"
+        "daemon_socket_path": "",  # Empty = auto-detect
     }
 
     def __init__(self, config_dir: Optional[Path] = None):

@@ -1,6 +1,7 @@
-# ClamUI Scanner Module
+# ClamUI Daemon Scanner Module
 """
-Scanner module for ClamUI providing ClamAV subprocess execution and async scanning.
+Daemon scanner module for ClamUI using clamdscan for clamd communication.
+Provides faster scanning by leveraging the ClamAV daemon's in-memory database.
 """
 
 import fnmatch
@@ -8,133 +9,29 @@ import re
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Callable, Optional
 
 from gi.repository import GLib
 
-if TYPE_CHECKING:
-    from .daemon_scanner import DaemonScanner
-
 from .log_manager import LogEntry, LogManager
 from .settings_manager import SettingsManager
+from .scanner import ScanResult, ScanStatus, ThreatDetail, glob_to_regex
 from .utils import (
-    check_clamav_installed,
+    check_clamdscan_installed,
     check_clamd_connection,
     validate_path,
-    get_clamav_path,
     wrap_host_command,
+    which_host_command,
 )
 
 
-def glob_to_regex(pattern: str) -> str:
+class DaemonScanner:
     """
-    Convert a user-friendly glob pattern to POSIX ERE for ClamAV.
+    ClamAV daemon scanner using clamdscan.
 
-    Uses fnmatch.translate() for conversion and strips Python-specific
-    regex suffixes for ClamAV compatibility. Adds anchors (^ and $) to ensure
-    the pattern matches the entire string, not just a substring.
-
-    Note: fnmatch doesn't support '**' recursive wildcards - document as limitation.
-
-    Args:
-        pattern: Glob pattern (e.g., '*.log', 'node_modules', '/tmp/*')
-
-    Returns:
-        POSIX Extended Regular Expression string with anchors
-    """
-    regex = fnmatch.translate(pattern)
-    # Strip fnmatch's \Z(?ms) suffix for ClamAV compatibility
-    # fnmatch.translate() adds (?s:...) wrapper and \Z anchor
-    # We need to remove these for ClamAV's regex engine
-    if regex.endswith(r"\Z"):
-        regex = regex[:-2]
-    # Handle newer Python versions that use (?s:pattern)\Z format
-    if regex.startswith("(?s:") and regex.endswith(")"):
-        regex = regex[4:-1]
-    # Add anchors to ensure full string match (prevents substring matching)
-    if not regex.startswith("^"):
-        regex = "^" + regex
-    if not regex.endswith("$"):
-        regex = regex + "$"
-    return regex
-
-
-def validate_pattern(pattern: str) -> bool:
-    """
-    Validate that a pattern can be converted and compiled as regex.
-
-    Args:
-        pattern: Glob pattern to validate
-
-    Returns:
-        True if pattern is valid, False otherwise
-    """
-    if not pattern or not pattern.strip():
-        return False
-    try:
-        re.compile(glob_to_regex(pattern))
-        return True
-    except re.error:
-        return False
-
-
-class ScanStatus(Enum):
-    """Status of a scan operation."""
-    CLEAN = "clean"           # No threats found (exit code 0)
-    INFECTED = "infected"     # Threats found (exit code 1)
-    ERROR = "error"           # Error occurred (exit code 2 or exception)
-    CANCELLED = "cancelled"   # Scan was cancelled
-
-
-@dataclass
-class ThreatDetail:
-    """Detailed information about a detected threat."""
-    file_path: str
-    threat_name: str
-    category: str
-    severity: str
-
-
-@dataclass
-class ScanResult:
-    """Result of a scan operation."""
-    status: ScanStatus
-    path: str
-    stdout: str
-    stderr: str
-    exit_code: int
-    infected_files: list[str]
-    scanned_files: int
-    scanned_dirs: int
-    infected_count: int
-    error_message: Optional[str]
-    threat_details: list[ThreatDetail]
-
-    @property
-    def is_clean(self) -> bool:
-        """Check if scan found no threats."""
-        return self.status == ScanStatus.CLEAN
-
-    @property
-    def has_threats(self) -> bool:
-        """Check if scan found threats."""
-        return self.status == ScanStatus.INFECTED
-
-
-class Scanner:
-    """
-    ClamAV scanner with async execution support.
-
-    Supports multiple scan backends:
-    - "auto": Prefer daemon if available, fallback to clamscan
-    - "daemon": Use clamd daemon only (error if unavailable)
-    - "clamscan": Use standalone clamscan only
-
-    Provides methods for running scans in a background thread
-    while safely updating the UI via GLib.idle_add.
+    Provides faster scanning by communicating with the clamd daemon,
+    which keeps the virus database loaded in memory.
     """
 
     def __init__(
@@ -143,72 +40,38 @@ class Scanner:
         settings_manager: Optional[SettingsManager] = None
     ):
         """
-        Initialize the scanner.
+        Initialize the daemon scanner.
 
         Args:
             log_manager: Optional LogManager instance for saving scan logs.
-                         If not provided, a default instance is created.
             settings_manager: Optional SettingsManager instance for reading
-                              exclusion patterns and scan backend settings.
+                              exclusion patterns and daemon settings.
         """
         self._current_process: Optional[subprocess.Popen] = None
         self._scan_cancelled = False
         self._log_manager = log_manager if log_manager else LogManager()
         self._settings_manager = settings_manager
-        self._daemon_scanner: Optional['DaemonScanner'] = None
-
-    def _get_backend(self) -> str:
-        """Get the configured scan backend."""
-        if self._settings_manager:
-            return self._settings_manager.get("scan_backend", "auto")
-        return "auto"
-
-    def _get_daemon_scanner(self) -> 'DaemonScanner':
-        """Get or create the daemon scanner instance."""
-        if self._daemon_scanner is None:
-            from .daemon_scanner import DaemonScanner
-            self._daemon_scanner = DaemonScanner(
-                log_manager=self._log_manager,
-                settings_manager=self._settings_manager
-            )
-        return self._daemon_scanner
-
-    def get_active_backend(self) -> str:
-        """
-        Get the backend that will actually be used for scanning.
-
-        Returns:
-            "daemon" if daemon will be used, "clamscan" otherwise
-        """
-        backend = self._get_backend()
-        if backend == "clamscan":
-            return "clamscan"
-        elif backend == "daemon":
-            is_available, _ = self._get_daemon_scanner().check_available()
-            return "daemon" if is_available else "unavailable"
-        else:  # auto
-            is_available, _ = check_clamd_connection()
-            return "daemon" if is_available else "clamscan"
 
     def check_available(self) -> tuple[bool, Optional[str]]:
         """
-        Check if the configured scan backend is available.
+        Check if daemon scanning is available.
+
+        Verifies both clamdscan is installed and clamd is responding.
 
         Returns:
             Tuple of (is_available, version_or_error)
         """
-        backend = self._get_backend()
+        # Check clamdscan is installed
+        is_installed, error = check_clamdscan_installed()
+        if not is_installed:
+            return (False, error)
 
-        if backend == "clamscan":
-            return check_clamav_installed()
-        elif backend == "daemon":
-            return self._get_daemon_scanner().check_available()
-        else:  # auto
-            # For auto, check if daemon is available, otherwise fallback to clamscan
-            is_daemon_available, _ = check_clamd_connection()
-            if is_daemon_available:
-                return (True, "Using clamd daemon")
-            return check_clamav_installed()
+        # Check clamd is running and responding
+        is_connected, message = check_clamd_connection()
+        if not is_connected:
+            return (False, f"clamd not accessible: {message}")
+
+        return (True, "clamd is available")
 
     def scan_sync(
         self,
@@ -217,16 +80,15 @@ class Scanner:
         profile_exclusions: dict | None = None
     ) -> ScanResult:
         """
-        Execute a synchronous scan on the given path.
+        Execute a synchronous scan using clamdscan.
 
         WARNING: This will block the calling thread. For UI applications,
         use scan_async() instead.
 
         Args:
             path: Path to file or directory to scan
-            recursive: Whether to scan directories recursively
+            recursive: Whether to scan directories recursively (always true for clamdscan)
             profile_exclusions: Optional exclusions from a scan profile.
-                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
 
         Returns:
             ScanResult with scan details
@@ -253,42 +115,27 @@ class Scanner:
             self._save_scan_log(result, duration)
             return result
 
-        # Determine which backend to use
-        backend = self._get_backend()
-
-        # For daemon-only mode, delegate entirely to daemon scanner
-        if backend == "daemon":
-            daemon_scanner = self._get_daemon_scanner()
-            return daemon_scanner.scan_sync(path, recursive, profile_exclusions)
-
-        # For auto mode, try daemon first if available
-        if backend == "auto":
-            is_daemon_available, _ = check_clamd_connection()
-            if is_daemon_available:
-                daemon_scanner = self._get_daemon_scanner()
-                return daemon_scanner.scan_sync(path, recursive, profile_exclusions)
-
-        # Fall through to clamscan for "clamscan" mode or auto fallback
-        is_installed, version_or_error = check_clamav_installed()
-        if not is_installed:
+        # Check daemon is available
+        is_available, error_msg = self.check_available()
+        if not is_available:
             result = ScanResult(
                 status=ScanStatus.ERROR,
                 path=path,
                 stdout="",
-                stderr=version_or_error or "ClamAV not installed",
+                stderr=error_msg or "Daemon not available",
                 exit_code=-1,
                 infected_files=[],
                 scanned_files=0,
                 scanned_dirs=0,
                 infected_count=0,
-                error_message=version_or_error,
+                error_message=error_msg,
                 threat_details=[]
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
             return result
 
-        # Build clamscan command
+        # Build clamdscan command
         cmd = self._build_command(path, recursive, profile_exclusions)
 
         try:
@@ -334,13 +181,13 @@ class Scanner:
                 status=ScanStatus.ERROR,
                 path=path,
                 stdout="",
-                stderr="ClamAV executable not found",
+                stderr="clamdscan executable not found",
                 exit_code=-1,
                 infected_files=[],
                 scanned_files=0,
                 scanned_dirs=0,
                 infected_count=0,
-                error_message="ClamAV executable not found",
+                error_message="clamdscan executable not found",
                 threat_details=[]
             )
             duration = time.monotonic() - start_time
@@ -389,7 +236,7 @@ class Scanner:
         profile_exclusions: dict | None = None
     ) -> None:
         """
-        Execute an asynchronous scan on the given path.
+        Execute an asynchronous scan using clamdscan.
 
         The scan runs in a background thread and the callback is invoked
         on the main GTK thread via GLib.idle_add when complete.
@@ -399,11 +246,9 @@ class Scanner:
             callback: Function to call with ScanResult when scan completes
             recursive: Whether to scan directories recursively
             profile_exclusions: Optional exclusions from a scan profile.
-                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
         """
         def scan_thread():
             result = self.scan_sync(path, recursive, profile_exclusions)
-            # Schedule callback on main thread
             GLib.idle_add(callback, result)
 
         thread = threading.Thread(target=scan_thread)
@@ -415,7 +260,6 @@ class Scanner:
         Cancel the current scan operation.
 
         If a scan is in progress, it will be terminated.
-        Cancels both clamscan and daemon scanner if active.
         """
         self._scan_cancelled = True
         if self._current_process is not None:
@@ -423,9 +267,6 @@ class Scanner:
                 self._current_process.terminate()
             except (OSError, ProcessLookupError):
                 pass
-        # Also cancel daemon scanner if it exists
-        if self._daemon_scanner is not None:
-            self._daemon_scanner.cancel()
 
     def _build_command(
         self,
@@ -434,31 +275,33 @@ class Scanner:
         profile_exclusions: dict | None = None
     ) -> list[str]:
         """
-        Build the clamscan command arguments.
+        Build the clamdscan command arguments.
 
-        When running inside a Flatpak sandbox, the command is automatically
-        wrapped with 'flatpak-spawn --host' to execute ClamAV on the host system.
+        Uses --multiscan for parallel scanning and --fdpass for
+        file descriptor passing (faster than streaming).
 
         Args:
             path: Path to scan
-            recursive: Whether to scan recursively
+            recursive: Whether to scan recursively (clamdscan is always recursive)
             profile_exclusions: Optional exclusions from a scan profile.
-                               Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
 
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
         """
-        clamscan = get_clamav_path() or "clamscan"
-        cmd = [clamscan]
+        clamdscan = which_host_command("clamdscan") or "clamdscan"
+        cmd = [clamdscan]
 
-        # Add recursive flag for directories
-        if recursive and Path(path).is_dir():
-            cmd.append("-r")
+        # Use multiscan for parallel scanning (daemon handles threads)
+        cmd.append("--multiscan")
 
-        # Show infected files only (reduces output noise)
+        # Use file descriptor passing for better performance
+        cmd.append("--fdpass")
+
+        # Show infected files only
         cmd.append("-i")
 
-        # Inject exclusion patterns from settings
+        # Note: clamdscan exclusions work differently than clamscan
+        # It uses --exclude and --exclude-dir with regex patterns
         if self._settings_manager is not None:
             exclusions = self._settings_manager.get('exclusion_patterns', [])
             for exclusion in exclusions:
@@ -474,104 +317,63 @@ class Scanner:
 
                 if exclusion_type == 'directory':
                     cmd.extend(['--exclude-dir', regex])
-                else:  # file or pattern
+                else:
                     cmd.extend(['--exclude', regex])
 
-        # Apply profile exclusions (paths and patterns)
+        # Apply profile exclusions
         if profile_exclusions:
-            # Handle path exclusions (directories)
             for excl_path in profile_exclusions.get('paths', []):
                 if not excl_path:
                     continue
-                # Expand ~ in exclusion paths
                 if excl_path.startswith('~'):
                     excl_path = str(Path(excl_path).expanduser())
-                # Use the path directly for --exclude-dir (ClamAV accepts paths)
                 cmd.extend(['--exclude-dir', excl_path])
 
-            # Handle pattern exclusions (file patterns like *.tmp)
             for pattern in profile_exclusions.get('patterns', []):
                 if not pattern:
                     continue
-                # Convert glob pattern to regex for ClamAV
                 regex = glob_to_regex(pattern)
                 cmd.extend(['--exclude', regex])
 
-        # Add the path to scan
         cmd.append(path)
-
-        # Wrap with flatpak-spawn if running inside Flatpak sandbox
         return wrap_host_command(cmd)
 
     def _classify_threat_severity(self, threat_name: str) -> str:
-        """
-        Classify the severity level of a threat based on its name.
-
-        Severity levels:
-        - critical: Ransomware, Rootkit, Bootkit
-        - high: Trojan, Worm, Backdoor, Exploit
-        - medium: Adware, PUA (Potentially Unwanted Application), Spyware, Unknown
-        - low: Test signatures (EICAR), Generic/Heuristic detections (when standalone)
-
-        Args:
-            threat_name: The threat name from ClamAV output
-
-        Returns:
-            Severity level as string: 'critical', 'high', 'medium', or 'low'
-        """
+        """Classify threat severity level."""
         if not threat_name:
             return "medium"
 
         name_lower = threat_name.lower()
 
-        # Critical: Most dangerous threats
         critical_patterns = ['ransom', 'rootkit', 'bootkit', 'cryptolocker', 'wannacry']
         for pattern in critical_patterns:
             if pattern in name_lower:
                 return "critical"
 
-        # High: Serious threats
         high_patterns = ['trojan', 'worm', 'backdoor', 'exploit', 'downloader', 'dropper', 'keylogger']
         for pattern in high_patterns:
             if pattern in name_lower:
                 return "high"
 
-        # Medium: Less severe but still concerning
         medium_patterns = ['adware', 'pua', 'pup', 'spyware', 'miner', 'coinminer']
         for pattern in medium_patterns:
             if pattern in name_lower:
                 return "medium"
 
-        # Low: Test files and generic/heuristic detections
         low_patterns = ['eicar', 'test-signature', 'test.file', 'heuristic', 'generic']
         for pattern in low_patterns:
             if pattern in name_lower:
                 return "low"
 
-        # Default to medium for unknown threats
         return "medium"
 
     def _categorize_threat(self, threat_name: str) -> str:
-        """
-        Extract the category of a threat from its name.
-
-        ClamAV threat names typically follow patterns like:
-        - "Win.Trojan.Agent" -> "Trojan"
-        - "Eicar-Test-Signature" -> "Test"
-        - "PUA.Win.Adware.Generic" -> "Adware"
-
-        Args:
-            threat_name: The threat name from ClamAV output
-
-        Returns:
-            Category as string (e.g., 'Virus', 'Trojan', 'Worm', etc.)
-        """
+        """Extract threat category from name."""
         if not threat_name:
             return "Unknown"
 
         name_lower = threat_name.lower()
 
-        # Check for specific categories in order of specificity
         category_patterns = [
             ('ransomware', 'Ransomware'),
             ('ransom', 'Ransomware'),
@@ -599,7 +401,6 @@ class Scanner:
             if pattern in name_lower:
                 return category
 
-        # Default to "Virus" for unrecognized threats (conservative assumption)
         return "Virus"
 
     def _parse_results(
@@ -610,17 +411,15 @@ class Scanner:
         exit_code: int
     ) -> ScanResult:
         """
-        Parse clamscan output into a ScanResult.
+        Parse clamdscan output into a ScanResult.
 
-        ClamAV exit codes:
-        - 0: No virus found
-        - 1: Virus(es) found
-        - 2: Some error(s) occurred
+        clamdscan output format is similar to clamscan.
+        Exit codes: 0=clean, 1=infected, 2=error
 
         Args:
             path: The scanned path
-            stdout: Standard output from clamscan
-            stderr: Standard error from clamscan
+            stdout: Standard output from clamdscan
+            stderr: Standard error from clamdscan
             exit_code: Process exit code
 
         Returns:
@@ -632,24 +431,18 @@ class Scanner:
         scanned_dirs = 0
         infected_count = 0
 
-        # Parse stdout line by line
         for line in stdout.splitlines():
             line = line.strip()
 
-            # Look for infected file lines (format: "/path/to/file: Virus.Name FOUND")
             if line.endswith("FOUND"):
-                # Extract file path and threat name
-                # Format: "/path/to/file: ThreatName FOUND"
                 parts = line.rsplit(":", 1)
                 if len(parts) == 2:
                     file_path = parts[0].strip()
-                    # Extract threat name (remove " FOUND" suffix)
                     threat_part = parts[1].strip()
                     threat_name = threat_part.rsplit(" ", 1)[0].strip() if " FOUND" in threat_part else threat_part
 
                     infected_files.append(file_path)
 
-                    # Create ThreatDetail with classification
                     threat_detail = ThreatDetail(
                         file_path=file_path,
                         threat_name=threat_name,
@@ -659,8 +452,6 @@ class Scanner:
                     threat_details.append(threat_detail)
                     infected_count += 1
 
-            # Look for individual summary lines from ClamAV output
-            # Format: "Scanned files: 10" or "Scanned directories: 1" or "Infected files: 0"
             elif line.startswith("Scanned files:"):
                 match = re.search(r"Scanned files:\s*(\d+)", line)
                 if match:
@@ -670,7 +461,6 @@ class Scanner:
                 if match:
                     scanned_dirs = int(match.group(1))
 
-        # Determine overall status based on exit code
         if exit_code == 0:
             status = ScanStatus.CLEAN
         elif exit_code == 1:
@@ -693,19 +483,12 @@ class Scanner:
         )
 
     def _save_scan_log(self, result: ScanResult, duration: float) -> None:
-        """
-        Save scan result to log.
-
-        Args:
-            result: The scan result
-            duration: Scan duration in seconds
-        """
-        # Build summary and details from scan result
+        """Save scan result to log."""
         if result.status == ScanStatus.CLEAN:
-            summary = f"Clean scan of {result.path}"
+            summary = f"Clean scan of {result.path} (daemon)"
             status = "clean"
         elif result.status == ScanStatus.INFECTED:
-            summary = f"Found {result.infected_count} threat(s) in {result.path}"
+            summary = f"Found {result.infected_count} threat(s) in {result.path} (daemon)"
             status = "infected"
         elif result.status == ScanStatus.CANCELLED:
             summary = f"Scan cancelled: {result.path}"
@@ -714,7 +497,6 @@ class Scanner:
             summary = f"Scan error: {result.path}"
             status = "error"
 
-        # Build details string with scan output info
         details_parts = []
         if result.scanned_files > 0:
             details_parts.append(f"Scanned: {result.scanned_files} files, {result.scanned_dirs} directories")
@@ -726,7 +508,6 @@ class Scanner:
             details_parts.append(f"Error: {result.error_message}")
         details = "\n".join(details_parts) if details_parts else result.stdout or ""
 
-        # Use LogEntry.create() factory method for proper id/timestamp generation
         entry = LogEntry.create(
             log_type="scan",
             status=status,

@@ -478,6 +478,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         except FileNotFoundError:
             self._clamd_available = False
 
+        # Create scan backend settings group (ClamUI settings)
+        self._create_scan_backend_group(page)
+
         # Create file location group
         self._create_file_location_group(
             page,
@@ -585,7 +588,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             page: The preferences page to add the group to
         """
         group = Adw.PreferencesGroup()
-        group.set_title("Performance & Limits")
+        group.set_title("Performance and Limits")
         group.set_description("Configure scanning limits and performance settings")
         group.set_header_suffix(self._create_permission_indicator())
 
@@ -671,6 +674,106 @@ class PreferencesWindow(Adw.PreferencesWindow):
         group.add(log_syslog_row)
 
         page.add(group)
+
+    def _create_scan_backend_group(self, page: Adw.PreferencesPage):
+        """
+        Create the Scan Backend preferences group.
+
+        Allows users to select between different scan backends:
+        - Auto: Prefer daemon if available, fallback to clamscan
+        - Daemon: Use clamd daemon only (faster, requires daemon running)
+        - Clamscan: Use standalone clamscan only
+
+        Args:
+            page: The preferences page to add the group to
+        """
+        from src.core.utils import check_clamd_connection
+
+        group = Adw.PreferencesGroup()
+        group.set_title("Scan Backend")
+        group.set_description("Choose how ClamUI performs virus scans")
+
+        # Scan backend dropdown
+        backend_row = Adw.ComboRow()
+        backend_model = Gtk.StringList()
+        backend_model.append("Auto (prefer daemon)")
+        backend_model.append("ClamAV Daemon (clamd)")
+        backend_model.append("Standalone Scanner (clamscan)")
+        backend_row.set_model(backend_model)
+        backend_row.set_title("Scan Backend")
+        backend_row.set_subtitle("Select the scanning method")
+
+        # Set current selection from settings
+        current_backend = self._settings_manager.get("scan_backend", "auto")
+        backend_map = {"auto": 0, "daemon": 1, "clamscan": 2}
+        backend_row.set_selected(backend_map.get(current_backend, 0))
+
+        # Connect to selection changes
+        backend_row.connect("notify::selected", self._on_backend_changed)
+
+        self._backend_row = backend_row
+        group.add(backend_row)
+
+        # Daemon status indicator
+        status_row = Adw.ActionRow()
+        status_row.set_title("Daemon Status")
+
+        # Check daemon connection
+        is_connected, message = check_clamd_connection()
+        if is_connected:
+            status_row.set_subtitle("Connected to clamd")
+            status_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+            status_icon.add_css_class("success")
+        else:
+            status_row.set_subtitle(f"Not available: {message}")
+            status_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            status_icon.add_css_class("warning")
+
+        status_row.add_suffix(status_icon)
+        self._daemon_status_row = status_row
+        group.add(status_row)
+
+        # Refresh button
+        refresh_button = Gtk.Button()
+        refresh_button.set_label("Refresh Status")
+        refresh_button.set_valign(Gtk.Align.CENTER)
+        refresh_button.add_css_class("flat")
+        refresh_button.connect("clicked", self._on_refresh_daemon_status)
+        status_row.add_suffix(refresh_button)
+
+        page.add(group)
+
+    def _on_backend_changed(self, row: Adw.ComboRow, _pspec):
+        """Handle scan backend selection change."""
+        backend_reverse_map = {0: "auto", 1: "daemon", 2: "clamscan"}
+        selected = row.get_selected()
+        backend = backend_reverse_map.get(selected, "auto")
+        self._settings_manager.set("scan_backend", backend)
+
+    def _on_refresh_daemon_status(self, button: Gtk.Button):
+        """Refresh the daemon connection status."""
+        from src.core.utils import check_clamd_connection
+
+        is_connected, message = check_clamd_connection()
+
+        # Update status row
+        if is_connected:
+            self._daemon_status_row.set_subtitle("Connected to clamd")
+            # Update icon
+            for child in list(self._daemon_status_row):
+                if isinstance(child, Gtk.Image):
+                    child.set_from_icon_name("emblem-ok-symbolic")
+                    child.remove_css_class("warning")
+                    child.add_css_class("success")
+                    break
+        else:
+            self._daemon_status_row.set_subtitle(f"Not available: {message}")
+            for child in list(self._daemon_status_row):
+                if isinstance(child, Gtk.Image):
+                    child.set_from_icon_name("dialog-warning-symbolic")
+                    child.remove_css_class("success")
+                    child.add_css_class("warning")
+                    break
 
     def _create_scheduled_scans_page(self):
         """

@@ -783,7 +783,7 @@ class ScanView(Gtk.Box):
         # Status bar
         status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         status_box.set_halign(Gtk.Align.CENTER)
-        status_box.set_spacing(6)
+        status_box.set_spacing(12)
 
         # ClamAV status icon
         self._clamav_status_icon = Gtk.Image()
@@ -796,6 +796,24 @@ class ScanView(Gtk.Box):
 
         status_box.append(self._clamav_status_icon)
         status_box.append(self._clamav_status_label)
+
+        # Separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        separator.set_margin_start(6)
+        separator.set_margin_end(6)
+        status_box.append(separator)
+
+        # Backend indicator icon
+        self._backend_status_icon = Gtk.Image()
+        self._backend_status_icon.set_from_icon_name("system-run-symbolic")
+
+        # Backend indicator label
+        self._backend_status_label = Gtk.Label()
+        self._backend_status_label.set_text("Backend: clamscan")
+        self._backend_status_label.add_css_class("dim-label")
+
+        status_box.append(self._backend_status_icon)
+        status_box.append(self._backend_status_label)
 
         self.append(status_box)
 
@@ -817,7 +835,27 @@ class ScanView(Gtk.Box):
             self._status_banner.set_button_label(None)
             self._status_banner.set_revealed(True)
 
+        # Update backend indicator
+        self._update_backend_indicator()
+
         return False  # Don't repeat
+
+    def _update_backend_indicator(self):
+        """Update the backend status indicator based on current settings."""
+        active_backend = self._scanner.get_active_backend()
+
+        if active_backend == "daemon":
+            self._backend_status_icon.set_from_icon_name("network-server-symbolic")
+            self._backend_status_label.set_text("Backend: clamd")
+            self._backend_status_icon.remove_css_class("warning")
+        elif active_backend == "unavailable":
+            self._backend_status_icon.set_from_icon_name("network-offline-symbolic")
+            self._backend_status_label.set_text("Backend: clamd (offline)")
+            self._backend_status_icon.add_css_class("warning")
+        else:  # clamscan
+            self._backend_status_icon.set_from_icon_name("system-run-symbolic")
+            self._backend_status_label.set_text("Backend: clamscan")
+            self._backend_status_icon.remove_css_class("warning")
 
     def _on_select_folder_clicked(self, button):
         """Handle folder selection button click."""

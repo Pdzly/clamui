@@ -134,6 +134,8 @@ class UpdateView(Gtk.Box):
         # Status banner (hidden by default)
         self._status_banner = Adw.Banner()
         self._status_banner.set_revealed(False)
+        self._status_banner.set_button_label("Dismiss")
+        self._status_banner.connect("button-clicked", self._on_status_banner_dismissed)
         results_box.append(self._status_banner)
 
         # Results text view in a scrolled window
@@ -204,10 +206,20 @@ class UpdateView(Gtk.Box):
             # Disable update button and show error banner
             self._update_button.set_sensitive(False)
             self._status_banner.set_title(version_or_error or "freshclam not installed")
-            self._status_banner.set_button_label(None)
             self._status_banner.set_revealed(True)
 
         return False  # Don't repeat
+
+    def _on_status_banner_dismissed(self, banner):
+        """
+        Handle status banner dismiss button click.
+
+        Hides the status banner when the user clicks the Dismiss button.
+
+        Args:
+            banner: The Adw.Banner that was dismissed
+        """
+        banner.set_revealed(False)
 
     def _on_update_clicked(self, button):
         """Handle update button click."""
@@ -318,7 +330,6 @@ class UpdateView(Gtk.Box):
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("warning")
 
-        self._status_banner.set_button_label(None)
         self._status_banner.set_revealed(True)
 
         # Build results text

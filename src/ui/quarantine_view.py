@@ -109,6 +109,8 @@ class QuarantineView(Gtk.Box):
         # Create the status banner (hidden by default)
         self._status_banner = Adw.Banner()
         self._status_banner.set_revealed(False)
+        self._status_banner.set_button_label("Dismiss")
+        self._status_banner.connect("button-clicked", self._on_status_banner_dismissed)
         self.append(self._status_banner)
 
         # Create the storage info section
@@ -258,6 +260,17 @@ class QuarantineView(Gtk.Box):
         row.set_child(loading_box)
 
         return row
+
+    def _on_status_banner_dismissed(self, banner):
+        """
+        Handle status banner dismiss button click.
+
+        Hides the status banner when the user clicks the Dismiss button.
+
+        Args:
+            banner: The Adw.Banner that was dismissed
+        """
+        banner.set_revealed(False)
 
     def _load_entries_async(self):
         """
@@ -663,7 +676,7 @@ class QuarantineView(Gtk.Box):
             self._status_banner.add_css_class("error")
             self._status_banner.remove_css_class("success")
 
-        self._status_banner.set_button_label(None)
+        self._status_banner.set_button_label("Dismiss")
         self._status_banner.set_revealed(True)
 
     def _on_delete_clicked(self, button, entry: QuarantineEntry):
@@ -736,7 +749,7 @@ class QuarantineView(Gtk.Box):
             self._status_banner.add_css_class("error")
             self._status_banner.remove_css_class("success")
 
-        self._status_banner.set_button_label(None)
+        self._status_banner.set_button_label("Dismiss")
         self._status_banner.set_revealed(True)
 
     def _on_clear_old_clicked(self, button):
@@ -747,7 +760,7 @@ class QuarantineView(Gtk.Box):
             self._status_banner.set_title("No items older than 30 days")
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("error")
-            self._status_banner.set_button_label(None)
+            self._status_banner.set_button_label("Dismiss")
             self._status_banner.set_revealed(True)
             return
 
@@ -805,7 +818,7 @@ class QuarantineView(Gtk.Box):
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("error")
 
-        self._status_banner.set_button_label(None)
+        self._status_banner.set_button_label("Dismiss")
         self._status_banner.set_revealed(True)
 
     def refresh(self):

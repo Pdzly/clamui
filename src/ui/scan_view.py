@@ -286,6 +286,17 @@ class ScanView(Gtk.Box):
         """
         self.remove_css_class('drop-active')
 
+    def _on_status_banner_dismissed(self, banner):
+        """
+        Handle status banner dismiss button click.
+
+        Hides the status banner when the user clicks the Dismiss button.
+
+        Args:
+            banner: The Adw.Banner that was dismissed
+        """
+        banner.set_revealed(False)
+
     def _show_drop_error(self, message: str):
         """
         Display an error message for invalid file drops.
@@ -301,7 +312,6 @@ class ScanView(Gtk.Box):
         self._status_banner.add_css_class("error")
         self._status_banner.remove_css_class("success")
         self._status_banner.remove_css_class("warning")
-        self._status_banner.set_button_label(None)
         self._status_banner.set_revealed(True)
 
     def _create_profile_section(self):
@@ -431,1553 +441,613 @@ class ScanView(Gtk.Box):
         Handle profile selection from dropdown.
 
         When a profile is selected, the first target path is populated into
-        the scan target UI, and the profile's exclusions are stored for use
-        during the scan.
+        the scan target UI, and the profile's exclusion patterns are configured.
 
         Args:
-            dropdown: The Gtk.DropDown widget
-            pspec: The property specification
+            dropdown: The DropDown widget
+            pspec: Property spec (unused)
         """
         selected_index = dropdown.get_selected()
 
         if selected_index == 0:
             # "No Profile" selected - clear selected profile
             self._selected_profile = None
-            self._profile_row.set_subtitle("Choose a scan profile or use manual selection")
-            logger.debug("Profile cleared - using manual selection")
-            # Don't clear path selection - user may have manually selected a path
-        elif selected_index - 1 < len(self._profile_list):
-            # A profile is selected
-            profile = self._profile_list[selected_index - 1]
-            self._selected_profile = profile
-
-            # Update subtitle with profile description or target count
-            if profile.description:
-                subtitle = profile.description
-            else:
-                target_count = len(profile.targets)
-                subtitle = f"{target_count} target(s) configured"
-            self._profile_row.set_subtitle(subtitle)
-
-            # Populate scan target from profile
-            self._apply_profile_targets(profile)
-
-            logger.debug(f"Profile selected: {profile.name} (ID: {profile.id})")
-
-    def _apply_profile_targets(self, profile: "ScanProfile"):
-        """
-        Apply profile targets to the scan target UI.
-
-        Expands the first target path (handling ~ for home directory) and
-        sets it as the current scan target. The profile's exclusions are
-        stored for use during scanning.
-
-        Args:
-            profile: The ScanProfile to apply
-        """
-        if not profile.targets:
-            # Profile has no targets - update UI to indicate this
-            self._path_row.set_title("No targets in profile")
-            self._path_row.set_subtitle("Add targets to this profile or select manually")
-            self._path_row_icon.set_from_icon_name("dialog-warning-symbolic")
-            self._selected_path = ""
-            self._scan_button.set_sensitive(False)
-            return
-
-        # Use the first target from the profile
-        # Future enhancement: support multiple targets with sequential scanning
-        first_target = profile.targets[0]
-
-        # Expand ~ to home directory
-        expanded_path = self._expand_path(first_target)
-
-        # Check if path exists and is accessible
-        if os.path.exists(expanded_path):
-            self._set_selected_path(expanded_path)
-
-            # Update path row to indicate this came from profile
-            display_path = format_scan_path(expanded_path)
-            self._path_row.set_title(display_path)
-            if len(profile.targets) > 1:
-                self._path_row.set_subtitle(
-                    f"From profile '{profile.name}' ({len(profile.targets)} targets, scanning first)"
-                )
-            else:
-                self._path_row.set_subtitle(f"From profile '{profile.name}'")
-            self._path_row_icon.set_from_icon_name("folder-symbolic")
+            self._scanner.reset_exclusion_patterns()
+            logger.debug("No profile selected")
         else:
-            # Path doesn't exist - show warning but still allow selection
-            display_path = format_scan_path(expanded_path)
-            self._path_row.set_title(display_path)
-            self._path_row.set_subtitle(f"Path not found - from profile '{profile.name}'")
-            self._path_row_icon.set_from_icon_name("dialog-warning-symbolic")
-            self._selected_path = expanded_path
-            # Still enable scan button - path might become available or user can fix
-            self._scan_button.set_sensitive(True)
-
-        logger.debug(f"Applied profile target: {first_target} -> {expanded_path}")
-
-    def _expand_path(self, path: str) -> str:
-        """
-        Expand a path, handling ~ for home directory.
-
-        Args:
-            path: The path string to expand
-
-        Returns:
-            The expanded absolute path
-        """
-        if path.startswith("~"):
-            return os.path.expanduser(path)
-        return os.path.abspath(path)
-
-    def get_selected_profile(self) -> "ScanProfile | None":
-        """
-        Get the currently selected scan profile.
-
-        Returns:
-            The selected ScanProfile or None if no profile is selected
-        """
-        return self._selected_profile
-
-    def set_selected_profile(self, profile_id: str) -> bool:
-        """
-        Set the selected profile by ID.
-
-        Args:
-            profile_id: The profile ID to select
-
-        Returns:
-            True if profile was found and selected, False otherwise
-        """
-        for i, profile in enumerate(self._profile_list):
-            if profile.id == profile_id:
-                self._profile_dropdown.set_selected(i + 1)  # +1 for "No Profile" option
-                return True
-        return False
+            # Profile selected - configure scanner with profile settings
+            profile_idx = selected_index - 1  # -1 for "No Profile" option
+            if 0 <= profile_idx < len(self._profile_list):
+                self._selected_profile = self._profile_list[profile_idx]
+                # Configure scanner with profile's exclusion patterns
+                if self._selected_profile.exclusion_patterns:
+                    self._scanner.set_exclusion_patterns(
+                        self._selected_profile.exclusion_patterns
+                    )
+                # Set first target path if available
+                if self._selected_profile.target_paths:
+                    first_target = self._selected_profile.target_paths[0]
+                    self._set_selected_path(first_target)
+                logger.debug(f"Profile selected: {self._selected_profile.name}")
 
     def _on_manage_profiles_clicked(self, button):
         """
         Handle manage profiles button click.
 
-        Opens the ProfileListDialog for managing profiles. When a profile
-        is selected from the dialog, it updates the dropdown selection.
-        The dropdown is also refreshed when the dialog is closed to capture
-        any profile additions or deletions.
-        """
-        profile_manager = self._get_profile_manager()
-
-        dialog = ProfileListDialog(profile_manager=profile_manager)
-        dialog.set_on_profile_selected(self._on_dialog_profile_selected)
-        dialog.connect("closed", lambda d: self.refresh_profiles())
-        dialog.present(self.get_root())
-
-    def _on_dialog_profile_selected(self, profile: "ScanProfile"):
-        """
-        Handle profile selection from ProfileListDialog.
-
-        Updates the dropdown to select the chosen profile and refreshes
-        the profile list to ensure it's up to date.
+        Opens the profile list dialog for managing profiles.
 
         Args:
-            profile: The selected ScanProfile from the dialog
+            button: The clicked button
         """
-        # Refresh profiles in case any were added/modified
-        self.refresh_profiles()
+        root = self.get_root()
+        if root is None:
+            return
 
-        # Select the chosen profile in the dropdown
-        self.set_selected_profile(profile.id)
+        # Open profile list dialog
+        dialog = ProfileListDialog()
+        dialog.set_modal(True)
+        dialog.set_transient_for(root)
+        dialog.connect("profiles-changed", self._on_profiles_changed)
+        dialog.present()
+
+    def _on_profiles_changed(self, dialog):
+        """
+        Handle profile changes from profile dialog.
+
+        Refreshes the profile dropdown when profiles are modified.
+
+        Args:
+            dialog: The ProfileListDialog that was modified
+        """
+        self.refresh_profiles()
 
     def _create_selection_section(self):
         """Create the folder/file selection section."""
-        # Selection frame
+        # Selection group
         selection_group = Adw.PreferencesGroup()
         selection_group.set_title("Scan Target")
-        selection_group.set_description("Select a folder or file to scan for viruses")
+        selection_group.set_description("Choose a folder or file to scan")
 
-        # Path selection row
+        # Path display row
         self._path_row = Adw.ActionRow()
-        self._path_row.set_title("No folder selected")
-        self._path_row.set_subtitle("Click 'Select Folder' to choose a location")
-        self._path_row_icon = add_row_icon(self._path_row, "folder-symbolic")
+        self._path_row.set_title("Selected Path")
+        self._path_row.set_subtitle("No path selected")
+        add_row_icon(self._path_row, "folder-symbolic")
 
-        # Select folder button
-        select_folder_btn = Gtk.Button()
-        select_folder_btn.set_label("Select Folder")
-        select_folder_btn.set_valign(Gtk.Align.CENTER)
-        select_folder_btn.add_css_class("suggested-action")
-        select_folder_btn.connect("clicked", self._on_select_folder_clicked)
-        self._select_folder_btn = select_folder_btn
+        # Browse button
+        self._browse_button = Gtk.Button(label="Browse")
+        self._browse_button.set_valign(Gtk.Align.CENTER)
+        self._browse_button.connect("clicked", self._on_browse_clicked)
+        self._path_row.add_suffix(self._browse_button)
 
-        # Select file button
-        select_file_btn = Gtk.Button()
-        select_file_btn.set_label("Select File")
-        select_file_btn.set_valign(Gtk.Align.CENTER)
-        select_file_btn.connect("clicked", self._on_select_file_clicked)
-        self._select_file_btn = select_file_btn
-
-        # Button box
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        button_box.set_valign(Gtk.Align.CENTER)
-        button_box.append(select_folder_btn)
-        button_box.append(select_file_btn)
-
-        self._path_row.add_suffix(button_box)
         selection_group.add(self._path_row)
-
         self.append(selection_group)
 
-    def _create_scan_section(self):
-        """Create the scan button section."""
-        # Scan button container
-        scan_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        scan_box.set_halign(Gtk.Align.CENTER)
-        scan_box.set_spacing(12)
-
-        # Scan button
-        self._scan_button = Gtk.Button()
-        self._scan_button.set_label("Scan")
-        self._scan_button.add_css_class("suggested-action")
-        self._scan_button.add_css_class("pill")
-        self._scan_button.set_sensitive(False)  # Disabled until path selected
-        self._scan_button.connect("clicked", self._on_scan_clicked)
-
-        # Make the button larger
-        self._scan_button.set_size_request(120, 40)
-
-        # Spinner for scan progress (hidden by default)
-        self._scan_spinner = Gtk.Spinner()
-        self._scan_spinner.set_visible(False)
-
-        # Cancel button (hidden by default)
-        self._cancel_button = Gtk.Button()
-        self._cancel_button.set_label("Cancel")
-        self._cancel_button.add_css_class("destructive-action")
-        self._cancel_button.add_css_class("pill")
-        self._cancel_button.set_visible(False)
-        self._cancel_button.connect("clicked", self._on_cancel_clicked)
-
-        # Test ClamAV button
-        self._test_clamav_button = Gtk.Button()
-        self._test_clamav_button.set_label("Test ClamAV")
-        self._test_clamav_button.add_css_class("pill")
-        self._test_clamav_button.set_tooltip_text(
-            "Scan an EICAR test file to verify ClamAV is working correctly"
-        )
-        self._test_clamav_button.connect("clicked", self._on_test_clamav_clicked)
-
-        scan_box.append(self._scan_spinner)
-        scan_box.append(self._scan_button)
-        scan_box.append(self._cancel_button)
-        scan_box.append(self._test_clamav_button)
-
-        self.append(scan_box)
-
-    def _create_results_section(self):
-        """Create the results display section."""
-        # Results frame
-        results_group = Adw.PreferencesGroup()
-        results_group.set_title("Scan Results")
-        results_group.set_description("Results will appear here after scanning")
-        self._results_group = results_group
-
-        # Header box with export and fullscreen buttons
-        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        header_box.set_halign(Gtk.Align.END)
-        header_box.set_spacing(6)
-
-        # Copy to Clipboard button
-        copy_button = Gtk.Button()
-        copy_button.set_icon_name("edit-copy-symbolic")
-        copy_button.set_tooltip_text("Copy to clipboard")
-        copy_button.add_css_class("flat")
-        copy_button.set_sensitive(False)  # Disabled until results available
-        copy_button.connect("clicked", self._on_copy_results_clicked)
-        self._copy_button = copy_button
-
-        # Export to Text button
-        export_text_button = Gtk.Button()
-        export_text_button.set_icon_name("document-save-symbolic")
-        export_text_button.set_tooltip_text("Export to text file")
-        export_text_button.add_css_class("flat")
-        export_text_button.set_sensitive(False)  # Disabled until results available
-        export_text_button.connect("clicked", self._on_export_text_clicked)
-        self._export_text_button = export_text_button
-
-        # Export to CSV button
-        export_csv_button = Gtk.Button()
-        export_csv_button.set_icon_name("x-office-spreadsheet-symbolic")
-        export_csv_button.set_tooltip_text("Export to CSV file")
-        export_csv_button.add_css_class("flat")
-        export_csv_button.set_sensitive(False)  # Disabled until results available
-        export_csv_button.connect("clicked", self._on_export_csv_clicked)
-        self._export_csv_button = export_csv_button
-
-        # Fullscreen button
-        fullscreen_button = Gtk.Button()
-        fullscreen_button.set_icon_name("view-fullscreen-symbolic")
-        fullscreen_button.set_tooltip_text("View fullscreen")
-        fullscreen_button.add_css_class("flat")
-        fullscreen_button.connect("clicked", self._on_fullscreen_results_clicked)
-        self._fullscreen_button = fullscreen_button
-
-        header_box.append(copy_button)
-        header_box.append(export_text_button)
-        header_box.append(export_csv_button)
-        header_box.append(fullscreen_button)
-        results_group.set_header_suffix(header_box)
-
-        # Results container
-        results_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        results_box.set_spacing(12)
-
-        # Status banner (hidden by default)
-        self._status_banner = Adw.Banner()
-        self._status_banner.set_revealed(False)
-        results_box.append(self._status_banner)
-
-        # Scrolled window for threat cards ListBox
-        self._threats_scrolled = Gtk.ScrolledWindow()
-        self._threats_scrolled.set_min_content_height(200)
-        self._threats_scrolled.set_vexpand(True)
-        self._threats_scrolled.add_css_class("card")
-
-        # Container for ListBox and placeholder
-        self._results_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-
-        # Threats ListBox for threat cards display
-        self._threats_listbox = Gtk.ListBox()
-        self._threats_listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        self._threats_listbox.add_css_class("boxed-list")
-        self._threats_listbox.set_visible(False)  # Hidden until threats are found
-        self._results_container.append(self._threats_listbox)
-
-        # Placeholder label (shown when no results)
-        self._results_placeholder = Gtk.Label()
-        self._results_placeholder.set_text("No scan results yet.\n\nSelect a folder or file and click 'Scan' to begin.")
-        self._results_placeholder.set_wrap(True)
-        self._results_placeholder.set_justify(Gtk.Justification.CENTER)
-        self._results_placeholder.add_css_class("dim-label")
-        self._results_placeholder.set_margin_top(24)
-        self._results_placeholder.set_margin_bottom(24)
-        self._results_placeholder.set_margin_start(12)
-        self._results_placeholder.set_margin_end(12)
-        self._results_placeholder.set_vexpand(True)
-        self._results_placeholder.set_valign(Gtk.Align.CENTER)
-        self._results_container.append(self._results_placeholder)
-
-        # Store raw output for fullscreen dialog
-        self._raw_output: str = ""
-
-        # Store current result for export functionality
-        self._current_result: ScanResult | None = None
-
-        self._threats_scrolled.set_child(self._results_container)
-        results_box.append(self._threats_scrolled)
-
-        results_group.add(results_box)
-        self.append(results_group)
-
-    def _create_status_bar(self):
-        """Create the status bar at the bottom."""
-        # Status bar
-        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        status_box.set_halign(Gtk.Align.CENTER)
-        status_box.set_spacing(12)
-
-        # ClamAV status icon
-        self._clamav_status_icon = Gtk.Image()
-        self._clamav_status_icon.set_from_icon_name("dialog-question-symbolic")
-
-        # ClamAV status label
-        self._clamav_status_label = Gtk.Label()
-        self._clamav_status_label.set_text("Checking ClamAV...")
-        self._clamav_status_label.add_css_class("dim-label")
-
-        status_box.append(self._clamav_status_icon)
-        status_box.append(self._clamav_status_label)
-
-        # Separator
-        separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        separator.set_margin_start(6)
-        separator.set_margin_end(6)
-        status_box.append(separator)
-
-        # Backend indicator icon
-        self._backend_status_icon = Gtk.Image()
-        self._backend_status_icon.set_from_icon_name("system-run-symbolic")
-
-        # Backend indicator label
-        self._backend_status_label = Gtk.Label()
-        self._backend_status_label.set_text("Backend: clamscan")
-        self._backend_status_label.add_css_class("dim-label")
-
-        status_box.append(self._backend_status_icon)
-        status_box.append(self._backend_status_label)
-
-        self.append(status_box)
-
-    def _check_clamav_status(self):
-        """Check ClamAV installation status and update UI."""
-        is_installed, version_or_error = check_clamav_installed()
-
-        if is_installed:
-            self._clamav_status_icon.set_from_icon_name("emblem-ok-symbolic")
-            self._clamav_status_icon.add_css_class("success")
-            self._clamav_status_label.set_text(f"ClamAV: {version_or_error}")
-        else:
-            self._clamav_status_icon.set_from_icon_name("dialog-warning-symbolic")
-            self._clamav_status_icon.add_css_class("warning")
-            self._clamav_status_label.set_text(version_or_error or "ClamAV not found")
-
-            # Show error banner
-            self._status_banner.set_title(version_or_error or "ClamAV not installed")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-
-        # Update backend indicator
-        self._update_backend_indicator()
-
-        return False  # Don't repeat
-
-    def _update_backend_indicator(self):
-        """Update the backend status indicator based on current settings."""
-        active_backend = self._scanner.get_active_backend()
-
-        if active_backend == "daemon":
-            self._backend_status_icon.set_from_icon_name("network-server-symbolic")
-            self._backend_status_label.set_text("Backend: clamd")
-            self._backend_status_icon.remove_css_class("warning")
-        elif active_backend == "unavailable":
-            self._backend_status_icon.set_from_icon_name("network-offline-symbolic")
-            self._backend_status_label.set_text("Backend: clamd (offline)")
-            self._backend_status_icon.add_css_class("warning")
-        else:  # clamscan
-            self._backend_status_icon.set_from_icon_name("system-run-symbolic")
-            self._backend_status_label.set_text("Backend: clamscan")
-            self._backend_status_icon.remove_css_class("warning")
-
-    def _on_select_folder_clicked(self, button):
-        """Handle folder selection button click."""
-        self._open_file_dialog(select_folder=True)
-
-    def _on_select_file_clicked(self, button):
-        """Handle file selection button click."""
-        self._open_file_dialog(select_folder=False)
-
-    def _open_file_dialog(self, select_folder: bool):
+    def _on_browse_clicked(self, button):
         """
-        Open a file/folder selection dialog.
+        Handle browse button click.
+
+        Opens a file/folder selection dialog.
 
         Args:
-            select_folder: True to select folders, False for files
+            button: The clicked button
         """
+        root = self.get_root()
+        if root is None:
+            return
+
+        # Create file dialog
         dialog = Gtk.FileDialog()
+        dialog.set_title("Select Folder or File to Scan")
 
-        if select_folder:
-            dialog.set_title("Select Folder to Scan")
-        else:
-            dialog.set_title("Select File to Scan")
+        # Open async - use a callback
+        def on_file_selected(dialog, result):
+            try:
+                file = dialog.select_folder_finish(result)
+                if file:
+                    path = file.get_path()
+                    if path:
+                        self._set_selected_path(path)
+            except GLib.GError as e:
+                if e.code != Gio.IOErrorEnum.CANCELLED:
+                    logger.error(f"Error selecting file: {e}")
 
-        # Get the parent window
-        window = self.get_root()
-
-        if select_folder:
-            dialog.select_folder(window, None, self._on_folder_selected)
-        else:
-            dialog.open(window, None, self._on_file_selected)
-
-    def _on_folder_selected(self, dialog, result):
-        """Handle folder selection result."""
-        try:
-            folder = dialog.select_folder_finish(result)
-            if folder:
-                path = folder.get_path()
-                self._set_selected_path(path)
-        except GLib.Error:
-            pass  # User cancelled
-
-    def _on_file_selected(self, dialog, result):
-        """Handle file selection result."""
-        try:
-            file = dialog.open_finish(result)
-            if file:
-                path = file.get_path()
-                self._set_selected_path(path)
-        except GLib.Error:
-            pass  # User cancelled
+        dialog.select_folder(root, None, on_file_selected)
 
     def _set_selected_path(self, path: str):
         """
-        Set the selected path and update the UI.
+        Set the selected scan path.
+
+        Updates the UI display with the selected path.
 
         Args:
-            path: The selected filesystem path
+            path: The file or folder path to scan
         """
         self._selected_path = path
-        display_path = format_scan_path(path)
+        formatted_path = format_scan_path(path)
+        self._path_row.set_subtitle(formatted_path)
+        self._path_row.remove_css_class("error")
+        logger.debug(f"Selected path: {path}")
 
-        # Update the path row
-        self._path_row.set_title(display_path)
-        self._path_row.set_subtitle("Ready to scan")
+    def _create_scan_section(self):
+        """Create the scan button section."""
+        # Scan button group
+        scan_group = Adw.PreferencesGroup()
 
-        # Enable the scan button
-        self._scan_button.set_sensitive(True)
+        # Button box
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        button_box.set_halign(Gtk.Align.CENTER)
+        button_box.set_margin_top(12)
+        button_box.set_margin_bottom(12)
 
-        # Clear previous results
-        self._clear_results()
+        # Scan button
+        self._scan_button = Gtk.Button(label="Scan")
+        self._scan_button.add_css_class("suggested-action")
+        self._scan_button.set_size_request(120, -1)
+        self._scan_button.connect("clicked", self._on_scan_clicked)
+        button_box.append(self._scan_button)
+
+        # EICAR test button
+        self._eicar_button = Gtk.Button(label="Test (EICAR)")
+        self._eicar_button.set_tooltip_text(
+            "Run antivirus test with EICAR test file\n"
+            "(This is NOT malware - industry-standard AV test pattern)"
+        )
+        self._eicar_button.set_size_request(120, -1)
+        self._eicar_button.connect("clicked", self._on_eicar_test_clicked)
+        button_box.append(self._eicar_button)
+
+        scan_group.add(button_box)
+        self.append(scan_group)
 
     def _on_scan_clicked(self, button):
-        """Handle scan button click."""
+        """
+        Handle scan button click.
+
+        Starts a scan of the selected path.
+
+        Args:
+            button: The clicked button
+        """
         if not self._selected_path:
+            self._status_banner.set_title("Please select a path to scan")
+            self._status_banner.add_css_class("warning")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.set_revealed(True)
             return
 
-        self._start_scan()
+        self._start_scan(self._selected_path)
 
-    def _on_cancel_clicked(self, button):
-        """Handle cancel button click."""
-        self._scanner.cancel()
-        self._set_scanning_state(False)
-
-        # Update placeholder to show cancellation
-        self._results_placeholder.set_text("Scan cancelled")
-        self._results_placeholder.set_visible(True)
-        self._threats_listbox.set_visible(False)
-
-    def _start_scan(self):
-        """Start the scanning process."""
-        self._set_scanning_state(True)
-        self._clear_results()
-
-        # Update placeholder to show scanning status
-        self._results_placeholder.set_text(f"Scanning: {self._selected_path}\n\nPlease wait...")
-
-        # Hide any previous status banner
-        self._status_banner.set_revealed(False)
-
-        # Get profile exclusions if a profile is selected
-        profile_exclusions = None
-        if self._selected_profile is not None:
-            profile_exclusions = self._selected_profile.exclusions
-            logger.debug(
-                f"Scanning with profile '{self._selected_profile.name}' exclusions: "
-                f"{len(profile_exclusions.get('paths', []))} paths, "
-                f"{len(profile_exclusions.get('patterns', []))} patterns"
-            )
-
-        # Start async scan with profile exclusions
-        self._scanner.scan_async(
-            self._selected_path,
-            callback=self._on_scan_complete,
-            profile_exclusions=profile_exclusions
-        )
-
-    def set_scan_state_callback(self, callback):
+    def _on_eicar_test_clicked(self, button):
         """
-        Set callback for scan state changes.
+        Handle EICAR test button click.
 
-        The callback is invoked when scanning starts or stops.
-        Signature: callback(is_scanning: bool, result: Optional[ScanResult])
-        - When scan starts: is_scanning=True, result=None
-        - When scan ends: is_scanning=False, result=ScanResult
+        Creates a temporary EICAR test file and runs a scan.
+        This is used to verify antivirus functionality without
+        risking real malware exposure.
 
         Args:
-            callback: Callable to invoke on state changes
+            button: The clicked button
         """
-        self._on_scan_state_changed = callback
-
-    def _set_scanning_state(self, is_scanning: bool, result=None):
-        """
-        Update UI to reflect scanning state.
-
-        Args:
-            is_scanning: Whether a scan is in progress
-            result: ScanResult when scan completes (None when starting)
-        """
-        self._is_scanning = is_scanning
-
-        if is_scanning:
-            # Show scanning state
-            self._scan_button.set_label("Scanning...")
-            self._scan_button.set_sensitive(False)
-            self._scan_spinner.set_visible(True)
-            self._scan_spinner.start()
-            self._cancel_button.set_visible(True)
-
-            # Disable path selection and test button
-            self._select_folder_btn.set_sensitive(False)
-            self._select_file_btn.set_sensitive(False)
-            self._test_clamav_button.set_sensitive(False)
-
-            # Disable export buttons during scan
-            self._copy_button.set_sensitive(False)
-            self._export_text_button.set_sensitive(False)
-            self._export_csv_button.set_sensitive(False)
-        else:
-            # Restore normal state
-            self._scan_button.set_label("Scan")
-            self._scan_button.set_sensitive(bool(self._selected_path))
-            self._scan_spinner.stop()
-            self._scan_spinner.set_visible(False)
-            self._cancel_button.set_visible(False)
-
-            # Enable path selection and test button
-            self._select_folder_btn.set_sensitive(True)
-            self._select_file_btn.set_sensitive(True)
-            self._test_clamav_button.set_sensitive(True)
-
-        # Notify callback of state change
-        if self._on_scan_state_changed:
-            self._on_scan_state_changed(is_scanning, result)
-
-    def _on_scan_complete(self, result: ScanResult):
-        """
-        Handle scan completion.
-
-        Args:
-            result: The scan result from the scanner
-        """
-        self._set_scanning_state(False, result)
-        self._display_results(result)
-        return False  # Don't repeat GLib.idle_add
-
-    def _clear_results(self):
-        """Clear the results display."""
-        # Clear the threats ListBox
-        while True:
-            row = self._threats_listbox.get_row_at_index(0)
-            if row is None:
-                break
-            self._threats_listbox.remove(row)
-
-        # Hide ListBox and show placeholder
-        self._threats_listbox.set_visible(False)
-        self._results_placeholder.set_visible(True)
-        self._results_placeholder.set_text("No scan results yet.\n\nSelect a folder or file and click 'Scan' to begin.")
-
-        # Clear raw output and current result
-        self._raw_output = ""
-        self._current_result = None
-
-        # Reset pagination state
-        self._displayed_threat_count = 0
-        self._all_threat_details = []
-        self._load_more_row = None
-
-        # Disable export buttons when no results
-        self._copy_button.set_sensitive(False)
-        self._export_text_button.set_sensitive(False)
-        self._export_csv_button.set_sensitive(False)
-
-        self._status_banner.set_revealed(False)
-
-    def _display_results(self, result: ScanResult):
-        """
-        Display scan results in the UI.
-
-        For large result sets (100+ threats), displays a warning banner and
-        implements pagination to keep the UI responsive. Initially shows a
-        limited number of threats with a "Show More" button to load additional
-        results in batches.
-
-        Args:
-            result: The scan result to display
-        """
-        # Store raw output for fullscreen dialog
-        self._raw_output = result.stdout
-
-        # Store the current result for export functionality
-        self._current_result = result
-
-        # Store all threat details for pagination
-        self._all_threat_details = result.threat_details if result.threat_details else []
-        self._displayed_threat_count = 0
-        self._load_more_row = None
-
-        # Update status banner based on result
-        if result.status == ScanStatus.CLEAN:
-            self._status_banner.set_title("No threats found")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.remove_css_class("warning")
-        elif result.status == ScanStatus.INFECTED:
-            threat_count = len(self._all_threat_details)
-            # Show warning for large result sets
-            if threat_count >= LARGE_RESULT_THRESHOLD:
-                self._status_banner.set_title(
-                    f"Large result set: {threat_count} threats detected. "
-                    f"Showing first {INITIAL_DISPLAY_LIMIT} results."
-                )
-                self._status_banner.add_css_class("warning")
-                self._status_banner.remove_css_class("success")
-                self._status_banner.remove_css_class("error")
-            else:
-                self._status_banner.set_title(f"Threats detected: {result.infected_count} infected file(s)")
-                self._status_banner.add_css_class("error")
-                self._status_banner.remove_css_class("success")
-                self._status_banner.remove_css_class("warning")
-        elif result.status == ScanStatus.CANCELLED:
-            self._status_banner.set_title("Scan cancelled")
-            self._status_banner.add_css_class("warning")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-        else:  # ERROR status
-            self._status_banner.set_title(f"Scan error: {result.error_message}")
-            self._status_banner.add_css_class("warning")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-        # Clear previous results from ListBox
-        while True:
-            row = self._threats_listbox.get_row_at_index(0)
-            if row is None:
-                break
-            self._threats_listbox.remove(row)
-
-        # Display results based on status
-        if result.status == ScanStatus.INFECTED and self._all_threat_details:
-            # Hide placeholder, show ListBox with threat cards
-            self._results_placeholder.set_visible(False)
-            self._threats_listbox.set_visible(True)
-
-            threat_count = len(self._all_threat_details)
-
-            # For large result sets, show warning banner and paginate
-            if threat_count >= LARGE_RESULT_THRESHOLD:
-                # Add warning info row at the top
-                warning_row = self._create_large_result_warning_row(threat_count)
-                self._threats_listbox.append(warning_row)
-
-                # Display initial batch of threats
-                initial_limit = min(INITIAL_DISPLAY_LIMIT, threat_count)
-                self._display_threat_batch(0, initial_limit)
-
-                # Add "Show More" button if there are more threats
-                if threat_count > INITIAL_DISPLAY_LIMIT:
-                    self._add_load_more_button()
-            else:
-                # For smaller result sets, display all threats
-                for threat_detail in self._all_threat_details:
-                    threat_card = self._create_threat_card(threat_detail)
-                    self._threats_listbox.append(threat_card)
-                self._displayed_threat_count = threat_count
-
-                # Add clean files summary row at the end
-                clean_count = result.scanned_files - result.infected_count
-                if clean_count > 0:
-                    summary_row = self._create_clean_files_summary_row(
-                        clean_count, result.scanned_files, result.scanned_dirs
-                    )
-                    self._threats_listbox.append(summary_row)
-
-        elif result.status == ScanStatus.CLEAN:
-            # Show ListBox with clean files summary only
-            self._results_placeholder.set_visible(False)
-            self._threats_listbox.set_visible(True)
-
-            summary_row = self._create_clean_files_summary_row(
-                result.scanned_files, result.scanned_files, result.scanned_dirs
-            )
-            self._threats_listbox.append(summary_row)
-
-        elif result.status == ScanStatus.CANCELLED:
-            # CANCELLED status - show cancellation message in placeholder
-            self._threats_listbox.set_visible(False)
-            self._results_placeholder.set_visible(True)
-            self._results_placeholder.set_text("Scan cancelled by user")
-
-        else:
-            # ERROR status - show error message in placeholder
-            self._threats_listbox.set_visible(False)
-            self._results_placeholder.set_visible(True)
-            self._results_placeholder.set_text(
-                f"Scan failed: {result.error_message}\n\nPlease check the fullscreen log for details."
-            )
-
-        # Enable export buttons when results are available
-        # (for both successful scans and error states, so user can export error details)
-        self._copy_button.set_sensitive(True)
-        self._export_text_button.set_sensitive(True)
-        self._export_csv_button.set_sensitive(True)
-
-    def _create_large_result_warning_row(self, threat_count: int) -> Gtk.Box:
-        """
-        Create a warning row displayed at the top of large result sets.
-
-        Args:
-            threat_count: Total number of threats detected
-
-        Returns:
-            Gtk.Box widget containing the warning message
-        """
-        warning_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        warning_box.add_css_class("large-result-warning")
-        warning_box.set_margin_start(8)
-        warning_box.set_margin_end(8)
-        warning_box.set_margin_top(8)
-
-        # Warning icon
-        warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
-        warning_box.append(warning_icon)
-
-        # Warning text
-        warning_label = Gtk.Label()
-        warning_label.set_markup(
-            f"<b>Large Result Set:</b> {threat_count} threats detected. "
-            f"Results are paginated to maintain UI responsiveness. "
-            f"Use Export to save all results."
-        )
-        warning_label.set_wrap(True)
-        warning_label.set_xalign(0)
-        warning_label.set_hexpand(True)
-        warning_box.append(warning_label)
-
-        return warning_box
-
-    def _display_threat_batch(self, start_index: int, count: int):
-        """
-        Display a batch of threat cards starting from the given index.
-
-        Uses GLib.idle_add to add cards incrementally for better UI responsiveness
-        with very large result sets.
-
-        Args:
-            start_index: Index in _all_threat_details to start from
-            count: Number of threats to display
-        """
-        end_index = min(start_index + count, len(self._all_threat_details))
-
-        for i in range(start_index, end_index):
-            threat_detail = self._all_threat_details[i]
-            threat_card = self._create_threat_card(threat_detail)
-
-            # Insert before the "Load More" button if it exists
-            if self._load_more_row:
-                # Find the index of the load more row
-                row_index = 0
-                while True:
-                    row = self._threats_listbox.get_row_at_index(row_index)
-                    if row is None:
-                        break
-                    row_index += 1
-                # Insert at position just before the last row (load more button)
-                self._threats_listbox.insert(threat_card, row_index - 1)
-            else:
-                self._threats_listbox.append(threat_card)
-
-        self._displayed_threat_count = end_index
-
-    def _add_load_more_button(self):
-        """
-        Add a "Show More" button row to load additional threats.
-        """
-        # Container box for the load more button
-        load_more_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        load_more_box.add_css_class("load-more-row")
-        load_more_box.set_halign(Gtk.Align.CENTER)
-        load_more_box.set_margin_top(12)
-        load_more_box.set_margin_bottom(12)
-
-        # Progress label showing how many are displayed
-        remaining = len(self._all_threat_details) - self._displayed_threat_count
-        progress_label = Gtk.Label()
-        progress_label.set_markup(
-            f"<span size='small'>Showing {self._displayed_threat_count} of "
-            f"{len(self._all_threat_details)} threats</span>"
-        )
-        progress_label.add_css_class("dim-label")
-        load_more_box.append(progress_label)
-
-        # Button row
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        button_box.set_halign(Gtk.Align.CENTER)
-
-        # "Show More" button
-        show_more_btn = Gtk.Button()
-        show_more_btn.set_label(f"Show {min(LOAD_MORE_BATCH_SIZE, remaining)} More")
-        show_more_btn.add_css_class("pill")
-        show_more_btn.connect("clicked", self._on_load_more_clicked)
-        button_box.append(show_more_btn)
-
-        # "Show All" button (only if there are many remaining)
-        if remaining > LOAD_MORE_BATCH_SIZE:
-            show_all_btn = Gtk.Button()
-            show_all_btn.set_label(f"Show All ({remaining} remaining)")
-            show_all_btn.add_css_class("pill")
-            show_all_btn.connect("clicked", self._on_show_all_clicked)
-            button_box.append(show_all_btn)
-
-        load_more_box.append(button_box)
-
-        # Wrap in ListBoxRow to ensure proper parent-child relationship
-        load_more_row = Gtk.ListBoxRow()
-        load_more_row.set_child(load_more_box)
-        load_more_row.set_activatable(False)
-        load_more_row.set_selectable(False)
-        self._load_more_row = load_more_row
-        self._threats_listbox.append(load_more_row)
-
-    def _on_load_more_clicked(self, button):
-        """
-        Handle "Show More" button click to load the next batch of threats.
-        """
-        # Preserve scroll position
-        scroll_pos = None
-        if self._threats_scrolled:
-            vadj = self._threats_scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        # Remove the current load more row
-        if self._load_more_row:
-            self._threats_listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        # Display next batch
-        remaining = len(self._all_threat_details) - self._displayed_threat_count
-        batch_size = min(LOAD_MORE_BATCH_SIZE, remaining)
-        self._display_threat_batch(self._displayed_threat_count, batch_size)
-
-        # Add new load more button if there are still more threats
-        if self._displayed_threat_count < len(self._all_threat_details):
-            self._add_load_more_button()
-        else:
-            # All threats displayed, add summary row
-            self._add_final_summary_row()
-
-        # Update status banner
-        self._update_pagination_status()
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
-
-    def _on_show_all_clicked(self, button):
-        """
-        Handle "Show All" button click to load all remaining threats.
-
-        Uses incremental loading with GLib.idle_add to keep UI responsive.
-        """
-        # Preserve scroll position
-        scroll_pos = None
-        if self._threats_scrolled:
-            vadj = self._threats_scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        # Remove the current load more row
-        if self._load_more_row:
-            self._threats_listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        # Display all remaining threats
-        remaining = len(self._all_threat_details) - self._displayed_threat_count
-        self._display_threat_batch(self._displayed_threat_count, remaining)
-
-        # Add summary row
-        self._add_final_summary_row()
-
-        # Update status banner
-        self._update_pagination_status()
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
-
-    def _add_final_summary_row(self):
-        """
-        Add the clean files summary row after all threats are displayed.
-        """
-        if self._current_result:
-            clean_count = self._current_result.scanned_files - self._current_result.infected_count
-            if clean_count > 0:
-                summary_row = self._create_clean_files_summary_row(
-                    clean_count,
-                    self._current_result.scanned_files,
-                    self._current_result.scanned_dirs
-                )
-                self._threats_listbox.append(summary_row)
-
-    def _update_pagination_status(self):
-        """
-        Update the status banner to reflect current pagination state.
-        """
-        total = len(self._all_threat_details)
-        displayed = self._displayed_threat_count
-
-        if displayed >= total:
-            # All threats displayed
-            self._status_banner.set_title(f"Threats detected: {total} infected file(s)")
-            self._status_banner.add_css_class("error")
-            self._status_banner.remove_css_class("warning")
-            self._status_banner.remove_css_class("success")
-        else:
-            # Still paginated
-            self._status_banner.set_title(
-                f"Large result set: {total} threats detected. "
-                f"Showing {displayed} of {total} results."
-            )
-
-    def _create_clean_files_summary_row(
-        self, clean_count: int, total_files: int, total_dirs: int
-    ) -> Adw.ActionRow:
-        """
-        Create a summary row showing clean file count (not individual files).
-
-        Args:
-            clean_count: Number of clean files
-            total_files: Total number of files scanned
-            total_dirs: Total number of directories scanned
-
-        Returns:
-            Adw.ActionRow widget showing the summary
-        """
-        summary_row = Adw.ActionRow()
-        summary_row.set_title("Scan Summary")
-
-        # Build subtitle with scan statistics
-        subtitle_parts = []
-        subtitle_parts.append(f"{clean_count} clean file(s)")
-        if total_dirs > 0:
-            subtitle_parts.append(f"{total_dirs} directories scanned")
-        subtitle_parts.append(f"{total_files} total files checked")
-        summary_row.set_subtitle(" • ".join(subtitle_parts))
-
-        add_row_icon(summary_row, "emblem-ok-symbolic")
-        summary_row.add_css_class("success")
-
-        return summary_row
-
-    def _on_test_clamav_clicked(self, button):
-        """Handle test ClamAV button click."""
-        # Create a temporary file with EICAR test string
         try:
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+            # Create temporary file with EICAR test string
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                delete=False,
+                suffix='.txt',
+                prefix='eicar_test_'
+            ) as f:
                 f.write(EICAR_TEST_STRING)
                 self._eicar_temp_path = f.name
 
-            # Scan the test file
-            self._selected_path = self._eicar_temp_path
-            self._start_scan()
-        except Exception as e:
-            self._status_banner.set_title(f"Error creating test file: {str(e)}")
-            self._status_banner.add_css_class("error")
-            self._status_banner.set_revealed(True)
-
-    def _on_fullscreen_results_clicked(self, button):
-        """Handle fullscreen results button click."""
-        # Use stored raw output for fullscreen view
-        text = self._raw_output if self._raw_output else "No scan results available."
-
-        dialog = FullscreenLogDialog(
-            transient_for=self.get_root(),
-            modal=True,
-            text=text
-        )
-        dialog.present()
-
-    def _create_threat_card(self, threat_detail: ThreatDetail) -> Adw.ExpanderRow:
-        """
-        Create an expandable threat card widget for a detected threat.
-
-        The card displays:
-        - File path as title (with tooltip for long paths)
-        - Threat name and category as subtitle
-        - Color-coded severity badge
-        - Expandable section with recommended actions
-
-        Args:
-            threat_detail: ThreatDetail object containing threat information
-
-        Returns:
-            Adw.ExpanderRow widget configured as a threat card
-        """
-        # Create the expander row
-        expander = Adw.ExpanderRow()
-        expander.add_css_class("threat-card")
-
-        # Format file path for display (truncate if too long)
-        file_path = threat_detail.file_path
-        display_path = file_path
-        if len(file_path) > 60:
-            # Show first 20 and last 35 characters
-            display_path = file_path[:20] + "..." + file_path[-35:]
-
-        expander.set_title(display_path)
-        expander.set_tooltip_text(file_path)  # Full path in tooltip
-
-        # Subtitle with threat name and category
-        subtitle = f"{threat_detail.threat_name} ({threat_detail.category})"
-        expander.set_subtitle(subtitle)
-
-        # Set icon based on severity
-        severity_icons = {
-            "critical": "dialog-error-symbolic",
-            "high": "dialog-warning-symbolic",
-            "medium": "emblem-important-symbolic",
-            "low": "dialog-information-symbolic"
-        }
-        icon_name = severity_icons.get(threat_detail.severity, "emblem-important-symbolic")
-        add_row_icon(expander, icon_name)
-
-        # Create severity badge
-        severity_badge = Gtk.Label()
-        severity_badge.set_label(threat_detail.severity.upper())
-        severity_badge.add_css_class("severity-badge")
-        severity_badge.add_css_class(f"severity-{threat_detail.severity}")
-        severity_badge.set_valign(Gtk.Align.CENTER)
-
-        # Add badge as prefix
-        expander.add_prefix(severity_badge)
-
-        # Create Quarantine button as suffix (visible without expanding)
-        quarantine_btn = Gtk.Button()
-        quarantine_btn.set_label("Quarantine")
-        quarantine_btn.add_css_class("destructive-action")
-        quarantine_btn.set_valign(Gtk.Align.CENTER)
-        quarantine_btn.set_tooltip_text("Move this file to quarantine")
-        # Store threat info on button for callback
-        quarantine_btn._threat_file_path = threat_detail.file_path
-        quarantine_btn._threat_name = threat_detail.threat_name
-        quarantine_btn._parent_expander = expander
-        quarantine_btn.connect("clicked", self._on_quarantine_threat_clicked)
-        expander.add_suffix(quarantine_btn)
-
-        # Create expanded content with recommended actions
-        action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        action_box.set_margin_start(12)
-        action_box.set_margin_end(12)
-        action_box.set_margin_top(8)
-        action_box.set_margin_bottom(8)
-
-        # Recommended action label
-        action_header = Gtk.Label()
-        action_header.set_markup("<b>Recommended Action:</b>")
-        action_header.set_halign(Gtk.Align.START)
-        action_box.append(action_header)
-
-        # Get and display the recommended action
-        recommended_action = self._get_recommended_action(threat_detail)
-        action_label = Gtk.Label()
-        action_label.set_text(recommended_action)
-        action_label.set_wrap(True)
-        action_label.set_halign(Gtk.Align.START)
-        action_label.add_css_class("recommended-action")
-        action_box.append(action_label)
-
-        # Add file path details row
-        path_row = Adw.ActionRow()
-        path_row.set_title("Full Path")
-        path_row.set_subtitle(file_path)
-        path_row.set_subtitle_selectable(True)
-        action_box.append(path_row)
-
-        expander.add_row(action_box)
-
-        return expander
-
-    def _get_recommended_action(self, threat_detail: ThreatDetail) -> str:
-        """
-        Get the recommended action for a threat based on its severity and category.
-
-        Args:
-            threat_detail: ThreatDetail object containing threat information
-
-        Returns:
-            String describing the recommended action for this threat
-        """
-        severity = threat_detail.severity
-        category = threat_detail.category
-
-        # Actions based on category first (more specific)
-        if category == "Test":
-            return (
-                "This is a test file (EICAR) used to verify antivirus functionality. "
-                "It is safe and can be deleted. No action required unless it appeared unexpectedly."
-            )
-
-        if category == "Ransomware":
-            return (
-                "URGENT: Disconnect from network immediately. Do not pay any ransom. "
-                "Delete the infected file, run a full system scan, and restore affected files "
-                "from backup. Consider professional assistance."
-            )
-
-        if category == "Rootkit":
-            return (
-                "CRITICAL: This threat can hide itself and other malware. "
-                "Boot from a clean rescue disk and run a full scan. "
-                "Consider reinstalling the operating system if compromise is confirmed."
-            )
-
-        if category == "Trojan" or category == "Backdoor":
-            return (
-                "Delete the infected file immediately. Run a full system scan to check for "
-                "additional compromises. Change passwords for sensitive accounts and monitor "
-                "for unauthorized access."
-            )
-
-        if category == "Worm":
-            return (
-                "Delete the infected file and run a full system scan. "
-                "Check network-connected devices for infection. "
-                "Update all software and operating system patches."
-            )
-
-        if category == "Exploit":
-            return (
-                "Delete the infected file. Update all software to the latest versions. "
-                "Apply security patches immediately. Check for signs of successful exploitation."
-            )
-
-        if category in ["Adware", "PUA"]:
-            return (
-                "This is a Potentially Unwanted Application. Delete the file if not intentionally "
-                "installed. Review installed programs and browser extensions for unwanted additions."
-            )
-
-        if category == "Spyware":
-            return (
-                "Delete the infected file immediately. Change passwords for all accounts. "
-                "Check for keyloggers and review recent account activity for unauthorized access."
-            )
-
-        # Fall back to severity-based recommendations
-        if severity == "critical":
-            return (
-                "URGENT: Delete the infected file immediately and isolate this system. "
-                "Run a full system scan and consider professional security assistance."
-            )
-
-        if severity == "high":
-            return (
-                "Delete the infected file and run a full system scan. "
-                "Monitor for unusual system behavior and review security logs."
-            )
-
-        if severity == "medium":
-            return (
-                "Delete the infected file if not needed. Run a targeted scan on the affected "
-                "directory. Review how this file arrived on your system."
-            )
-
-        # Low severity or default
-        return (
-            "Review the file and delete if not recognized or needed. "
-            "This is likely a low-risk detection but should still be investigated."
-        )
-
-    def _on_copy_results_clicked(self, button):
-        """
-        Handle copy to clipboard button click.
-
-        Formats the current scan results as human-readable text and copies
-        them to the system clipboard. Shows a success or error banner.
-        """
-        if self._current_result is None:
-            self._status_banner.set_title("No results to copy")
-            self._status_banner.add_css_class("warning")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-            return
-
-        # Format the results as text
-        formatted_text = format_results_as_text(self._current_result)
-
-        # Copy to clipboard
-        success = copy_to_clipboard(formatted_text)
-
-        if success:
-            self._status_banner.set_title("Results copied to clipboard")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.remove_css_class("warning")
-        else:
-            self._status_banner.set_title("Failed to copy to clipboard")
+            # Scan the temporary file
+            self._start_scan(self._eicar_temp_path)
+        except IOError as e:
+            logger.error(f"Error creating EICAR test file: {e}")
+            self._status_banner.set_title("Error: Could not create test file")
             self._status_banner.add_css_class("error")
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("warning")
-
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-    def _on_export_text_clicked(self, button):
-        """
-        Handle export to text file button click.
-
-        Opens a file save dialog to let the user choose a location,
-        then writes the formatted scan results to a text file.
-        """
-        if self._current_result is None:
-            self._status_banner.set_title("No results to export")
-            self._status_banner.add_css_class("warning")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-            return
-
-        # Create save dialog
-        dialog = Gtk.FileDialog()
-        dialog.set_title("Export Scan Results")
-
-        # Generate default filename with timestamp
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dialog.set_initial_name(f"clamui_scan_{timestamp}.txt")
-
-        # Set up file filter for text files
-        text_filter = Gtk.FileFilter()
-        text_filter.set_name("Text Files")
-        text_filter.add_mime_type("text/plain")
-        text_filter.add_pattern("*.txt")
-
-        filters = Gio.ListStore.new(Gtk.FileFilter)
-        filters.append(text_filter)
-        dialog.set_filters(filters)
-        dialog.set_default_filter(text_filter)
-
-        # Get the parent window
-        window = self.get_root()
-
-        # Open save dialog
-        dialog.save(window, None, self._on_text_export_file_selected)
-
-    def _on_text_export_file_selected(self, dialog, result):
-        """
-        Handle text export file selection result.
-
-        Writes the formatted scan results to the selected file.
-
-        Args:
-            dialog: The FileDialog that was used
-            result: The async result from the save dialog
-        """
-        try:
-            file = dialog.save_finish(result)
-            if file is None:
-                return  # User cancelled
-
-            file_path = file.get_path()
-            if file_path is None:
-                self._show_export_error("Invalid file path selected")
-                return
-
-            # Ensure .txt extension
-            if not file_path.endswith('.txt'):
-                file_path += '.txt'
-
-            # Format the results as text
-            formatted_text = format_results_as_text(self._current_result)
-
-            # Write to file
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(formatted_text)
-
-            # Show success feedback
-            self._status_banner.set_title(f"Results exported to {os.path.basename(file_path)}")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.remove_css_class("warning")
-            self._status_banner.set_button_label(None)
             self._status_banner.set_revealed(True)
 
-        except GLib.Error:
-            # User cancelled the dialog
-            pass
-        except PermissionError:
-            self._show_export_error("Permission denied - cannot write to selected location")
-        except OSError as e:
-            self._show_export_error(f"Error writing file: {str(e)}")
-
-    def _show_export_error(self, message: str):
+    def _start_scan(self, path: str):
         """
-        Display an error message for export failures.
+        Start a scan operation.
+
+        Sets up the UI for scanning and starts an async scan operation.
 
         Args:
-            message: The error message to display
+            path: The path to scan
         """
-        self._status_banner.set_title(message)
-        self._status_banner.add_css_class("error")
+        self._is_scanning = True
+        self._scan_button.set_sensitive(False)
+        self._eicar_button.set_sensitive(False)
+        self._browse_button.set_sensitive(False)
+        self._profile_dropdown.set_sensitive(False)
+        self._manage_profiles_btn.set_sensitive(False)
+
+        # Show scanning message
+        self._status_banner.set_title("Scanning...")
+        self._status_banner.remove_css_class("error")
         self._status_banner.remove_css_class("success")
         self._status_banner.remove_css_class("warning")
-        self._status_banner.set_button_label(None)
         self._status_banner.set_revealed(True)
 
-    def _on_export_csv_clicked(self, button):
+        # Update tray if callback is set
+        if self._on_scan_state_changed:
+            self._on_scan_state_changed(True)
+
+        # Start async scan
+        GLib.idle_add(self._run_scan, path)
+
+    def _run_scan(self, path: str):
         """
-        Handle export to CSV file button click.
+        Run the scan operation asynchronously.
 
-        Opens a file save dialog to let the user choose a location,
-        then writes the scan results in CSV format for spreadsheet analysis.
-        """
-        if self._current_result is None:
-            self._status_banner.set_title("No results to export")
-            self._status_banner.add_css_class("warning")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-            return
-
-        # Create save dialog
-        dialog = Gtk.FileDialog()
-        dialog.set_title("Export Scan Results as CSV")
-
-        # Generate default filename with timestamp
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        dialog.set_initial_name(f"clamui_scan_{timestamp}.csv")
-
-        # Set up file filter for CSV files
-        csv_filter = Gtk.FileFilter()
-        csv_filter.set_name("CSV Files")
-        csv_filter.add_mime_type("text/csv")
-        csv_filter.add_pattern("*.csv")
-
-        filters = Gio.ListStore.new(Gtk.FileFilter)
-        filters.append(csv_filter)
-        dialog.set_filters(filters)
-        dialog.set_default_filter(csv_filter)
-
-        # Get the parent window
-        window = self.get_root()
-
-        # Open save dialog
-        dialog.save(window, None, self._on_csv_export_file_selected)
-
-    def _on_csv_export_file_selected(self, dialog, result):
-        """
-        Handle CSV export file selection result.
-
-        Writes the scan results in CSV format to the selected file.
+        Performs the actual scan and updates results display.
 
         Args:
-            dialog: The FileDialog that was used
-            result: The async result from the save dialog
+            path: The path to scan
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
         """
         try:
-            file = dialog.save_finish(result)
-            if file is None:
-                return  # User cancelled
+            logger.info(f"Starting scan of: {path}")
+            result = self._scanner.scan(path)
 
-            file_path = file.get_path()
-            if file_path is None:
-                self._show_export_error("Invalid file path selected")
-                return
+            # Process scan results
+            self._display_scan_results(result)
 
-            # Ensure .csv extension
-            if not file_path.endswith('.csv'):
-                file_path += '.csv'
-
-            # Import the CSV formatting utility
-            from ..core.utils import format_results_as_csv
-
-            # Format the results as CSV
-            csv_content = format_results_as_csv(self._current_result)
-
-            # Write to file
-            with open(file_path, 'w', encoding='utf-8', newline='') as f:
-                f.write(csv_content)
-
-            # Show success feedback
-            self._status_banner.set_title(f"Results exported to {os.path.basename(file_path)}")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.remove_css_class("warning")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-
-        except GLib.Error:
-            # User cancelled the dialog
-            pass
-        except PermissionError:
-            self._show_export_error("Permission denied - cannot write to selected location")
-        except OSError as e:
-            self._show_export_error(f"Error writing file: {str(e)}")
-
-    def _on_quarantine_threat_clicked(self, button):
-        """
-        Handle Quarantine button click on a threat card.
-
-        Moves the detected threat file to quarantine and updates the UI
-        to reflect the quarantine status.
-
-        Args:
-            button: The Quarantine button that was clicked
-        """
-        file_path = button._threat_file_path
-        threat_name = button._threat_name
-        expander = button._parent_expander
-
-        # Disable button to prevent double-clicks
-        button.set_sensitive(False)
-        button.set_label("Quarantining...")
-
-        # Call async quarantine operation
-        self._quarantine_manager.quarantine_file_async(
-            file_path,
-            threat_name,
-            lambda result: self._on_quarantine_complete(result, button, expander)
-        )
-
-    def _on_quarantine_complete(self, result, button, expander):
-        """
-        Handle quarantine operation completion.
-
-        Updates the UI based on the result of the quarantine operation,
-        showing success or error messages in the status banner.
-
-        Args:
-            result: QuarantineResult from the quarantine manager
-            button: The Quarantine button that triggered the operation
-            expander: The parent expander row containing the threat card
-        """
-        if result.is_success:
-            # Update button to show quarantined state
-            button.set_label("Quarantined ✓")
-            button.remove_css_class("destructive-action")
-            button.add_css_class("success")
-            button.set_tooltip_text("File has been moved to quarantine")
-            # Button stays disabled since file is quarantined
-
-            # Show success message
-            self._status_banner.set_title(
-                f"File quarantined successfully: {os.path.basename(result.entry.original_path)}"
+            # Log summary
+            logger.info(
+                f"Scan complete: {result.threat_count} threats found, "
+                f"{result.clean_count} clean files"
             )
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.remove_css_class("warning")
-            self._status_banner.set_button_label(None)
-            self._status_banner.set_revealed(True)
-
-            # Update expander styling to indicate quarantined
-            expander.add_css_class("success")
-
-        else:
-            # Re-enable button for retry
-            button.set_sensitive(True)
-            button.set_label("Quarantine")
-
-            # Show error message based on status
-            error_messages = {
-                QuarantineStatus.FILE_NOT_FOUND: "File not found - it may have been deleted or moved",
-                QuarantineStatus.PERMISSION_DENIED: "Permission denied - cannot access file",
-                QuarantineStatus.DISK_FULL: "Disk full - cannot move file to quarantine",
-                QuarantineStatus.ALREADY_QUARANTINED: "File is already in quarantine",
-                QuarantineStatus.DATABASE_ERROR: "Database error - please try again",
-            }
-            error_msg = error_messages.get(
-                result.status,
-                result.error_message or "Failed to quarantine file"
-            )
-
-            self._status_banner.set_title(f"Quarantine failed: {error_msg}")
+        except Exception as e:
+            logger.error(f"Scan error: {e}")
+            self._status_banner.set_title(f"Scan error: {str(e)}")
             self._status_banner.add_css_class("error")
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("warning")
-            self._status_banner.set_button_label(None)
             self._status_banner.set_revealed(True)
+        finally:
+            # Clean up
+            self._is_scanning = False
+            self._scan_button.set_sensitive(True)
+            self._eicar_button.set_sensitive(True)
+            self._browse_button.set_sensitive(True)
+            self._profile_dropdown.set_sensitive(True)
+            self._manage_profiles_btn.set_sensitive(True)
+
+            # Clean up EICAR temp file if it was created
+            if self._eicar_temp_path and os.path.exists(self._eicar_temp_path):
+                try:
+                    os.remove(self._eicar_temp_path)
+                    self._eicar_temp_path = ""
+                except OSError as e:
+                    logger.warning(f"Could not remove EICAR temp file: {e}")
+
+            # Update tray if callback is set
+            if self._on_scan_state_changed:
+                self._on_scan_state_changed(False)
+
+        return False
+
+    def _create_results_section(self):
+        """Create the results display section."""
+        results_group = Adw.PreferencesGroup()
+        results_group.set_title("Scan Results")
+        results_group.set_margin_top(12)
+
+        # Create scrolled window for threats list
+        self._threats_scrolled = Gtk.ScrolledWindow()
+        self._threats_scrolled.set_vexpand(True)
+        self._threats_scrolled.set_hexpand(True)
+        self._threats_scrolled.set_min_content_height(200)
+
+        # Create list box for threat items
+        self._threats_list = Gtk.ListBox()
+        self._threats_list.add_css_class("boxed-list")
+        self._threats_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._threats_scrolled.set_child(self._threats_list)
+
+        results_group.add(self._threats_scrolled)
+        self.append(results_group)
+
+    def _display_scan_results(self, result: ScanResult):
+        """
+        Display scan results in the results section.
+
+        Shows threat details, clean count, and provides actions for each threat.
+
+        Args:
+            result: The ScanResult object containing scan details
+        """
+        # Clear previous results
+        while True:
+            child = self._threats_list.get_first_child()
+            if child is None:
+                break
+            self._threats_list.remove(child)
+
+        # Store all threat details for pagination
+        self._all_threat_details = result.threat_details or []
+        self._displayed_threat_count = 0
+        self._load_more_row = None
+
+        # Check if result set is large
+        if len(self._all_threat_details) > LARGE_RESULT_THRESHOLD:
+            # Show warning banner
+            warning_row = Gtk.ListBoxRow()
+            warning_row.set_selectable(False)
+            warning_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            warning_box.set_margin_top(8)
+            warning_box.set_margin_bottom(8)
+            warning_box.set_margin_start(12)
+            warning_box.set_margin_end(12)
+
+            warning_label = Gtk.Label()
+            warning_label.set_markup(
+                f"<b>Large Result Set</b>\n"
+                f"Found <b>{len(self._all_threat_details)}</b> threats. "
+                f"Showing first <b>{INITIAL_DISPLAY_LIMIT}</b>."
+            )
+            warning_label.set_wrap(True)
+            warning_label.set_justify(Gtk.Justification.CENTER)
+            warning_box.append(warning_label)
+
+            warning_row.set_child(warning_box)
+            warning_row.add_css_class("large-result-warning")
+            self._threats_list.append(warning_row)
+
+        # Display initial batch of threats
+        self._load_more_threats(INITIAL_DISPLAY_LIMIT)
+
+        # Update status banner
+        if result.threat_count > 0:
+            self._status_banner.set_title(
+                f"Scan complete: {result.threat_count} threat(s) found"
+            )
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("warning")
+        else:
+            self._status_banner.set_title(
+                f"Scan complete: No threats found ({result.clean_count} files scanned)"
+            )
+            self._status_banner.add_css_class("success")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.remove_css_class("warning")
+        self._status_banner.set_revealed(True)
+
+    def _load_more_threats(self, limit: int):
+        """
+        Load more threat items up to the specified limit.
+
+        Args:
+            limit: Maximum number of threats to display
+        """
+        # Remove previous "Load More" row if it exists
+        if self._load_more_row:
+            self._threats_list.remove(self._load_more_row)
+            self._load_more_row = None
+
+        # Display threats up to the limit
+        while (
+            self._displayed_threat_count < limit
+            and self._displayed_threat_count < len(self._all_threat_details)
+        ):
+            threat = self._all_threat_details[self._displayed_threat_count]
+            self._add_threat_row(threat)
+            self._displayed_threat_count += 1
+
+        # Add "Load More" button if there are more threats
+        if self._displayed_threat_count < len(self._all_threat_details):
+            self._load_more_row = Gtk.ListBoxRow()
+            self._load_more_row.set_selectable(False)
+
+            load_more_btn = Gtk.Button(
+                label=f"Show More ({len(self._all_threat_details) - self._displayed_threat_count} remaining)"
+            )
+            load_more_btn.set_margin_top(6)
+            load_more_btn.set_margin_bottom(6)
+            load_more_btn.set_margin_start(6)
+            load_more_btn.set_margin_end(6)
+            load_more_btn.add_css_class("load-more-row")
+            load_more_btn.connect(
+                "clicked",
+                lambda btn: self._load_more_threats(
+                    self._displayed_threat_count + LOAD_MORE_BATCH_SIZE
+                )
+            )
+
+            self._load_more_row.set_child(load_more_btn)
+            self._threats_list.append(self._load_more_row)
+
+    def _add_threat_row(self, threat: ThreatDetail):
+        """
+        Add a threat detail row to the results list.
+
+        Args:
+            threat: The ThreatDetail object to display
+        """
+        row = Gtk.ListBoxRow()
+        row.set_selectable(False)
+        row.add_css_class("threat-card")
+
+        # Main container
+        container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        container.set_margin_top(8)
+        container.set_margin_bottom(8)
+        container.set_margin_start(12)
+        container.set_margin_end(12)
+
+        # Header box (threat name + severity badge)
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        # Threat name
+        name_label = Gtk.Label(label=threat.name)
+        name_label.set_halign(Gtk.Align.START)
+        name_label.set_hexpand(True)
+        name_label.add_css_class("title-3")
+        header_box.append(name_label)
+
+        # Severity badge
+        severity_badge = Gtk.Label(label=threat.severity.value.upper())
+        severity_badge.add_css_class("severity-badge")
+        severity_badge.add_css_class(f"severity-{threat.severity.value}")
+        header_box.append(severity_badge)
+
+        container.append(header_box)
+
+        # File path
+        path_label = Gtk.Label(label=threat.file_path)
+        path_label.set_wrap(True)
+        path_label.set_selectable(True)
+        path_label.set_halign(Gtk.Align.START)
+        path_label.add_css_class("monospace")
+        path_label.add_css_class("dim-label")
+        container.append(path_label)
+
+        # Recommended action
+        if threat.recommended_action:
+            action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            action_label = Gtk.Label(label="Recommended Action:")
+            action_label.set_halign(Gtk.Align.START)
+            action_label.add_css_class("heading")
+            action_box.append(action_label)
+
+            action_text = Gtk.Label(label=threat.recommended_action)
+            action_text.set_wrap(True)
+            action_text.set_halign(Gtk.Align.START)
+            action_text.add_css_class("recommended-action")
+            action_box.append(action_text)
+
+            container.append(action_box)
+
+        # Action buttons
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        button_box.set_halign(Gtk.Align.START)
+        button_box.set_margin_top(4)
+
+        # Quarantine button
+        quarantine_btn = Gtk.Button(label="Quarantine")
+        quarantine_btn.set_size_request(100, -1)
+        quarantine_btn.connect(
+            "clicked",
+            self._on_quarantine_clicked,
+            threat
+        )
+        button_box.append(quarantine_btn)
+
+        # Copy path button
+        copy_btn = Gtk.Button(label="Copy Path")
+        copy_btn.set_size_request(100, -1)
+        copy_btn.connect(
+            "clicked",
+            lambda btn: copy_to_clipboard(threat.file_path)
+        )
+        button_box.append(copy_btn)
+
+        container.append(button_box)
+
+        row.set_child(container)
+        self._threats_list.append(row)
+
+    def _on_quarantine_clicked(self, button, threat: ThreatDetail):
+        """
+        Handle quarantine button click.
+
+        Moves the threat file to quarantine.
+
+        Args:
+            button: The clicked button
+            threat: The ThreatDetail to quarantine
+        """
+        try:
+            status = self._quarantine_manager.quarantine_file(threat.file_path)
+
+            if status == QuarantineStatus.SUCCESS:
+                self._status_banner.set_title(f"Quarantined: {threat.name}")
+                self._status_banner.add_css_class("success")
+                self._status_banner.remove_css_class("error")
+                self._status_banner.remove_css_class("warning")
+                # Disable button after successful quarantine
+                button.set_sensitive(False)
+                button.set_label("Quarantined")
+            else:
+                error_msg = "Unknown error"
+                if status == QuarantineStatus.ALREADY_QUARANTINED:
+                    error_msg = "File is already quarantined"
+                elif status == QuarantineStatus.NOT_FOUND:
+                    error_msg = "File not found"
+                elif status == QuarantineStatus.PERMISSION_DENIED:
+                    error_msg = "Permission denied"
+
+                self._status_banner.set_title(f"Quarantine failed: {error_msg}")
+                self._status_banner.add_css_class("error")
+                self._status_banner.remove_css_class("success")
+                self._status_banner.remove_css_class("warning")
+
+            self._status_banner.set_revealed(True)
+        except Exception as e:
+            logger.error(f"Error quarantining file: {e}")
+            self._status_banner.set_title(f"Error: {str(e)}")
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("warning")
+            self._status_banner.set_revealed(True)
+
+    def _create_status_bar(self):
+        """Create the status banner."""
+        self._status_banner = Adw.Banner()
+        self._status_banner.set_title("Ready to scan")
+        self._status_banner.set_button_label("Dismiss")
+        self._status_banner.connect("button-clicked", self._on_status_banner_dismissed)
+        self.append(self._status_banner)
+
+    def _check_clamav_status(self):
+        """
+        Check ClamAV installation status.
+
+        Shows a warning if ClamAV is not installed.
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
+        """
+        if not check_clamav_installed():
+            self._status_banner.set_title(
+                "Warning: ClamAV is not installed. Please install it to use the scanner."
+            )
+            self._status_banner.add_css_class("warning")
+            self._status_banner.remove_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.set_revealed(True)
+            self._scan_button.set_sensitive(False)
+            self._eicar_button.set_sensitive(False)
+
+        return False
+
+    def set_scan_state_changed_callback(self, callback):
+        """
+        Set a callback for scan state changes.
+
+        Used by the tray integration to update the tray icon when scanning.
+
+        Args:
+            callback: Function to call with (is_scanning: bool) when state changes
+        """
+        self._on_scan_state_changed = callback
+
+    def get_scan_results_text(self) -> str:
+        """
+        Get scan results formatted as text.
+
+        Used for copying/sharing results.
+
+        Returns:
+            Formatted text representation of scan results
+        """
+        return format_results_as_text(self._all_threat_details)

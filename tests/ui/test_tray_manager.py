@@ -11,7 +11,7 @@ import pytest
 # Mock gi and GTK before any imports
 _mock_gi = mock.MagicMock()
 _mock_glib = mock.MagicMock()
-_mock_glib.idle_add = mock.MagicMock(side_effect=lambda func: func())
+_mock_glib.idle_add = mock.MagicMock(side_effect=lambda func, *args: func(*args))
 
 _mock_repo = mock.MagicMock()
 _mock_repo.GLib = _mock_glib

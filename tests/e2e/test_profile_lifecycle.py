@@ -18,10 +18,6 @@ from unittest import mock
 
 import pytest
 
-# Mock gi module before importing to avoid GTK dependencies in tests
-sys.modules["gi"] = mock.MagicMock()
-sys.modules["gi.repository"] = mock.MagicMock()
-
 from src.profiles.profile_manager import ProfileManager
 from src.profiles.profile_storage import ProfileStorage
 from src.profiles.models import ScanProfile

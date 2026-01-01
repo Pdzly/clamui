@@ -136,7 +136,7 @@ class StatisticsCalculator:
 
         return (start, now)
 
-    def _parse_timestamp(self, timestamp: str) -> Optional[datetime]:
+    def _parse_timestamp(self, timestamp: Optional[str]) -> Optional[datetime]:
         """
         Parse an ISO format timestamp string to datetime.
 
@@ -144,8 +144,10 @@ class StatisticsCalculator:
             timestamp: ISO format timestamp string
 
         Returns:
-            datetime object or None if parsing fails
+            datetime object or None if parsing fails or timestamp is None
         """
+        if timestamp is None:
+            return None
         try:
             # Handle ISO format with or without microseconds
             if "." in timestamp:

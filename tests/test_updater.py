@@ -3,28 +3,50 @@
 
 import sys
 from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Store original gi modules to restore later (if they exist)
-_original_gi = sys.modules.get("gi")
-_original_gi_repository = sys.modules.get("gi.repository")
 
-# Mock gi module before importing src.core to avoid GTK dependencies in tests
-sys.modules["gi"] = mock.MagicMock()
-sys.modules["gi.repository"] = mock.MagicMock()
+def _clear_src_modules():
+    """Clear all cached src.* modules to ensure clean imports."""
+    modules_to_remove = [mod for mod in list(sys.modules.keys()) if mod.startswith("src.")]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
 
-from src.core.updater import FreshclamUpdater, UpdateResult, UpdateStatus
 
-# Restore original gi modules after imports are done
-if _original_gi is not None:
-    sys.modules["gi"] = _original_gi
-else:
-    del sys.modules["gi"]
-if _original_gi_repository is not None:
-    sys.modules["gi.repository"] = _original_gi_repository
-else:
-    del sys.modules["gi.repository"]
+@pytest.fixture(autouse=True)
+def updater_test_isolation():
+    """Ensure updater tests have proper module isolation."""
+    global FreshclamUpdater, UpdateResult, UpdateStatus
+
+    # Clear any cached modules before test
+    _clear_src_modules()
+
+    # Set up GI mocks
+    mock_gi = MagicMock()
+    mock_gi_repository = MagicMock()
+
+    with patch.dict(sys.modules, {
+        'gi': mock_gi,
+        'gi.repository': mock_gi_repository,
+        'gi.repository.Gtk': MagicMock(),
+        'gi.repository.GLib': MagicMock(),
+    }):
+        # Import and expose the classes for tests
+        from src.core.updater import (
+            FreshclamUpdater as _FreshclamUpdater,
+            UpdateResult as _UpdateResult,
+            UpdateStatus as _UpdateStatus,
+        )
+        FreshclamUpdater = _FreshclamUpdater
+        UpdateResult = _UpdateResult
+        UpdateStatus = _UpdateStatus
+
+        yield
+
+    # Clear after test
+    _clear_src_modules()
 
 
 class TestUpdaterBuildCommand:

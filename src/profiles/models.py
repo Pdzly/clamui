@@ -3,6 +3,7 @@
 Data models for scan profile management.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,19 +41,22 @@ class ScanProfile:
         """
         Convert the profile to a dictionary for JSON serialization.
 
+        Returns a deep copy to prevent mutations of the returned dict from
+        affecting the original profile object.
+
         Returns:
             Dictionary representation of the profile
         """
         return {
             "id": self.id,
             "name": self.name,
-            "targets": self.targets,
-            "exclusions": self.exclusions,
+            "targets": copy.deepcopy(self.targets),
+            "exclusions": copy.deepcopy(self.exclusions),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "is_default": self.is_default,
             "description": self.description,
-            "options": self.options,
+            "options": copy.deepcopy(self.options),
         }
 
     @classmethod

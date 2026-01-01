@@ -3,40 +3,98 @@
 
 import sys
 from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Store original gi modules to restore later (if they exist)
-_original_gi = sys.modules.get("gi")
-_original_gi_repository = sys.modules.get("gi.repository")
 
-# Mock gi module before importing src.core to avoid GTK dependencies in tests
-sys.modules["gi"] = mock.MagicMock()
-sys.modules["gi.repository"] = mock.MagicMock()
+def _clear_src_modules():
+    """Clear all cached src.* modules to ensure clean imports."""
+    modules_to_remove = [mod for mod in list(sys.modules.keys()) if mod.startswith("src.")]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
 
-from src.core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail, glob_to_regex, validate_pattern
 
-# Restore original gi modules after imports are done
-if _original_gi is not None:
-    sys.modules["gi"] = _original_gi
-else:
-    del sys.modules["gi"]
-if _original_gi_repository is not None:
-    sys.modules["gi.repository"] = _original_gi_repository
-else:
-    del sys.modules["gi.repository"]
+@pytest.fixture(autouse=True)
+def scanner_test_isolation():
+    """Ensure scanner tests have proper module isolation."""
+    global Scanner, ScanResult, ScanStatus, ThreatDetail, glob_to_regex, validate_pattern
+
+    # Clear any cached modules before test
+    _clear_src_modules()
+
+    # Set up GI mocks
+    mock_gi = MagicMock()
+    mock_gi_repository = MagicMock()
+
+    with patch.dict(sys.modules, {
+        'gi': mock_gi,
+        'gi.repository': mock_gi_repository,
+        'gi.repository.Gtk': MagicMock(),
+        'gi.repository.GLib': MagicMock(),
+    }):
+        # Import and expose the classes/functions for tests
+        from src.core.scanner import (
+            Scanner as _Scanner,
+            ScanResult as _ScanResult,
+            ScanStatus as _ScanStatus,
+            ThreatDetail as _ThreatDetail,
+            glob_to_regex as _glob_to_regex,
+            validate_pattern as _validate_pattern,
+        )
+        Scanner = _Scanner
+        ScanResult = _ScanResult
+        ScanStatus = _ScanStatus
+        ThreatDetail = _ThreatDetail
+        glob_to_regex = _glob_to_regex
+        validate_pattern = _validate_pattern
+
+        yield
+
+    # Clear after test
+    _clear_src_modules()
+
+
+@pytest.fixture
+def scanner_class():
+    """Get Scanner class with proper mocking."""
+    return Scanner
+
+
+@pytest.fixture
+def scan_result_class():
+    """Get ScanResult class with proper mocking."""
+    return ScanResult
+
+
+@pytest.fixture
+def scan_status_class():
+    """Get ScanStatus enum with proper mocking."""
+    return ScanStatus
+
+
+@pytest.fixture
+def threat_detail_class():
+    """Get ThreatDetail class with proper mocking."""
+    return ThreatDetail
+
+
+@pytest.fixture
+def pattern_functions():
+    """Get pattern utility functions."""
+    return glob_to_regex, validate_pattern
 
 
 class TestScannerBuildCommand:
     """Tests for the Scanner._build_command method."""
 
-    def test_build_command_basic_file(self, tmp_path):
+    def test_build_command_basic_file(self, tmp_path, scanner_class):
         """Test _build_command for a basic file scan without Flatpak."""
         # Create a temporary file for testing
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        scanner = Scanner()
+        scanner = scanner_class()
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
@@ -49,9 +107,9 @@ class TestScannerBuildCommand:
         # Should NOT have -r flag for file (non-recursive)
         assert "-r" not in cmd
 
-    def test_build_command_directory_recursive(self, tmp_path):
+    def test_build_command_directory_recursive(self, tmp_path, scanner_class):
         """Test _build_command for recursive directory scan."""
-        scanner = Scanner()
+        scanner = scanner_class()
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
@@ -63,12 +121,12 @@ class TestScannerBuildCommand:
         assert "-i" in cmd
         assert str(tmp_path) in cmd
 
-    def test_build_command_fallback_to_clamscan(self, tmp_path):
+    def test_build_command_fallback_to_clamscan(self, tmp_path, scanner_class):
         """Test _build_command falls back to 'clamscan' when path not found."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        scanner = Scanner()
+        scanner = scanner_class()
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value=None):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
@@ -77,12 +135,12 @@ class TestScannerBuildCommand:
         # Should fall back to 'clamscan'
         assert cmd[0] == "clamscan"
 
-    def test_build_command_wraps_with_flatpak_spawn(self, tmp_path):
+    def test_build_command_wraps_with_flatpak_spawn(self, tmp_path, scanner_class):
         """Test _build_command wraps command with flatpak-spawn when in Flatpak."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        scanner = Scanner()
+        scanner = scanner_class()
 
         # Mock wrap_host_command to add flatpak-spawn prefix (simulating Flatpak environment)
         def mock_wrap(cmd):
@@ -99,12 +157,12 @@ class TestScannerBuildCommand:
         assert "-i" in cmd
         assert str(test_file) in cmd
 
-    def test_build_command_no_wrap_outside_flatpak(self, tmp_path):
+    def test_build_command_no_wrap_outside_flatpak(self, tmp_path, scanner_class):
         """Test _build_command does NOT wrap when not in Flatpak."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
-        scanner = Scanner()
+        scanner = scanner_class()
 
         # Mock wrap_host_command to return command unchanged (not in Flatpak)
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
@@ -234,13 +292,16 @@ class TestScannerBuildCommand:
         assert "--exclude" not in cmd
         assert "--exclude-dir" not in cmd
 
-        # Double-check none of the disabled patterns appear in the command
-        all_args = " ".join(cmd)
-        assert "log" not in all_args.lower()
-        assert "node_modules" not in all_args
-        assert "tmp" not in all_args.lower()
-        assert "pycache" not in all_args
-        assert ".git" not in all_args
+        # Double-check none of the disabled patterns appear as exclusion args
+        # We need to exclude the path argument itself (which may contain /tmp/)
+        # Get only the exclusion-related args by filtering out the scan path and base command
+        exclusion_args = [arg for arg in cmd if arg not in ["/usr/bin/clamscan", "-r", "-i", str(test_dir)]]
+        all_exclusion_args = " ".join(exclusion_args)
+        assert "log" not in all_exclusion_args.lower()
+        assert "node_modules" not in all_exclusion_args
+        assert "tmp" not in all_exclusion_args.lower()
+        assert "pycache" not in all_exclusion_args
+        assert ".git" not in all_exclusion_args
 
 
 class TestScannerFlatpakIntegration:

@@ -2,17 +2,208 @@
 """
 Pytest configuration and shared fixtures for ClamUI tests.
 
-This file provides common test configuration. GTK/GI mocking is handled
-by individual test files as needed since different tests require different
-mocking strategies.
+This file provides:
+- Centralized GTK/GI mocking for all UI tests
+- Common test utilities and fixtures
+- Module cache management for test isolation
 """
 
-import os
-import tempfile
+import sys
 from pathlib import Path
 from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+# =============================================================================
+# GTK Mock Base Classes
+# =============================================================================
+# These classes allow GTK widgets to work with object.__new__() for Python 3.13+
+# compatibility. They must be real classes, not MagicMock, for inheritance to work.
+
+
+class MockGtkWidget:
+    """
+    Base mock class for all GTK widgets.
+
+    Supports object.__new__() instantiation and returns MagicMock for
+    any undefined attribute access, enabling method chaining.
+    """
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __getattr__(self, name):
+        """Return a MagicMock for any undefined attribute access."""
+        return MagicMock()
+
+
+class MockGtkBox(MockGtkWidget):
+    """Mock for Gtk.Box with Orientation constants."""
+
+    class Orientation:
+        VERTICAL = 0
+        HORIZONTAL = 1
+
+    @classmethod
+    def do_unmap(cls, instance):
+        """Mock for Gtk.Box.do_unmap class method."""
+        pass
+
+    @classmethod
+    def do_map(cls, instance):
+        """Mock for Gtk.Box.do_map class method."""
+        pass
+
+
+class MockAdwPreferencesWindow(MockGtkWidget):
+    """Mock for Adw.PreferencesWindow."""
+    pass
+
+
+class MockAdwDialog(MockGtkWidget):
+    """Mock for Adw.Dialog."""
+    pass
+
+
+class MockAdwApplicationWindow(MockGtkWidget):
+    """Mock for Adw.ApplicationWindow."""
+    pass
+
+
+class MockGtkListBox(MockGtkWidget):
+    """Mock for Gtk.ListBox."""
+    pass
+
+
+class MockGtkListBoxRow(MockGtkWidget):
+    """Mock for Gtk.ListBoxRow."""
+    pass
+
+
+# =============================================================================
+# Module Cache Management
+# =============================================================================
+
+
+def _clear_src_modules():
+    """
+    Clear all cached src.* modules from sys.modules.
+
+    This ensures each test starts with a fresh import of source modules,
+    preventing stale mock references from affecting subsequent tests.
+    """
+    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
+
+
+# =============================================================================
+# Centralized GTK/GI Mocking
+# =============================================================================
+
+
+@pytest.fixture
+def mock_gi_modules():
+    """
+    Unified GTK/GLib mocking for UI tests.
+
+    This fixture provides consistent mocking of GTK/GLib/Adw modules across
+    all test files. It:
+    - Clears cached src.* modules before and after each test
+    - Sets up real base classes for widgets (required for object.__new__)
+    - Provides access to mock objects via returned dict
+
+    Usage:
+        def test_something(mock_gi_modules):
+            gtk = mock_gi_modules['gtk']
+            # gtk.SomeClass is available
+
+        # Or just use it for side effects:
+        def test_something(mock_gi_modules):
+            from src.ui.some_view import SomeView
+            # SomeView can now be imported with mocked GTK
+
+    Yields:
+        dict: Dictionary containing mock objects for gtk, adw, gio, glib
+    """
+    # Clear any cached src modules first
+    _clear_src_modules()
+
+    # Create mock modules
+    mock_gtk = MagicMock()
+    mock_adw = MagicMock()
+    mock_gio = MagicMock()
+    mock_glib = MagicMock()
+
+    # Set real classes for widgets (required for object.__new__)
+    mock_gtk.Box = MockGtkBox
+    mock_gtk.Widget = MockGtkWidget
+    mock_gtk.ListBox = MockGtkListBox
+    mock_gtk.ListBoxRow = MockGtkListBoxRow
+    mock_gtk.Orientation = MockGtkBox.Orientation
+
+    mock_adw.PreferencesWindow = MockAdwPreferencesWindow
+    mock_adw.Dialog = MockAdwDialog
+    mock_adw.ApplicationWindow = MockAdwApplicationWindow
+    mock_adw.ActionRow = MagicMock()  # ActionRow instance - tests can set return_value
+
+    # Build gi module structure
+    mock_gi_module = MagicMock()
+    mock_gi_module.require_version = MagicMock()
+
+    mock_repository = MagicMock()
+    mock_repository.Gtk = mock_gtk
+    mock_repository.Adw = mock_adw
+    mock_repository.Gio = mock_gio
+    mock_repository.GLib = mock_glib
+
+    # Patch sys.modules
+    with patch.dict(sys.modules, {
+        'gi': mock_gi_module,
+        'gi.repository': mock_repository,
+        'gi.repository.Gtk': mock_gtk,
+        'gi.repository.Adw': mock_adw,
+        'gi.repository.Gio': mock_gio,
+        'gi.repository.GLib': mock_glib,
+    }):
+        yield {
+            'gtk': mock_gtk,
+            'adw': mock_adw,
+            'gio': mock_gio,
+            'glib': mock_glib,
+            'gi': mock_gi_module,
+            'repository': mock_repository,
+        }
+
+    # Cleanup after test
+    _clear_src_modules()
+
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+
+def create_instance_without_init(cls):
+    """
+    Create an instance of a class without calling __init__.
+
+    This is a Python 3.13+ compatible alternative to:
+        with mock.patch.object(cls, '__init__', lambda self, **kwargs: None):
+            instance = cls()
+
+    Python 3.13 disallows patching __init__ as a magic method, so we use
+    object.__new__ to bypass it entirely.
+
+    Args:
+        cls: The class to instantiate
+
+    Returns:
+        An instance of cls with no attributes set
+    """
+    return object.__new__(cls)
 
 
 # EICAR standard test string - recognized by antivirus software as a test file

@@ -25,7 +25,8 @@ def glob_to_regex(pattern: str) -> str:
     Convert a user-friendly glob pattern to POSIX ERE for ClamAV.
 
     Uses fnmatch.translate() for conversion and strips Python-specific
-    regex suffixes for ClamAV compatibility.
+    regex suffixes for ClamAV compatibility. Adds anchors (^ and $) to ensure
+    the pattern matches the entire string, not just a substring.
 
     Note: fnmatch doesn't support '**' recursive wildcards - document as limitation.
 
@@ -33,7 +34,7 @@ def glob_to_regex(pattern: str) -> str:
         pattern: Glob pattern (e.g., '*.log', 'node_modules', '/tmp/*')
 
     Returns:
-        POSIX Extended Regular Expression string
+        POSIX Extended Regular Expression string with anchors
     """
     regex = fnmatch.translate(pattern)
     # Strip fnmatch's \Z(?ms) suffix for ClamAV compatibility
@@ -44,6 +45,11 @@ def glob_to_regex(pattern: str) -> str:
     # Handle newer Python versions that use (?s:pattern)\Z format
     if regex.startswith("(?s:") and regex.endswith(")"):
         regex = regex[4:-1]
+    # Add anchors to ensure full string match (prevents substring matching)
+    if not regex.startswith("^"):
+        regex = "^" + regex
+    if not regex.endswith("$"):
+        regex = regex + "$"
     return regex
 
 
@@ -576,16 +582,16 @@ class Scanner:
                     threat_details.append(threat_detail)
                     infected_count += 1
 
-            # Look for summary line (format: "Scanned: X files, Y directories, Z infected files")
-            elif line.startswith("Scanned:"):
-                # Parse: "Scanned: 1234 files, 56 directories, 2 infected files"
-                # Use regex to extract numbers
-                match = re.search(r"Scanned:\s+(\d+)\s+files,\s+(\d+)\s+directories,\s+(\d+)\s+infected", line)
+            # Look for individual summary lines from ClamAV output
+            # Format: "Scanned files: 10" or "Scanned directories: 1" or "Infected files: 0"
+            elif line.startswith("Scanned files:"):
+                match = re.search(r"Scanned files:\s*(\d+)", line)
                 if match:
                     scanned_files = int(match.group(1))
-                    scanned_dirs = int(match.group(2))
-                    # The infected count from summary should match what we counted
-                    # but we use our manual count to be consistent
+            elif line.startswith("Scanned directories:"):
+                match = re.search(r"Scanned directories:\s*(\d+)", line)
+                if match:
+                    scanned_dirs = int(match.group(1))
 
         # Determine overall status based on exit code
         if exit_code == 0:

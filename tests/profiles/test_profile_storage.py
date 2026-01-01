@@ -29,13 +29,13 @@ def create_test_profile(
     return ScanProfile(
         id=profile_id,
         name=name,
-        targets=targets or ["/home/user"],
-        exclusions=exclusions or {},
+        targets=["/home/user"] if targets is None else targets,
+        exclusions={} if exclusions is None else exclusions,
         created_at=created_at,
         updated_at=updated_at,
         is_default=is_default,
         description=description,
-        options=options or {},
+        options={} if options is None else options,
     )
 
 

@@ -505,7 +505,7 @@ class TestConfigChange:
         )
         result1 = manager1.quarantine_file(str(file1), "Threat1")
         assert result1.is_success
-        assert temp_environment["quarantine_dir1"] in Path(result1.entry.quarantine_path).parent.parts[-1]
+        assert str(temp_environment["quarantine_dir1"]) in str(Path(result1.entry.quarantine_path).parent)
 
         # Create another file
         file2 = source_dir / "test2.exe"
@@ -518,7 +518,7 @@ class TestConfigChange:
         )
         result2 = manager2.quarantine_file(str(file2), "Threat2")
         assert result2.is_success
-        assert temp_environment["quarantine_dir2"] in Path(result2.entry.quarantine_path).parent.parts[-1]
+        assert str(temp_environment["quarantine_dir2"]) in str(Path(result2.entry.quarantine_path).parent)
 
         # Verify files are in their respective directories
         assert Path(result1.entry.quarantine_path).parent == temp_environment["quarantine_dir1"]

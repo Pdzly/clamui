@@ -6,10 +6,6 @@ from unittest import mock
 
 import pytest
 
-# Mock gi module before importing to avoid GTK dependencies in tests
-sys.modules["gi"] = mock.MagicMock()
-sys.modules["gi.repository"] = mock.MagicMock()
-
 from src.core.battery_manager import BatteryManager, BatteryStatus, PSUTIL_AVAILABLE
 
 

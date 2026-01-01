@@ -121,7 +121,8 @@ class ProfileStorage:
                         pass
                     raise
 
-            except (OSError, PermissionError):
+            except Exception:
+                # Catch all exceptions (including OSError, PermissionError)
                 return False
 
     def _backup_corrupted_file(self) -> None:

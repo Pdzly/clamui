@@ -59,6 +59,11 @@ def mock_gtk_modules(monkeypatch):
 
     yield
 
+    # Clean up cached src.* modules to prevent gi pollution
+    mods_to_remove = [m for m in sys.modules if m.startswith("src.")]
+    for mod in mods_to_remove:
+        del sys.modules[mod]
+
 
 class TestTrayMenuActionsIntegration:
     """Integration tests for tray menu actions triggering app operations."""

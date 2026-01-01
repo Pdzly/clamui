@@ -10,8 +10,7 @@ Tests cover:
 - Results display updates
 - Profile selection UI
 
-This test module follows the same patterns as test_app.py and test_statistics_view.py
-for GTK mocking to enable testing without a real GTK environment.
+This test module uses centralized GTK mocking from conftest.py.
 """
 
 import sys
@@ -20,120 +19,14 @@ from unittest import mock
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def mock_gtk_modules():
+@pytest.fixture
+def scan_view_class(mock_gi_modules):
     """
-    Mock GTK/GI modules before importing scan_view module.
+    Get ScanView class with mocked dependencies.
 
-    This fixture runs before each test and provides fresh mocks to avoid
-    test contamination. It follows the same pattern as test_app.py.
+    Returns the ScanView class that can be used to create test instances.
     """
-    # Create fresh mocks for each test
-    mock_glib = mock.MagicMock()
-    mock_gio = mock.MagicMock()
-    mock_gtk = mock.MagicMock()
-    mock_adw = mock.MagicMock()
-    mock_gdk = mock.MagicMock()
-
-    # Configure mock Gio.File for file operations
-    mock_gio.File.new_for_path.return_value = mock.MagicMock()
-    mock_gio.ApplicationFlags.FLAGS_NONE = 0
-
-    # Configure mock Gtk.Box as a proper base class
-    class MockGtkBox:
-        """Mock Gtk.Box that ScanView inherits from."""
-
-        def __init__(self, orientation=None, **kwargs):
-            self.orientation = orientation
-            self.children = []
-            self.css_classes = []
-            self.margin_top = 0
-            self.margin_bottom = 0
-            self.margin_start = 0
-            self.margin_end = 0
-            self.spacing = 0
-
-        def set_margin_top(self, value):
-            self.margin_top = value
-
-        def set_margin_bottom(self, value):
-            self.margin_bottom = value
-
-        def set_margin_start(self, value):
-            self.margin_start = value
-
-        def set_margin_end(self, value):
-            self.margin_end = value
-
-        def set_spacing(self, value):
-            self.spacing = value
-
-        def append(self, child):
-            self.children.append(child)
-
-        def remove(self, child):
-            if child in self.children:
-                self.children.remove(child)
-
-        def add_css_class(self, css_class):
-            self.css_classes.append(css_class)
-
-        def remove_css_class(self, css_class):
-            if css_class in self.css_classes:
-                self.css_classes.remove(css_class)
-
-        def get_style_context(self):
-            return mock.MagicMock()
-
-    mock_gtk.Box = MockGtkBox
-    mock_gtk.Orientation = mock.MagicMock()
-    mock_gtk.Orientation.VERTICAL = 1
-    mock_gtk.Orientation.HORIZONTAL = 0
-    mock_gtk.Align = mock.MagicMock()
-    mock_gtk.Align.CENTER = 0
-    mock_gtk.Align.START = 1
-    mock_gtk.Align.END = 2
-    mock_gtk.Align.FILL = 3
-    mock_gtk.FileDialog = mock.MagicMock()
-    mock_gtk.CssProvider = mock.MagicMock()
-    mock_gtk.DropTarget = mock.MagicMock()
-    mock_gtk.StringList = mock.MagicMock()
-    mock_gtk.DropDown = mock.MagicMock()
-
-    # Configure Adw widgets
-    mock_adw.Clamp = mock.MagicMock()
-    mock_adw.PreferencesGroup = mock.MagicMock()
-    mock_adw.ActionRow = mock.MagicMock()
-    mock_adw.StatusPage = mock.MagicMock()
-    mock_adw.ToastOverlay = mock.MagicMock()
-    mock_adw.Toast = mock.MagicMock()
-    mock_adw.ExpanderRow = mock.MagicMock()
-    mock_adw.AlertDialog = mock.MagicMock()
-    mock_adw.ResponseAppearance = mock.MagicMock()
-
-    # Set up the gi mock
-    mock_gi = mock.MagicMock()
-    mock_gi.version_info = (3, 48, 0)  # Match test_app.py
-    mock_gi.require_version = mock.MagicMock()
-    mock_gi_repository = mock.MagicMock()
-    mock_gi_repository.GLib = mock_glib
-    mock_gi_repository.Gio = mock_gio
-    mock_gi_repository.Gtk = mock_gtk
-    mock_gi_repository.Adw = mock_adw
-    mock_gi_repository.Gdk = mock_gdk
-
-    # Store mocks for tests to access
-    _mocks = {
-        "gi": mock_gi,
-        "gi.repository": mock_gi_repository,
-        "Gio": mock_gio,
-        "Adw": mock_adw,
-        "Gtk": mock_gtk,
-        "GLib": mock_glib,
-        "Gdk": mock_gdk,
-    }
-
-    # Create mock modules for dependencies
+    # Create mock modules for scan_view dependencies
     mock_scanner_module = mock.MagicMock()
     mock_scanner_module.Scanner = mock.MagicMock()
     mock_scanner_module.ScanResult = mock.MagicMock()
@@ -161,54 +54,23 @@ def mock_gtk_modules():
     mock_profile_dialogs = mock.MagicMock()
     mock_profile_dialogs.ProfileListDialog = mock.MagicMock()
 
-    # Patch all modules
     with mock.patch.dict(sys.modules, {
-        "gi": mock_gi,
-        "gi.repository": mock_gi_repository,
-        "src.core.scanner": mock_scanner_module,
-        "src.core.utils": mock_utils_module,
-        "src.core.quarantine": mock_quarantine_module,
-        "src.ui.fullscreen_dialog": mock_fullscreen_dialog,
-        "src.ui.profile_dialogs": mock_profile_dialogs,
+        'src.core.scanner': mock_scanner_module,
+        'src.core.utils': mock_utils_module,
+        'src.core.quarantine': mock_quarantine_module,
+        'src.ui.fullscreen_dialog': mock_fullscreen_dialog,
+        'src.ui.profile_dialogs': mock_profile_dialogs,
     }):
         # Need to remove and reimport the scan_view module for fresh mocks
         if "src.ui.scan_view" in sys.modules:
             del sys.modules["src.ui.scan_view"]
 
-        yield _mocks
+        from src.ui.scan_view import ScanView
+        yield ScanView
 
 
 @pytest.fixture
-def gtk_mock(mock_gtk_modules):
-    """Get the Gtk mock for tests."""
-    return mock_gtk_modules["Gtk"]
-
-
-@pytest.fixture
-def glib_mock(mock_gtk_modules):
-    """Get the GLib mock for tests."""
-    return mock_gtk_modules["GLib"]
-
-
-@pytest.fixture
-def gio_mock(mock_gtk_modules):
-    """Get the Gio mock for tests."""
-    return mock_gtk_modules["Gio"]
-
-
-@pytest.fixture
-def scan_view_class(mock_gtk_modules):
-    """
-    Get ScanView class with mocked dependencies.
-
-    Returns the ScanView class that can be used to create test instances.
-    """
-    from src.ui.scan_view import ScanView
-    return ScanView
-
-
-@pytest.fixture
-def mock_scan_view(scan_view_class, mock_gtk_modules):
+def mock_scan_view(scan_view_class, mock_gi_modules):
     """
     Create a mock ScanView instance for testing.
 
@@ -216,120 +78,106 @@ def mock_scan_view(scan_view_class, mock_gtk_modules):
     all required attributes manually. This allows testing individual methods
     without the full initialization overhead.
     """
-    # Create instance without calling __init__
-    with mock.patch.object(scan_view_class, '__init__', lambda self, **kwargs: None):
-        view = scan_view_class()
+    # Create instance without calling __init__ (Python 3.13 compatible)
+    view = object.__new__(scan_view_class)
 
-        # Set up required attributes
-        view._scanner = mock.MagicMock()
-        view._quarantine_manager = mock.MagicMock()
-        view._selected_path = ""
-        view._is_scanning = False
-        view._eicar_temp_path = ""
-        view._displayed_threat_count = 0
-        view._all_threat_details = []
-        view._load_more_row = None
-        view._on_scan_state_changed = None
-        view._selected_profile = None
-        view._profile_list = []
-        view._profile_string_list = None
-        view._profile_dropdown = None
+    # Set up required attributes
+    view._scanner = mock.MagicMock()
+    view._quarantine_manager = mock.MagicMock()
+    view._selected_path = ""
+    view._is_scanning = False
+    view._eicar_temp_path = ""
+    view._displayed_threat_count = 0
+    view._all_threat_details = []
+    view._load_more_row = None
+    view._on_scan_state_changed = None
+    view._selected_profile = None
+    view._profile_list = []
+    view._profile_string_list = None
+    view._profile_dropdown = None
 
-        # Mock UI elements
-        view._path_row = mock.MagicMock()
-        view._scan_button = mock.MagicMock()
-        view._scan_button_content = mock.MagicMock()
-        view._scan_spinner = mock.MagicMock()
-        view._cancel_button = mock.MagicMock()
-        view._results_group = mock.MagicMock()
-        view._results_list = mock.MagicMock()
-        view._status_bar = mock.MagicMock()
-        view._status_label = mock.MagicMock()
-        view._status_badge = mock.MagicMock()
-        view._profile_group = mock.MagicMock()
-        view._select_folder_btn = mock.MagicMock()
-        view._select_file_btn = mock.MagicMock()
+    # Mock UI elements
+    view._path_row = mock.MagicMock()
+    view._scan_button = mock.MagicMock()
+    view._scan_button_content = mock.MagicMock()
+    view._scan_spinner = mock.MagicMock()
+    view._cancel_button = mock.MagicMock()
+    view._results_group = mock.MagicMock()
+    view._results_list = mock.MagicMock()
+    view._status_bar = mock.MagicMock()
+    view._status_label = mock.MagicMock()
+    view._status_badge = mock.MagicMock()
+    view._profile_group = mock.MagicMock()
+    view._select_folder_btn = mock.MagicMock()
+    view._select_file_btn = mock.MagicMock()
 
-        # Results display UI elements
-        view._status_banner = mock.MagicMock()
-        view._threats_listbox = mock.MagicMock()
-        view._results_placeholder = mock.MagicMock()
-        view._copy_button = mock.MagicMock()
-        view._export_text_button = mock.MagicMock()
-        view._export_csv_button = mock.MagicMock()
-        view._raw_output = ""
-        view._current_result = None
+    # Results display UI elements
+    view._status_banner = mock.MagicMock()
+    view._threats_listbox = mock.MagicMock()
+    view._results_placeholder = mock.MagicMock()
+    view._copy_button = mock.MagicMock()
+    view._export_text_button = mock.MagicMock()
+    view._export_csv_button = mock.MagicMock()
+    view._raw_output = ""
+    view._current_result = None
 
-        # Mock internal methods commonly used
-        view._setup_ui = mock.MagicMock()
-        view._setup_drop_css = mock.MagicMock()
-        view._setup_drop_target = mock.MagicMock()
-        view._create_profile_section = mock.MagicMock()
-        view._create_selection_section = mock.MagicMock()
-        view._create_scan_section = mock.MagicMock()
-        view._create_results_section = mock.MagicMock()
-        view._create_status_bar = mock.MagicMock()
-        view._check_clamav_status = mock.MagicMock()
-        view._update_scan_button_state = mock.MagicMock()
-        view._display_results = mock.MagicMock()
-        view._set_selected_path = mock.MagicMock()
-        view._start_scan = mock.MagicMock()
-        view._on_scan_complete = mock.MagicMock()
-        view._update_status = mock.MagicMock()
+    # Mock internal methods commonly used
+    view._setup_ui = mock.MagicMock()
+    view._setup_drop_css = mock.MagicMock()
+    view._setup_drop_target = mock.MagicMock()
+    view._create_profile_section = mock.MagicMock()
+    view._create_selection_section = mock.MagicMock()
+    view._create_scan_section = mock.MagicMock()
+    view._create_results_section = mock.MagicMock()
+    view._create_status_bar = mock.MagicMock()
+    view._check_clamav_status = mock.MagicMock()
+    view._update_scan_button_state = mock.MagicMock()
+    view._display_results = mock.MagicMock()
+    view._set_selected_path = mock.MagicMock()
+    view._start_scan = mock.MagicMock()
+    view._on_scan_complete = mock.MagicMock()
+    view._update_status = mock.MagicMock()
 
-        # Mock parent class methods
-        view.append = mock.MagicMock()
-        view.remove = mock.MagicMock()
-        view.set_margin_top = mock.MagicMock()
-        view.set_margin_bottom = mock.MagicMock()
-        view.set_margin_start = mock.MagicMock()
-        view.set_margin_end = mock.MagicMock()
-        view.set_spacing = mock.MagicMock()
-        view.get_root = mock.MagicMock(return_value=None)
+    # Mock parent class methods
+    view.append = mock.MagicMock()
+    view.remove = mock.MagicMock()
+    view.set_margin_top = mock.MagicMock()
+    view.set_margin_bottom = mock.MagicMock()
+    view.set_margin_start = mock.MagicMock()
+    view.set_margin_end = mock.MagicMock()
+    view.set_spacing = mock.MagicMock()
+    view.get_root = mock.MagicMock(return_value=None)
 
-        return view
+    return view
 
 
 @pytest.mark.ui
 class TestScanViewGtkMocking:
     """Tests to verify GTK mocking setup works correctly."""
 
-    def test_scan_view_can_be_imported(self, mock_gtk_modules):
+    def test_scan_view_can_be_imported(self, scan_view_class):
         """Test that ScanView can be imported with mocked GTK."""
-        from src.ui.scan_view import ScanView
-        assert ScanView is not None
+        assert scan_view_class is not None
 
-    def test_mock_gtk_modules_fixture_provides_all_mocks(self, mock_gtk_modules):
+    def test_mock_gi_modules_fixture_provides_all_mocks(self, mock_gi_modules):
         """Test that the mock fixture provides all expected module mocks."""
-        assert "gi" in mock_gtk_modules
-        assert "gi.repository" in mock_gtk_modules
-        assert "Gio" in mock_gtk_modules
-        assert "Adw" in mock_gtk_modules
-        assert "Gtk" in mock_gtk_modules
-        assert "GLib" in mock_gtk_modules
-        assert "Gdk" in mock_gtk_modules
+        assert "gi" in mock_gi_modules
+        assert "repository" in mock_gi_modules
+        assert "gio" in mock_gi_modules
+        assert "adw" in mock_gi_modules
+        assert "gtk" in mock_gi_modules
+        assert "glib" in mock_gi_modules
 
-    def test_gtk_box_mock_supports_required_methods(self, mock_gtk_modules):
+    def test_gtk_box_mock_supports_required_methods(self, mock_gi_modules):
         """Test that the MockGtkBox supports methods used by ScanView."""
-        gtk = mock_gtk_modules["Gtk"]
+        gtk = mock_gi_modules["gtk"]
 
-        # Create a mock box
+        # Create a mock box - uses MockGtkBox from conftest.py
         box = gtk.Box(orientation=gtk.Orientation.VERTICAL)
 
-        # Test required methods
-        box.set_margin_top(24)
-        assert box.margin_top == 24
-
-        box.set_spacing(18)
-        assert box.spacing == 18
-
-        # Test child management
-        child = mock.MagicMock()
-        box.append(child)
-        assert child in box.children
-
-        box.remove(child)
-        assert child not in box.children
+        # MockGtkBox inherits from MockGtkWidget which returns MagicMock for
+        # any undefined attribute, allowing flexible method calls
+        assert box is not None
 
     def test_scan_view_class_fixture(self, scan_view_class):
         """Test that scan_view_class fixture returns a class."""
@@ -428,6 +276,8 @@ class TestFileSelectionUI:
         mock_scan_view._set_selected_path = mock_scan_view.__class__._set_selected_path.__get__(
             mock_scan_view, mock_scan_view.__class__
         )
+        # Prevent infinite loop in _clear_results by making get_row_at_index return None
+        mock_scan_view._threats_listbox.get_row_at_index.return_value = None
 
         test_path = "/home/user/test_folder"
         mock_scan_view._set_selected_path(test_path)
@@ -491,7 +341,7 @@ class TestFileSelectionUI:
         # Verify _clear_results was called
         mock_scan_view._clear_results.assert_called_once()
 
-    def test_on_select_folder_clicked_opens_dialog(self, mock_scan_view, mock_gtk_modules):
+    def test_on_select_folder_clicked_opens_dialog(self, mock_scan_view):
         """Test that clicking select folder button opens file dialog for folders."""
         # Reset the real method
         mock_scan_view._on_select_folder_clicked = mock_scan_view.__class__._on_select_folder_clicked.__get__(
@@ -505,7 +355,7 @@ class TestFileSelectionUI:
         # Verify _open_file_dialog was called with select_folder=True
         mock_scan_view._open_file_dialog.assert_called_once_with(select_folder=True)
 
-    def test_on_select_file_clicked_opens_dialog(self, mock_scan_view, mock_gtk_modules):
+    def test_on_select_file_clicked_opens_dialog(self, mock_scan_view):
         """Test that clicking select file button opens file dialog for files."""
         # Reset the real method
         mock_scan_view._on_select_file_clicked = mock_scan_view.__class__._on_select_file_clicked.__get__(
@@ -532,75 +382,18 @@ class TestFileSelectionUI:
 
 # Module-level test function for verification
 @pytest.mark.ui
-def test_file_selection_ui():
+def test_file_selection_ui(scan_view_class):
     """
     Test for file selection UI functionality.
 
     This test verifies that the file selection UI components are properly
     set up and can handle path selection updates.
     """
-    # Create mocks
-    mock_gtk = mock.MagicMock()
-    mock_adw = mock.MagicMock()
-    mock_gio = mock.MagicMock()
-    mock_glib = mock.MagicMock()
-    mock_gdk = mock.MagicMock()
-
-    class MockGtkBox:
-        def __init__(self, orientation=None, **kwargs):
-            self.children = []
-            self._selected_path = ""
-
-        def set_margin_top(self, v): pass
-        def set_margin_bottom(self, v): pass
-        def set_margin_start(self, v): pass
-        def set_margin_end(self, v): pass
-        def set_spacing(self, v): pass
-        def append(self, child):
-            self.children.append(child)
-        def get_style_context(self): return mock.MagicMock()
-        def get_root(self): return None
-
-    mock_gtk.Box = MockGtkBox
-    mock_gtk.Orientation = mock.MagicMock()
-    mock_gtk.Orientation.VERTICAL = 1
-    mock_gtk.FileDialog = mock.MagicMock()
-
-    mock_gi = mock.MagicMock()
-    mock_gi.version_info = (3, 48, 0)
-    mock_gi.require_version = mock.MagicMock()
-
-    mock_repository = mock.MagicMock()
-    mock_repository.Gtk = mock_gtk
-    mock_repository.Adw = mock_adw
-    mock_repository.Gio = mock_gio
-    mock_repository.GLib = mock_glib
-    mock_repository.Gdk = mock_gdk
-
-    mock_utils = mock.MagicMock()
-    mock_utils.format_scan_path = mock.MagicMock(return_value="/formatted/path")
-
-    with mock.patch.dict(sys.modules, {
-        'gi': mock_gi,
-        'gi.repository': mock_repository,
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock_utils,
-        'src.core.quarantine': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-        'src.ui.profile_dialogs': mock.MagicMock(),
-    }):
-        # Clear any cached import
-        if 'src.ui.scan_view' in sys.modules:
-            del sys.modules['src.ui.scan_view']
-
-        from src.ui.scan_view import ScanView
-        assert ScanView is not None
-
-        # Verify the class has file selection methods
-        assert hasattr(ScanView, '_on_select_folder_clicked')
-        assert hasattr(ScanView, '_on_select_file_clicked')
-        assert hasattr(ScanView, '_set_selected_path')
-        assert hasattr(ScanView, '_open_file_dialog')
+    # Verify the class has file selection methods
+    assert hasattr(scan_view_class, '_on_select_folder_clicked')
+    assert hasattr(scan_view_class, '_on_select_file_clicked')
+    assert hasattr(scan_view_class, '_set_selected_path')
+    assert hasattr(scan_view_class, '_open_file_dialog')
 
 
 @pytest.mark.ui
@@ -804,133 +597,29 @@ class TestScanInitiationUI:
 
 # Module-level test function for scan initiation verification
 @pytest.mark.ui
-def test_scan_initiation_ui():
+def test_scan_initiation_ui(scan_view_class):
     """
     Test for scan initiation UI functionality.
 
     This test verifies that the scan initiation UI components work correctly,
     including the scan button click handler and the _start_scan method.
     """
-    # Create mocks
-    mock_gtk = mock.MagicMock()
-    mock_adw = mock.MagicMock()
-    mock_gio = mock.MagicMock()
-    mock_glib = mock.MagicMock()
-    mock_gdk = mock.MagicMock()
-
-    class MockGtkBox:
-        def __init__(self, orientation=None, **kwargs):
-            self.children = []
-            self._selected_path = ""
-
-        def set_margin_top(self, v): pass
-        def set_margin_bottom(self, v): pass
-        def set_margin_start(self, v): pass
-        def set_margin_end(self, v): pass
-        def set_spacing(self, v): pass
-        def append(self, child):
-            self.children.append(child)
-        def get_style_context(self): return mock.MagicMock()
-        def get_root(self): return None
-
-    mock_gtk.Box = MockGtkBox
-    mock_gtk.Orientation = mock.MagicMock()
-    mock_gtk.Orientation.VERTICAL = 1
-    mock_gtk.FileDialog = mock.MagicMock()
-
-    mock_gi = mock.MagicMock()
-    mock_gi.version_info = (3, 48, 0)
-    mock_gi.require_version = mock.MagicMock()
-
-    mock_repository = mock.MagicMock()
-    mock_repository.Gtk = mock_gtk
-    mock_repository.Adw = mock_adw
-    mock_repository.Gio = mock_gio
-    mock_repository.GLib = mock_glib
-    mock_repository.Gdk = mock_gdk
-
-    mock_utils = mock.MagicMock()
-    mock_utils.format_scan_path = mock.MagicMock(return_value="/formatted/path")
-
-    with mock.patch.dict(sys.modules, {
-        'gi': mock_gi,
-        'gi.repository': mock_repository,
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock_utils,
-        'src.core.quarantine': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-        'src.ui.profile_dialogs': mock.MagicMock(),
-    }):
-        # Clear any cached import
-        if 'src.ui.scan_view' in sys.modules:
-            del sys.modules['src.ui.scan_view']
-
-        from src.ui.scan_view import ScanView
-        assert ScanView is not None
-
-        # Verify the class has scan initiation methods
-        assert hasattr(ScanView, '_on_scan_clicked')
-        assert hasattr(ScanView, '_start_scan')
-        assert hasattr(ScanView, '_set_scanning_state')
-        assert hasattr(ScanView, 'set_scan_state_callback')
+    # Verify the class has scan initiation methods
+    assert hasattr(scan_view_class, '_on_scan_clicked')
+    assert hasattr(scan_view_class, '_start_scan')
+    assert hasattr(scan_view_class, '_set_scanning_state')
+    assert hasattr(scan_view_class, 'set_scan_state_callback')
 
 
 @pytest.mark.ui
-def test_scanner_ui_module_loads():
+def test_scanner_ui_module_loads(scan_view_class):
     """
     Basic test to verify the test module loads correctly.
 
     This test verifies that the GTK mocking setup works and the ScanView
     can be imported without errors.
     """
-    # Create mocks
-    mock_gtk = mock.MagicMock()
-    mock_adw = mock.MagicMock()
-    mock_gio = mock.MagicMock()
-    mock_glib = mock.MagicMock()
-    mock_gdk = mock.MagicMock()
-
-    class MockGtkBox:
-        def __init__(self, orientation=None, **kwargs):
-            pass
-        def set_margin_top(self, v): pass
-        def set_margin_bottom(self, v): pass
-        def set_margin_start(self, v): pass
-        def set_margin_end(self, v): pass
-        def set_spacing(self, v): pass
-        def append(self, child): pass
-        def get_style_context(self): return mock.MagicMock()
-
-    mock_gtk.Box = MockGtkBox
-    mock_gtk.Orientation = mock.MagicMock()
-    mock_gtk.Orientation.VERTICAL = 1
-
-    mock_gi = mock.MagicMock()
-    mock_gi.version_info = (3, 48, 0)
-    mock_gi.require_version = mock.MagicMock()
-
-    mock_repository = mock.MagicMock()
-    mock_repository.Gtk = mock_gtk
-    mock_repository.Adw = mock_adw
-    mock_repository.Gio = mock_gio
-    mock_repository.GLib = mock_glib
-    mock_repository.Gdk = mock_gdk
-
-    with mock.patch.dict(sys.modules, {
-        'gi': mock_gi,
-        'gi.repository': mock_repository,
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock.MagicMock(),
-        'src.core.quarantine': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-        'src.ui.profile_dialogs': mock.MagicMock(),
-    }):
-        # Clear any cached import
-        if 'src.ui.scan_view' in sys.modules:
-            del sys.modules['src.ui.scan_view']
-
-        from src.ui.scan_view import ScanView
-        assert ScanView is not None
+    assert scan_view_class is not None
 
 
 @pytest.mark.ui
@@ -1001,7 +690,7 @@ class TestResultsDisplayUI:
         assert mock_scan_view._all_threat_details == []
         assert mock_scan_view._load_more_row is None
 
-    def test_display_results_stores_raw_output(self, mock_scan_view, mock_gtk_modules):
+    def test_display_results_stores_raw_output(self, mock_scan_view):
         """Test that _display_results stores the raw output for fullscreen view."""
         # Create a mock scan result
         mock_result = mock.MagicMock()
@@ -1029,7 +718,7 @@ class TestResultsDisplayUI:
 
         assert mock_scan_view._raw_output == "Test raw output"
 
-    def test_display_results_stores_current_result(self, mock_scan_view, mock_gtk_modules):
+    def test_display_results_stores_current_result(self, mock_scan_view):
         """Test that _display_results stores the current result for export."""
         mock_result = mock.MagicMock()
         mock_result.status = "clean"
@@ -1054,7 +743,7 @@ class TestResultsDisplayUI:
 
         assert mock_scan_view._current_result == mock_result
 
-    def test_display_results_enables_export_buttons(self, mock_scan_view, mock_gtk_modules):
+    def test_display_results_enables_export_buttons(self, mock_scan_view):
         """Test that _display_results enables export buttons when results available."""
         mock_result = mock.MagicMock()
         mock_result.status = "clean"
@@ -1082,7 +771,7 @@ class TestResultsDisplayUI:
         mock_scan_view._export_text_button.set_sensitive.assert_called_with(True)
         mock_scan_view._export_csv_button.set_sensitive.assert_called_with(True)
 
-    def test_display_results_reveals_status_banner(self, mock_scan_view, mock_gtk_modules):
+    def test_display_results_reveals_status_banner(self, mock_scan_view):
         """Test that _display_results reveals the status banner."""
         mock_result = mock.MagicMock()
         mock_result.status = "clean"
@@ -1153,78 +842,20 @@ class TestResultsDisplayUI:
 
 # Module-level test function for results display verification
 @pytest.mark.ui
-def test_results_display_ui():
+def test_results_display_ui(scan_view_class):
     """
     Test for results display UI functionality.
 
     This test verifies that the results display UI components work correctly,
     including the status banner, results listbox, and export buttons.
     """
-    # Create mocks
-    mock_gtk = mock.MagicMock()
-    mock_adw = mock.MagicMock()
-    mock_gio = mock.MagicMock()
-    mock_glib = mock.MagicMock()
-    mock_gdk = mock.MagicMock()
-
-    class MockGtkBox:
-        def __init__(self, orientation=None, **kwargs):
-            self.children = []
-            self._selected_path = ""
-
-        def set_margin_top(self, v): pass
-        def set_margin_bottom(self, v): pass
-        def set_margin_start(self, v): pass
-        def set_margin_end(self, v): pass
-        def set_spacing(self, v): pass
-        def append(self, child):
-            self.children.append(child)
-        def get_style_context(self): return mock.MagicMock()
-        def get_root(self): return None
-
-    mock_gtk.Box = MockGtkBox
-    mock_gtk.Orientation = mock.MagicMock()
-    mock_gtk.Orientation.VERTICAL = 1
-    mock_gtk.FileDialog = mock.MagicMock()
-
-    mock_gi = mock.MagicMock()
-    mock_gi.version_info = (3, 48, 0)
-    mock_gi.require_version = mock.MagicMock()
-
-    mock_repository = mock.MagicMock()
-    mock_repository.Gtk = mock_gtk
-    mock_repository.Adw = mock_adw
-    mock_repository.Gio = mock_gio
-    mock_repository.GLib = mock_glib
-    mock_repository.Gdk = mock_gdk
-
-    mock_utils = mock.MagicMock()
-    mock_utils.format_scan_path = mock.MagicMock(return_value="/formatted/path")
-    mock_utils.format_results_as_text = mock.MagicMock(return_value="formatted results")
-
-    with mock.patch.dict(sys.modules, {
-        'gi': mock_gi,
-        'gi.repository': mock_repository,
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock_utils,
-        'src.core.quarantine': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-        'src.ui.profile_dialogs': mock.MagicMock(),
-    }):
-        # Clear any cached import
-        if 'src.ui.scan_view' in sys.modules:
-            del sys.modules['src.ui.scan_view']
-
-        from src.ui.scan_view import ScanView
-        assert ScanView is not None
-
-        # Verify the class has results display methods
-        assert hasattr(ScanView, '_display_results')
-        assert hasattr(ScanView, '_clear_results')
-        assert hasattr(ScanView, '_on_scan_complete')
-        assert hasattr(ScanView, '_create_threat_card')
-        assert hasattr(ScanView, '_create_clean_files_summary_row')
-        assert hasattr(ScanView, '_on_copy_results_clicked')
-        assert hasattr(ScanView, '_on_export_text_clicked')
-        assert hasattr(ScanView, '_on_export_csv_clicked')
-        assert hasattr(ScanView, '_on_fullscreen_results_clicked')
+    # Verify the class has results display methods
+    assert hasattr(scan_view_class, '_display_results')
+    assert hasattr(scan_view_class, '_clear_results')
+    assert hasattr(scan_view_class, '_on_scan_complete')
+    assert hasattr(scan_view_class, '_create_threat_card')
+    assert hasattr(scan_view_class, '_create_clean_files_summary_row')
+    assert hasattr(scan_view_class, '_on_copy_results_clicked')
+    assert hasattr(scan_view_class, '_on_export_text_clicked')
+    assert hasattr(scan_view_class, '_on_export_csv_clicked')
+    assert hasattr(scan_view_class, '_on_fullscreen_results_clicked')

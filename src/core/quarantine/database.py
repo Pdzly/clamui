@@ -108,20 +108,29 @@ class QuarantineDatabase:
         """
         Get a database connection as a context manager with WAL mode enabled.
 
+        When connection pooling is enabled (pool_size > 0), connections are
+        obtained from the pool. Otherwise, creates a new connection per operation.
+
         The connection is properly closed after use, preventing resource warnings.
         Transactions are automatically committed on success or rolled back on error.
 
         Yields:
             SQLite connection object
         """
-        conn = sqlite3.connect(str(self._db_path), timeout=30.0)
-        try:
-            # Enable WAL mode for better concurrency and corruption prevention
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA foreign_keys=ON")
-            yield conn
-        finally:
-            conn.close()
+        # Use connection pool if available
+        if self._pool is not None:
+            with self._pool.get_connection() as conn:
+                yield conn
+        else:
+            # Fallback to per-operation connections when pooling is disabled
+            conn = sqlite3.connect(str(self._db_path), timeout=30.0)
+            try:
+                # Enable WAL mode for better concurrency and corruption prevention
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA foreign_keys=ON")
+                yield conn
+            finally:
+                conn.close()
 
     def _init_database(self) -> None:
         """Initialize the database schema if it doesn't exist."""

@@ -437,9 +437,14 @@ class QuarantineDatabase:
         """
         Close database connections and cleanup.
 
-        Note: Since connections are created per-operation, this mainly
-        serves as a cleanup hook for subclasses or future enhancements.
+        When connection pooling is enabled, this closes all connections in the pool
+        and prevents new connections from being created. Safe to call multiple times.
+
+        When pooling is disabled, this is a no-op (connections are created and
+        closed per-operation).
         """
-        # Connections are created and closed per-operation for thread safety
-        # This method exists for API consistency and future enhancements
-        pass
+        with self._lock:
+            # Close connection pool if it exists
+            if self._pool is not None:
+                self._pool.close_all()
+                self._pool = None

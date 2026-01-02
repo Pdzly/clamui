@@ -663,3 +663,309 @@ class TestConnectionPoolThreadSafety:
             t.join()
 
         assert len(errors) == 0, f"Errors occurred: {errors}"
+
+    def test_pool_exhaustion_under_concurrent_load(self, pool):
+        """Test pool exhaustion behavior under heavy concurrent load."""
+        acquired_connections = []
+        errors = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(10)  # Ensure threads start simultaneously
+
+        def acquire_and_hold(worker_id):
+            try:
+                # Wait for all threads to be ready
+                barrier.wait()
+                # Try to acquire a connection (pool has only 5)
+                conn = pool.acquire(timeout=3.0)
+                with lock:
+                    acquired_connections.append((worker_id, conn))
+                time.sleep(0.1)  # Hold the connection briefly
+                pool.release(conn)
+            except queue.Empty:
+                # Some threads should timeout since pool only has 5 connections
+                errors.append(f"Worker {worker_id} timed out")
+            except Exception as e:
+                errors.append(f"Worker {worker_id} error: {e}")
+
+        threads = [threading.Thread(target=acquire_and_hold, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # With pool_size=5 and 10 threads trying to acquire simultaneously,
+        # we should see either successful acquisitions or timeouts
+        total_operations = len(acquired_connections) + len([e for e in errors if "timed out" in e])
+        assert total_operations == 10, "All threads should complete (success or timeout)"
+        # No unexpected errors should occur
+        unexpected_errors = [e for e in errors if "timed out" not in e]
+        assert len(unexpected_errors) == 0, f"Unexpected errors: {unexpected_errors}"
+
+    def test_connection_reuse_under_concurrent_load(self, pool):
+        """Test that connections are correctly reused under concurrent load."""
+        connection_ids = []
+        errors = []
+        lock = threading.Lock()
+
+        def acquire_and_release_multiple(worker_id):
+            try:
+                for iteration in range(10):
+                    conn = pool.acquire(timeout=2.0)
+                    # Track the connection object ID
+                    with lock:
+                        connection_ids.append(id(conn))
+                    time.sleep(0.001)  # Brief work
+                    pool.release(conn)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=acquire_and_release_multiple, args=(i,)) for i in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        assert len(connection_ids) == 50, "Should have 50 total acquisitions (5 workers * 10 iterations)"
+
+        # Verify connection reuse: with pool_size=5, we should see repeated IDs
+        unique_connections = len(set(connection_ids))
+        assert unique_connections <= 5, f"Should not exceed pool_size of 5, got {unique_connections}"
+
+        # Verify actual reuse occurred (same connection used multiple times)
+        from collections import Counter
+        conn_usage = Counter(connection_ids)
+        max_reuse = max(conn_usage.values())
+        assert max_reuse > 1, "Connections should be reused (same ID appearing multiple times)"
+
+    def test_no_race_conditions_in_connection_creation(self, pool):
+        """Test that connection creation under concurrent load has no race conditions."""
+        barrier = threading.Barrier(10)
+        connections = []
+        errors = []
+        lock = threading.Lock()
+
+        def acquire_simultaneously(worker_id):
+            try:
+                barrier.wait()  # All threads start at the same time
+                conn = pool.acquire(timeout=2.0)
+                with lock:
+                    connections.append(conn)
+                time.sleep(0.01)
+                pool.release(conn)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=acquire_simultaneously, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should have no errors or timeouts (all should eventually get connections)
+        # Some may timeout if contention is high, which is acceptable behavior
+        assert all("timeout" in str(e).lower() or isinstance(e, queue.Empty) for e in errors) or len(errors) == 0
+
+        # Verify total connections never exceeded pool size
+        assert pool._total_connections <= 5, f"Total connections {pool._total_connections} exceeded pool_size"
+
+    def test_concurrent_stress_test_many_threads(self, pool):
+        """Stress test with many threads performing mixed operations."""
+        operations_completed = []
+        errors = []
+        lock = threading.Lock()
+
+        def worker(worker_id):
+            try:
+                for i in range(3):
+                    # Use context manager for automatic acquire/release
+                    with pool.get_connection(timeout=5.0) as conn:
+                        # Perform a query
+                        conn.execute("SELECT 1")
+                        with lock:
+                            operations_completed.append(f"Worker {worker_id} iteration {i}")
+                    time.sleep(0.001)  # Brief pause between operations
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        # Create many threads (30 threads, pool_size=5)
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(30)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All operations should complete successfully
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        assert len(operations_completed) == 90, "All 90 operations (30 threads * 3 iterations) should complete"
+        # Pool should still be healthy
+        assert pool._total_connections <= 5
+
+    def test_concurrent_release_with_invalid_connections(self, pool):
+        """Test concurrent release operations with mix of valid and invalid connections."""
+        errors = []
+
+        def release_invalid(worker_id):
+            try:
+                conn = pool.acquire(timeout=2.0)
+                if worker_id % 3 == 0:
+                    # Close the connection to make it invalid
+                    conn.close()
+                pool.release(conn)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=release_invalid, args=(i,)) for i in range(15)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should handle invalid connections gracefully
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+
+    def test_no_deadlock_with_nested_acquisitions(self, pool):
+        """Test that nested acquisition attempts don't cause deadlocks."""
+        errors = []
+        completed = []
+        lock = threading.Lock()
+
+        def nested_acquire(worker_id):
+            try:
+                # Acquire first connection
+                conn1 = pool.acquire(timeout=2.0)
+                time.sleep(0.01)
+
+                # Try to acquire second connection (may block or timeout)
+                try:
+                    conn2 = pool.acquire(timeout=0.5)
+                    time.sleep(0.01)
+                    pool.release(conn2)
+                except queue.Empty:
+                    # Timeout is acceptable
+                    pass
+
+                pool.release(conn1)
+                with lock:
+                    completed.append(worker_id)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=nested_acquire, args=(i,)) for i in range(8)]
+        for t in threads:
+            t.start()
+
+        # Use join with timeout to detect deadlocks
+        for t in threads:
+            t.join(timeout=10.0)
+            assert not t.is_alive(), "Thread should complete (no deadlock)"
+
+        # All threads should complete
+        assert len(completed) == 8, f"Expected 8 completions, got {len(completed)}"
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+
+    def test_concurrent_close_all_during_active_operations(self, pool):
+        """Test close_all() behavior when called during concurrent operations."""
+        active_operations = []
+        errors = []
+        lock = threading.Lock()
+        start_barrier = threading.Barrier(6)  # 5 workers + 1 closer
+
+        def worker(worker_id):
+            try:
+                start_barrier.wait()
+                for _ in range(5):
+                    try:
+                        with pool.get_connection(timeout=1.0) as conn:
+                            conn.execute("SELECT 1")
+                            with lock:
+                                active_operations.append(worker_id)
+                    except (RuntimeError, queue.Empty):
+                        # Pool may be closed or exhausted - this is acceptable
+                        break
+                    time.sleep(0.01)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        def closer():
+            try:
+                start_barrier.wait()
+                time.sleep(0.05)  # Let some operations start
+                pool.close_all()
+            except Exception as e:
+                errors.append(f"Closer: {e}")
+
+        # Start workers and closer
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(5)]
+        closer_thread = threading.Thread(target=closer)
+
+        for t in threads:
+            t.start()
+        closer_thread.start()
+
+        for t in threads:
+            t.join()
+        closer_thread.join()
+
+        # Pool should be closed
+        assert pool._closed is True
+        # Workers should either complete or gracefully handle closure
+        # No unexpected errors
+        unexpected_errors = [e for e in errors if "closed" not in e.lower()]
+        assert len(unexpected_errors) == 0, f"Unexpected errors: {unexpected_errors}"
+
+    def test_connection_count_consistency_under_load(self, pool):
+        """Test that connection count remains consistent under concurrent operations."""
+        errors = []
+
+        def worker(worker_id):
+            try:
+                for _ in range(10):
+                    conn = pool.acquire(timeout=2.0)
+                    time.sleep(0.001)
+                    pool.release(conn)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+
+        # After all operations complete, connection count should be consistent
+        # All connections should be back in the pool or properly accounted for
+        assert pool._total_connections <= pool._pool_size
+        assert pool._total_connections >= 0
+
+    def test_rapid_acquire_release_cycles(self, pool):
+        """Test rapid acquire/release cycles to detect any timing issues."""
+        iterations = 100
+        errors = []
+        lock = threading.Lock()
+        operation_count = []
+
+        def rapid_cycles(worker_id):
+            try:
+                local_count = 0
+                for _ in range(iterations):
+                    conn = pool.acquire(timeout=1.0)
+                    pool.release(conn)
+                    local_count += 1
+                with lock:
+                    operation_count.append(local_count)
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        threads = [threading.Thread(target=rapid_cycles, args=(i,)) for i in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        assert sum(operation_count) == 500, f"Expected 500 operations (5 workers * 100 iterations)"
+        # Pool should be healthy
+        assert pool._total_connections <= 5

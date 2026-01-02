@@ -9,10 +9,12 @@ import pytest
 
 from src.core.log_manager import LogEntry, LogManager
 from src.core.statistics_calculator import (
+    FILES_SCANNED_PATTERNS,
     ProtectionLevel,
     ProtectionStatus,
     ScanStatistics,
     StatisticsCalculator,
+    THREATS_FOUND_PATTERNS,
     Timeframe,
 )
 
@@ -185,6 +187,46 @@ class TestProtectionStatus:
         assert data["last_scan_age_hours"] is None
         assert data["last_definition_update"] is None
         assert data["definition_age_hours"] is None
+
+
+class TestPrecompiledPatterns:
+    """Tests for pre-compiled regex patterns at module level."""
+
+    def test_files_scanned_patterns_defined(self):
+        """Test FILES_SCANNED_PATTERNS is defined at module level."""
+        assert FILES_SCANNED_PATTERNS is not None
+
+    def test_files_scanned_patterns_is_list(self):
+        """Test FILES_SCANNED_PATTERNS is a list."""
+        assert isinstance(FILES_SCANNED_PATTERNS, list)
+
+    def test_files_scanned_patterns_count(self):
+        """Test FILES_SCANNED_PATTERNS has expected number of patterns."""
+        assert len(FILES_SCANNED_PATTERNS) == 4
+
+    def test_files_scanned_patterns_are_compiled_regex(self):
+        """Test FILES_SCANNED_PATTERNS contains compiled regex objects."""
+        import re
+        for pattern in FILES_SCANNED_PATTERNS:
+            assert isinstance(pattern, type(re.compile("")))
+
+    def test_threats_found_patterns_defined(self):
+        """Test THREATS_FOUND_PATTERNS is defined at module level."""
+        assert THREATS_FOUND_PATTERNS is not None
+
+    def test_threats_found_patterns_is_list(self):
+        """Test THREATS_FOUND_PATTERNS is a list."""
+        assert isinstance(THREATS_FOUND_PATTERNS, list)
+
+    def test_threats_found_patterns_count(self):
+        """Test THREATS_FOUND_PATTERNS has expected number of patterns."""
+        assert len(THREATS_FOUND_PATTERNS) == 3
+
+    def test_threats_found_patterns_are_compiled_regex(self):
+        """Test THREATS_FOUND_PATTERNS contains compiled regex objects."""
+        import re
+        for pattern in THREATS_FOUND_PATTERNS:
+            assert isinstance(pattern, type(re.compile("")))
 
 
 class TestStatisticsCalculator:

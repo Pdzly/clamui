@@ -99,20 +99,20 @@ class ConnectionPool:
         if self._closed:
             raise RuntimeError("Connection pool has been closed")
 
+        # First, check if we can create a new connection (non-blocking check)
+        with self._lock:
+            if self._total_connections < self._pool_size:
+                # We can create a new connection
+                conn = self._create_connection()
+                self._total_connections += 1
+                return conn
+
+        # Pool is at max capacity - wait for an available connection
         try:
-            # Try to get an existing connection from the pool
             return self._pool.get(block=True, timeout=timeout)
         except queue.Empty:
-            # Pool is empty - try to create a new connection if we're below max size
-            with self._lock:
-                if self._total_connections < self._pool_size:
-                    # We can create a new connection
-                    conn = self._create_connection()
-                    self._total_connections += 1
-                    return conn
-                else:
-                    # Pool is exhausted and we're at max size - re-raise the timeout exception
-                    raise
+            # Timeout while waiting for a connection - re-raise
+            raise
 
     def release(self, conn: sqlite3.Connection) -> None:
         """

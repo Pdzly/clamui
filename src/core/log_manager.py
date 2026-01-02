@@ -248,6 +248,29 @@ class LogManager:
         """
         return self._log_dir / INDEX_FILENAME
 
+    def _load_index(self) -> dict:
+        """
+        Load the log index from file.
+
+        Returns a dictionary with 'version' and 'entries' keys. If the file doesn't
+        exist or is corrupted, returns an empty structure with version 1 and empty entries list.
+
+        Returns:
+            Dictionary with structure: {"version": 1, "entries": [...]}
+        """
+        try:
+            if self._index_path.exists():
+                with open(self._index_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Validate structure has required keys
+                    if isinstance(data, dict) and "version" in data and "entries" in data:
+                        return data
+            # File doesn't exist or invalid structure - return empty index
+            return {"version": 1, "entries": []}
+        except (OSError, json.JSONDecodeError, PermissionError):
+            # Handle file read errors and JSON parsing errors gracefully
+            return {"version": 1, "entries": []}
+
     def save_log(self, entry: LogEntry) -> bool:
         """
         Save a log entry to storage.

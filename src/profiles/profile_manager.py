@@ -200,6 +200,84 @@ class ProfileManager:
         except (OSError, RuntimeError, ValueError):
             return None
 
+    @classmethod
+    def clear_path_cache(cls) -> None:
+        """
+        Clear all path resolution caches.
+
+        Clears the LRU caches for both _cached_expanduser() and _cached_resolve().
+        This should be called when external filesystem changes occur that might
+        affect path resolution results (e.g., symlinks changed, directories moved).
+
+        Cache Lifecycle:
+            - Caches are populated on first access during profile validation
+            - Caches persist across multiple profile operations for performance
+            - Caches should be cleared when filesystem state changes externally
+            - Each cache holds up to 128 entries (LRU eviction policy)
+
+        Thread Safety:
+            This method is thread-safe. The underlying LRU cache implementations
+            use locks internally for cache_clear() operations.
+
+        Examples:
+            >>> ProfileManager.clear_path_cache()  # Clear all caches
+        """
+        cls._cached_expanduser.cache_clear()
+        cls._cached_resolve.cache_clear()
+
+    @classmethod
+    def get_cache_info(cls) -> dict[str, dict[str, int]]:
+        """
+        Get cache statistics for debugging and monitoring.
+
+        Returns cache information for both _cached_expanduser() and
+        _cached_resolve() methods. Useful for performance analysis and
+        debugging cache behavior during validation.
+
+        Returns:
+            Dictionary with cache statistics for each cached method:
+            {
+                "expanduser": {
+                    "hits": int,      # Number of cache hits
+                    "misses": int,    # Number of cache misses
+                    "maxsize": int,   # Maximum cache size
+                    "currsize": int   # Current cache size
+                },
+                "resolve": {
+                    "hits": int,
+                    "misses": int,
+                    "maxsize": int,
+                    "currsize": int
+                }
+            }
+
+        Thread Safety:
+            This method is thread-safe. The underlying cache_info() calls
+            are atomic snapshots of cache state.
+
+        Examples:
+            >>> info = ProfileManager.get_cache_info()
+            >>> print(f"Expanduser cache hits: {info['expanduser']['hits']}")
+            >>> print(f"Resolve cache hit rate: {info['resolve']['hits'] / (info['resolve']['hits'] + info['resolve']['misses'])}")
+        """
+        expanduser_info = cls._cached_expanduser.cache_info()
+        resolve_info = cls._cached_resolve.cache_info()
+
+        return {
+            "expanduser": {
+                "hits": expanduser_info.hits,
+                "misses": expanduser_info.misses,
+                "maxsize": expanduser_info.maxsize,
+                "currsize": expanduser_info.currsize,
+            },
+            "resolve": {
+                "hits": resolve_info.hits,
+                "misses": resolve_info.misses,
+                "maxsize": resolve_info.maxsize,
+                "currsize": resolve_info.currsize,
+            },
+        }
+
     def _validate_name(
         self, name: str, exclude_id: Optional[str] = None
     ) -> None:

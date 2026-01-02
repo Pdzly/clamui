@@ -4833,7 +4833,896 @@ While not in the Quick Actions section, the **Refresh button** (🔄) in the Pro
 
 ## Settings and Preferences
 
-*(This section will be completed in subtask 3.3)*
+ClamUI provides comprehensive configuration options to customize how virus scanning works on your system. This section covers all available settings, from choosing the scan backend to configuring advanced ClamAV options.
+
+💡 **Tip:** Most users only need to adjust a few basic settings. Advanced options like ClamAV configuration files are for experienced users who want fine-grained control.
+
+---
+
+### Accessing Preferences
+
+ClamUI's preferences are organized into several pages covering different aspects of the application.
+
+**How to Open Preferences:**
+
+1. **Using Keyboard Shortcut:**
+   - Press `Ctrl+,` (Comma) from anywhere in ClamUI
+
+2. **Using Menu:**
+   - Click the menu button (☰) in the header bar
+   - Select "Preferences"
+
+**Preferences Window Layout:**
+
+The preferences window uses a sidebar navigation with these pages:
+
+```
+┌─────────────────────────────────────────┐
+│ Sidebar          │ Settings Page        │
+├──────────────────┼──────────────────────┤
+│ ▶ Database      │                       │
+│   Updates        │  [Configuration      │
+│                  │   Settings Display]  │
+│ ▶ Scanner        │                       │
+│   Settings       │                       │
+│                  │                       │
+│ ▶ Scheduled      │                       │
+│   Scans          │                       │
+│                  │                       │
+│ ▶ Exclusions     │                       │
+│                  │                       │
+│ ▶ Save & Apply   │                       │
+└──────────────────┴──────────────────────┘
+```
+
+**Navigation:**
+- Click any sidebar item to view that settings page
+- Changes are **not** saved until you click "Save & Apply"
+- Close the window to discard unsaved changes
+
+⚠️ **Important:** Many settings require administrator (root) privileges to modify because they change system-wide ClamAV configuration files. You'll see a lock icon (🔒) next to settings groups that require elevated permissions.
+
+---
+
+### Scan Backend Options
+
+The scan backend determines how ClamUI performs virus scanning. Choose the method that best fits your setup.
+
+#### Understanding Scan Backends
+
+ClamUI supports three scanning methods:
+
+| Backend | Description | Speed | When to Use |
+|---------|-------------|-------|-------------|
+| **Auto (Recommended)** | Automatically prefer clamd daemon if available, fall back to clamscan | Fast (daemon) or Moderate (clamscan) | Default choice for most users. Gets best performance automatically. |
+| **ClamAV Daemon (clamd)** | Use the ClamAV daemon exclusively | Very Fast (10-50x faster) | When daemon is always running and you want guaranteed fast scans. **Requires clamd to be active.** |
+| **Standalone Scanner (clamscan)** | Use standalone clamscan command | Moderate | When clamd is not available, or for compatibility with specific scan profiles. |
+
+**Performance Comparison:**
+
+The ClamAV daemon (clamd) keeps virus signatures loaded in memory, making scans **10-50 times faster** than the standalone scanner (clamscan), which must load signatures from disk for every scan.
+
+**Example scan time for 10,000 files:**
+- Daemon (clamd): 10-30 seconds
+- Standalone (clamscan): 2-5 minutes
+
+#### Choosing Your Scan Backend
+
+**To Select Scan Backend:**
+
+1. Open Preferences (`Ctrl+,`)
+2. Click "Scanner Settings" in the sidebar
+3. Locate the "Scan Backend" section at the top
+4. Click the "Scan Backend" dropdown
+5. Select your preferred option:
+   - "Auto (prefer daemon)" - Recommended
+   - "ClamAV Daemon (clamd)" - Fast, requires daemon
+   - "Standalone Scanner (clamscan)" - Compatible
+
+**The selection is saved immediately** - no need to click Save & Apply for this setting.
+
+#### Checking Daemon Status
+
+Below the scan backend selector, you'll see the **Daemon Status** indicator:
+
+**Status Messages:**
+
+| Status | Icon | Meaning | What to Do |
+|--------|------|---------|------------|
+| "Connected to clamd" | ✅ Green checkmark | Daemon is running and accessible | No action needed. Fast scanning available. |
+| "Not available: ..." | ⚠️ Warning | Daemon is not running or not installed | Install clamd or use Auto/Clamscan backend. Details shown in message. |
+
+**To Refresh Daemon Status:**
+
+1. Click the "Refresh Status" button next to the status indicator
+2. Status updates immediately with current daemon state
+
+**Common Daemon Status Issues:**
+
+| Error Message | Cause | Solution |
+|---------------|-------|----------|
+| "Socket not found" | clamd not installed or not running | Install clamav-daemon package and start the service: `sudo systemctl start clamav-daemon` |
+| "Connection refused" | Socket permissions issue | Check socket permissions or run ClamUI with appropriate access |
+| "Daemon not installed" | ClamAV daemon package missing | Install: `sudo apt install clamav-daemon` (Ubuntu/Debian) |
+
+💡 **Tip:** If you're unsure whether clamd is installed, use the "Auto (prefer daemon)" backend. ClamUI will automatically use the daemon if available and fall back to clamscan otherwise.
+
+⚠️ **Note:** On some distributions, the daemon is installed separately from the main ClamAV package. Check your distribution's package manager for "clamav-daemon" or "clamd".
+
+---
+
+### Database Update Settings
+
+ClamUI allows you to configure how ClamAV updates its virus definition databases through the `freshclam.conf` configuration file.
+
+🔒 **Requires Administrator Privileges:** These settings modify `/etc/clamav/freshclam.conf` and require root access.
+
+#### Opening Database Update Settings
+
+1. Open Preferences (`Ctrl+,`)
+2. Click "Database Updates" in the sidebar
+
+You'll see several configuration groups:
+
+#### Configuration File Location
+
+At the top of the page, you'll see the configuration file path:
+
+**File Location:** `/etc/clamav/freshclam.conf`
+
+**To Open the Configuration Folder:**
+- Click "Open Folder" button to view the file in your file manager
+- Useful for manual edits or viewing backup files
+
+#### Paths Configuration
+
+**DatabaseDirectory** - Where virus definition files are stored
+- **Default:** `/var/lib/clamav`
+- **Purpose:** Storage location for virus signature databases (main.cvd, daily.cld, etc.)
+- **When to change:** If you want databases on a different partition or faster storage
+- **Example:** `/mnt/ssd/clamav-db` (for SSD storage)
+
+**Update Log File** - Log file for database update operations
+- **Default:** `/var/log/clamav/freshclam.log`
+- **Purpose:** Records all database update attempts, successes, and failures
+- **When to check:** Troubleshooting update issues, verifying update schedule
+- **Example:** `/var/log/freshclam-updates.log`
+
+**Notify ClamD Config** - Path to clamd.conf for reload notification
+- **Default:** `/etc/clamav/clamd.conf`
+- **Purpose:** Tells freshclam to notify the daemon when databases are updated
+- **When to change:** If clamd.conf is in a non-standard location
+- **Why it matters:** Ensures the daemon reloads new signatures without restart
+
+**Verbose Logging** - Enable detailed logging
+- **Options:** On/Off (switch)
+- **Default:** Usually Off
+- **When to enable:** Troubleshooting update failures, monitoring update process
+- **Impact:** Larger log files, more detailed information
+
+**Syslog Logging** - Send log messages to system log
+- **Options:** On/Off (switch)
+- **Default:** Usually Off
+- **When to enable:** Centralized logging, system monitoring integration
+- **Location:** Messages appear in `/var/log/syslog` or journalctl
+
+#### Update Behavior Configuration
+
+**Checks Per Day** - How often to check for database updates
+- **Range:** 0-50 checks per day
+- **Default:** Usually 24 (once per hour)
+- **Recommended:** 12-24 for most users
+- **Special value:** 0 disables automatic updates (not recommended)
+- **Impact:** More frequent checks catch new threats faster but use more bandwidth
+
+**Update Frequency Recommendations:**
+
+| Checks/Day | Update Interval | Best For | Bandwidth Impact |
+|------------|-----------------|----------|------------------|
+| 24 | Every hour | Security-conscious users, servers | Low (~10-20 MB/day) |
+| 12 | Every 2 hours | Standard desktop users | Very Low (~5-10 MB/day) |
+| 6 | Every 4 hours | Low-bandwidth connections | Minimal (~2-5 MB/day) |
+| 2 | Every 12 hours | Infrequent usage | Negligible |
+| 0 | Never (manual only) | Testing/offline systems | None |
+
+**Database Mirror** - Mirror server URL for downloading databases
+- **Default:** `database.clamav.net`
+- **Purpose:** Server that provides virus definition database files
+- **When to change:** Local mirror available, connection issues with default mirror
+- **Format:** Hostname only (e.g., `db.local.clamav.net`) or full URL
+- **Example:** `your-company-mirror.local`
+
+⚠️ **Warning:** Only use trusted mirror servers. Malicious mirrors could provide compromised definitions.
+
+#### Proxy Settings Configuration
+
+If your network requires an HTTP proxy for internet access, configure these settings:
+
+**Proxy Server** - Proxy server hostname or IP address
+- **Example:** `proxy.company.com` or `192.168.1.1`
+- **When needed:** Corporate networks, restricted internet access
+- **Leave empty** if no proxy is required
+
+**Proxy Port** - Proxy server port number
+- **Range:** 0-65535
+- **Common values:** 8080 (HTTP proxy), 3128 (Squid proxy)
+- **Special value:** 0 disables proxy usage
+- **Default:** 0
+
+**Proxy Username** - Authentication username for proxy (optional)
+- **When needed:** Proxy requires authentication
+- **Leave empty** for anonymous proxies
+
+**Proxy Password** - Authentication password for proxy (optional)
+- **When needed:** Proxy requires authentication
+- **Security:** Stored in plaintext in freshclam.conf
+- **Leave empty** for anonymous proxies
+
+**Example Proxy Configuration:**
+
+| Scenario | Server | Port | Username | Password |
+|----------|--------|------|----------|----------|
+| Corporate proxy with auth | `proxy.company.com` | 8080 | `john.doe` | `password123` |
+| Local Squid proxy | `192.168.1.1` | 3128 | *(empty)* | *(empty)* |
+| No proxy | *(empty)* | 0 | *(empty)* | *(empty)* |
+
+⚠️ **Security Note:** Proxy passwords are stored in plaintext in the configuration file. Use a dedicated proxy account with minimal privileges.
+
+#### Applying Database Update Settings
+
+After configuring database update settings:
+
+1. Navigate to "Save & Apply" page in the sidebar
+2. Click the "Save & Apply" button
+3. Enter your administrator password when prompted
+4. Wait for confirmation dialog: "Configuration Saved"
+
+**What Happens When You Save:**
+- Backups are created of existing config files (`.bak` extension)
+- New settings are written to `/etc/clamav/freshclam.conf`
+- freshclam service may need restart to apply changes
+
+**To Apply Changes Immediately:**
+
+```bash
+# Restart freshclam service (systemd)
+sudo systemctl restart clamav-freshclam
+
+# Or run freshclam manually once
+sudo freshclam
+```
+
+💡 **Tip:** Test your configuration by running `sudo freshclam` manually. This will attempt a database update and show any errors immediately.
+
+---
+
+### Scanner Configuration
+
+ClamUI allows you to configure the ClamAV daemon scanner (clamd) behavior through the `clamd.conf` configuration file.
+
+🔒 **Requires Administrator Privileges:** These settings modify `/etc/clamav/clamd.conf` and require root access.
+
+⚠️ **Note:** Scanner settings are only available if `clamd.conf` exists. If you see "ClamD Configuration - clamd.conf not found", install the clamav-daemon package.
+
+#### Opening Scanner Settings
+
+1. Open Preferences (`Ctrl+,`)
+2. Click "Scanner Settings" in the sidebar
+3. Scroll past the "Scan Backend" section (covered earlier)
+
+You'll see the configuration file location and scanner-specific settings.
+
+#### Configuration File Location
+
+**File Location:** `/etc/clamav/clamd.conf`
+
+**To Open the Configuration Folder:**
+- Click "Open Folder" button to view the file in your file manager
+
+#### File Type Scanning
+
+Control which file types ClamAV scans. Disabling unnecessary file types can improve scan performance.
+
+**Available File Type Options:**
+
+| Setting | What It Scans | Recommended | When to Disable |
+|---------|---------------|-------------|-----------------|
+| **Scan PE Files** | Windows/DOS executables (.exe, .dll, .sys) | ✅ Yes | Never - critical for Windows malware |
+| **Scan ELF Files** | Unix/Linux executables | ✅ Yes | Never - critical for Linux malware |
+| **Scan OLE2 Files** | Microsoft Office documents (.doc, .xls, .ppt) | ✅ Yes | If you never work with Office files |
+| **Scan PDF Files** | PDF documents | ✅ Yes | If you never work with PDFs |
+| **Scan HTML Files** | HTML documents and emails | ✅ Yes | Only if you trust all HTML sources |
+| **Scan Archive Files** | Compressed archives (ZIP, RAR, 7z, etc.) | ✅ Yes | Never - archives often contain malware |
+
+**Default Configuration:** All file types enabled (recommended)
+
+**Performance Considerations:**
+
+Disabling file types provides minimal performance improvement. Only disable if you have a specific reason:
+
+- **Office documents:** Large OLE2 files (50+ MB) can slow scans
+- **Archives:** Deeply nested archives can increase scan time significantly
+- **HTML:** Scanning HTML is very fast, minimal impact
+
+💡 **Tip:** Unless you have performance issues, leave all file types enabled for maximum protection.
+
+⚠️ **Warning:** Disabling file type scanning creates security gaps. Malware often hides in "trusted" file types like PDFs and Office documents.
+
+**To Enable/Disable File Type Scanning:**
+
+1. Locate the "File Type Scanning" group
+2. Toggle the switch for each file type
+3. Navigate to "Save & Apply" page
+4. Click "Save & Apply" and enter administrator password
+
+#### Performance and Limits
+
+These settings control resource usage and prevent excessive scan times.
+
+**MaxFileSize** - Maximum individual file size to scan (MB)
+- **Range:** 0-4000 MB
+- **Default:** Usually 25-100 MB
+- **Special value:** 0 = unlimited (not recommended)
+- **Purpose:** Skip extremely large files to prevent timeouts
+- **Recommendation:** 100-200 MB for desktop, 500+ MB for servers
+
+**MaxScanSize** - Maximum total scan size (MB)
+- **Range:** 0-4000 MB
+- **Default:** Usually 100-400 MB
+- **Special value:** 0 = unlimited (not recommended)
+- **Purpose:** Limit total data scanned within archives
+- **Recommendation:** 400-800 MB for most users
+
+**MaxRecursion** - Maximum recursion depth for archives
+- **Range:** 0-255 levels
+- **Default:** Usually 16
+- **Purpose:** Prevent infinite recursion in maliciously crafted archives
+- **Recommendation:** 10-20 for most users
+- **Example:** ZIP containing ZIP containing ZIP (3 levels deep)
+
+**MaxFiles** - Maximum number of files in an archive
+- **Range:** 0-1,000,000 files
+- **Default:** Usually 10,000
+- **Special value:** 0 = unlimited (dangerous)
+- **Purpose:** Prevent "zip bomb" attacks with millions of tiny files
+- **Recommendation:** 5,000-20,000 for most users
+
+**Understanding Performance Settings:**
+
+```
+Example Scan Scenario:
+───────────────────────────────────────────────
+Archive: suspicious.zip (50 MB compressed)
+  ├─ file1.bin (150 MB)         ← MaxFileSize applies
+  ├─ nested.zip
+  │   └─ level2.zip
+  │       └─ level3.zip         ← MaxRecursion applies
+  └─ [20,000 tiny files]        ← MaxFiles applies
+
+Total extracted: 800 MB          ← MaxScanSize applies
+```
+
+**Performance Tuning Guide:**
+
+| Use Case | MaxFileSize | MaxScanSize | MaxRecursion | MaxFiles |
+|----------|-------------|-------------|--------------|----------|
+| **Fast scans (less thorough)** | 50 MB | 200 MB | 10 | 5,000 |
+| **Balanced (recommended)** | 100 MB | 400 MB | 16 | 10,000 |
+| **Thorough scans (slower)** | 500 MB | 1000 MB | 20 | 50,000 |
+| **Maximum protection** | 1000 MB | 2000 MB | 25 | 100,000 |
+
+💡 **Tip:** If scans are too slow, reduce MaxScanSize and MaxFiles first. These have the biggest performance impact.
+
+⚠️ **Warning:** Setting values to 0 (unlimited) can cause scans to hang on malicious archives designed to consume resources (zip bombs, recursive archives).
+
+**To Configure Performance Limits:**
+
+1. Locate the "Performance and Limits" group
+2. Adjust the values using the number spinners
+3. Navigate to "Save & Apply" page
+4. Click "Save & Apply" and enter administrator password
+
+#### Logging Configuration
+
+Control how the ClamAV daemon logs scan operations.
+
+**Log File Path** - Location of the scanner log file
+- **Default:** `/var/log/clamav/clamav.log`
+- **Purpose:** Records all daemon scan operations and errors
+- **When to change:** Different partition, centralized logging
+- **Example:** `/var/log/clamd-scans.log`
+
+**Verbose Logging** - Enable detailed scan logging
+- **Options:** On/Off (switch)
+- **Default:** Usually Off
+- **When to enable:** Troubleshooting scan issues, detailed audit trail
+- **Impact:** **Much larger log files** - can grow quickly with frequent scans
+- **What's logged:** Every file scanned, scan results, virus signatures matched
+
+**Syslog Logging** - Send log messages to system log
+- **Options:** On/Off (switch)
+- **Default:** Usually Off
+- **When to enable:** Centralized logging, system monitoring integration
+- **Location:** Messages appear in `/var/log/syslog` or via journalctl
+- **Integration:** Works with log aggregation tools (Splunk, ELK, etc.)
+
+**Logging Recommendations:**
+
+| Scenario | Verbose | Syslog | Log File |
+|----------|---------|--------|----------|
+| **Home desktop user** | Off | Off | Default |
+| **Troubleshooting** | On | Off | Default |
+| **Server with monitoring** | Off | On | Default |
+| **Compliance/audit** | On | On | Custom path |
+
+💡 **Tip:** Enable verbose logging temporarily when troubleshooting, then disable it to reduce log file size.
+
+**To View Daemon Logs:**
+
+ClamUI provides built-in log viewing:
+1. Go to the "Scan History" view
+2. Click the "ClamAV Daemon" tab
+3. View live daemon logs with auto-refresh
+
+Or use command line:
+```bash
+# View daemon log file
+sudo tail -f /var/log/clamav/clamav.log
+
+# View via systemd journal
+journalctl -u clamav-daemon -f
+```
+
+**To Configure Logging:**
+
+1. Locate the "Logging" group
+2. Set the log file path if needed
+3. Toggle verbose and syslog switches
+4. Navigate to "Save & Apply" page
+5. Click "Save & Apply" and enter administrator password
+
+---
+
+### Managing Exclusion Patterns
+
+Exclusion patterns allow you to skip certain files or directories during scans, improving performance and reducing false positives.
+
+💡 **Note:** Exclusions configured here are **global exclusions** that apply to all scans. For profile-specific exclusions, use the Scan Profiles feature (see [Managing Exclusions](#managing-exclusions) section).
+
+#### Opening Exclusions Settings
+
+1. Open Preferences (`Ctrl+,`)
+2. Click "Exclusions" in the sidebar
+
+You'll see two groups: Preset Exclusions and Custom Exclusions.
+
+#### Understanding Exclusion Types
+
+ClamUI supports two types of exclusions:
+
+**Path Exclusions:**
+- Exact file or directory paths
+- Example: `/home/user/safe-folder` or `/opt/myapp/cache`
+- Use for: Specific directories you trust completely
+
+**Pattern Exclusions:**
+- Glob patterns matching multiple files/directories
+- Example: `*.tmp`, `node_modules`, `/home/*/.cache`
+- Use for: Common file types or directory names anywhere on the system
+
+**Global vs Profile Exclusions:**
+
+| Type | Where Configured | Applies To | Use Case |
+|------|------------------|------------|----------|
+| **Global Exclusions** | Preferences → Exclusions | **All scans** (manual, scheduled, profile-based) | System-wide safe directories |
+| **Profile Exclusions** | Scan Profiles → Edit Profile | **Only that profile** | Profile-specific needs |
+
+💡 **Tip:** Use global exclusions for directories you **never** want to scan (system caches, temp directories). Use profile exclusions for context-specific needs.
+
+#### Preset Exclusions
+
+ClamUI provides common development directory patterns as presets. These are especially useful for developers and can significantly improve scan performance.
+
+**Available Preset Exclusions:**
+
+| Pattern | Description | Typical Size | Why Exclude |
+|---------|-------------|--------------|-------------|
+| `node_modules` | Node.js dependencies | 100-500 MB | Thousands of files, false positives, build artifacts |
+| `.git` | Git repository data | 10-100 MB | Binary objects, not executable, no malware risk |
+| `.venv` | Python virtual environment | 50-200 MB | Python packages, duplicates system packages |
+| `build` | Build output directory | 50-500 MB | Compiled artifacts, temporary files |
+| `dist` | Distribution output directory | 10-100 MB | Packaged builds, minified code |
+| `__pycache__` | Python bytecode cache | 1-50 MB | Compiled Python, not executable |
+
+**To Enable/Disable Preset Exclusions:**
+
+1. Locate the "Preset Exclusions" group
+2. Toggle the switch for each pattern
+3. Enabled (On) = pattern will be excluded from scans
+4. Disabled (Off) = pattern will be scanned normally
+
+**Changes take effect immediately** - no need to Save & Apply for preset exclusions.
+
+**When to Enable Presets:**
+
+✅ **Enable if you:**
+- Are a software developer
+- Have projects in your home directory
+- Want faster scans
+- Experience false positives in build directories
+
+❌ **Disable if you:**
+- Don't use development tools
+- Want maximum thorough scanning
+- Work with untrusted downloaded projects
+
+💡 **Tip:** Enabling all preset exclusions is safe for developers. These directories rarely contain executable malware and are rebuilt frequently.
+
+#### Custom Exclusions
+
+Add your own exclusion patterns for directories and files specific to your system.
+
+**To Add a Custom Exclusion Pattern:**
+
+1. Locate the "Custom Exclusions" group
+2. Click in the entry field labeled "Add Pattern"
+3. Type your exclusion pattern
+4. Click the "Add" button
+
+**Pattern Examples:**
+
+| Pattern | What It Excludes | Use Case |
+|---------|------------------|----------|
+| `/home/user/Music` | Entire Music directory | Media library (no malware risk) |
+| `/opt/safe-app` | Entire application folder | Trusted proprietary software |
+| `*.iso` | All ISO disk images | Large files, CD/DVD images |
+| `*.mp4` | All MP4 video files | Video library |
+| `/mnt/*` | All mounted filesystems | External drives, network shares |
+| `/var/log` | System log directory | Log files (no executable risk) |
+| `Thumbs.db` | Windows thumbnail cache | Temporary system files |
+
+**Pattern Syntax:**
+
+- **Exact paths:** Start with `/` for absolute paths (e.g., `/home/user/safe`)
+- **Wildcards:** Use `*` for any characters (e.g., `*.tmp` or `/home/*/Downloads/*.pdf`)
+- **Recursive:** Patterns match at any depth (e.g., `node_modules` matches `/project/node_modules` and `/project/sub/node_modules`)
+
+**Pattern Validation:**
+
+When you add a pattern, ClamUI validates it:
+
+| Indicator | Meaning | Action |
+|-----------|---------|--------|
+| ✅ Green checkmark | Valid pattern | Pattern will work correctly |
+| ⚠️ Yellow warning | Pattern works but may be too broad | Review pattern for accuracy |
+| ❌ Red X | Invalid pattern syntax | Correct the pattern before adding |
+
+**To Remove a Custom Exclusion:**
+
+1. Locate the exclusion in the custom exclusions list
+2. Click the remove/delete button (🗑️) next to the pattern
+3. Confirm removal if prompted
+
+**Changes take effect immediately** - no need to Save & Apply for custom exclusions.
+
+#### Best Practices for Exclusions
+
+**DO:**
+- ✅ Exclude large media libraries (Music, Videos, Photos)
+- ✅ Exclude development directories with many files
+- ✅ Exclude system cache directories
+- ✅ Exclude known safe application data folders
+- ✅ Test exclusions by running a scan and checking the file count
+
+**DON'T:**
+- ❌ Exclude your Downloads folder (common malware entry point)
+- ❌ Exclude Documents folder (macros in Office files)
+- ❌ Exclude your entire home directory (too broad)
+- ❌ Exclude email attachment directories
+- ❌ Exclude USB mount points (external media often contains threats)
+
+**Performance Impact Example:**
+
+```
+Scan without exclusions:
+├─ Files scanned: 250,000
+├─ Scan time: 8 minutes
+└─ False positives: 15 detections in build/
+
+Scan with exclusions (node_modules, build, .git):
+├─ Files scanned: 45,000
+├─ Scan time: 90 seconds
+└─ False positives: 0 detections
+```
+
+⚠️ **Warning:** Every exclusion reduces protection. Only exclude directories you completely trust.
+
+💡 **Tip:** Use the Statistics Dashboard to see how many files are scanned. If the number drops unexpectedly after adding exclusions, review your patterns.
+
+---
+
+### Notification Settings
+
+ClamUI can display desktop notifications when scans complete, threats are detected, or virus definitions are updated.
+
+#### Enabling Desktop Notifications
+
+**To Enable/Disable Notifications:**
+
+1. Open Preferences (`Ctrl+,`)
+2. Look for the "Notifications" group (usually at the top or in a General settings page)
+3. Toggle the "Desktop Notifications" switch
+   - **On:** Show notifications
+   - **Off:** Silent mode (no notifications)
+
+**When Notifications Appear:**
+
+| Event | Notification | Priority |
+|-------|--------------|----------|
+| **Scan Complete (Clean)** | "No threats found (X files scanned)" | Normal |
+| **Threats Detected** | "Threats Detected! X infected file(s) found" | **Urgent** (stays visible longer) |
+| **Database Update Success** | "Virus definitions updated" | Normal |
+| **Database Update Failed** | "Database update failed" with error | Normal |
+| **Scheduled Scan Complete** | "Scheduled scan complete" with results | Normal |
+
+**Notification Behavior:**
+
+- Appear in the GNOME notification area (top-right on most systems)
+- Click a notification to open ClamUI and view details
+- Dismiss automatically after a few seconds (except urgent threats)
+- Persist in notification center for review
+
+**When to Enable Notifications:**
+
+✅ **Enable if you:**
+- Want immediate awareness of scan results
+- Run scheduled scans while away from computer
+- Need alerts for detected threats
+- Multitask and may not watch scan progress
+
+❌ **Disable if you:**
+- Find notifications distracting
+- Always monitor scans manually
+- Run frequent scans that would spam notifications
+- Use ClamUI in a server/headless environment
+
+**Notification Examples:**
+
+```
+┌─────────────────────────────────────────┐
+│ ClamUI                              [×] │
+│ ─────────────────────────────────────── │
+│ Scan Complete                           │
+│ No threats found (1,234 files scanned)  │
+│                                  2m ago │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ ClamUI                              [×] │
+│ ─────────────────────────────────────── │
+│ ⚠️ Threats Detected!                    │
+│ 3 infected file(s) found                │
+│                                  now    │
+└─────────────────────────────────────────┘
+```
+
+💡 **Tip:** Notifications are especially useful for scheduled scans. Enable them to get alerts even when you're not actively using ClamUI.
+
+⚠️ **Note:** Notifications require a GNOME-compatible desktop environment. They may not work in all Linux desktop environments.
+
+**To Test Notifications:**
+
+1. Enable "Desktop Notifications"
+2. Run a Quick Scan (Downloads folder)
+3. Wait for scan to complete
+4. You should see a "Scan Complete" notification
+
+If notifications don't appear:
+- Check your desktop environment notification settings
+- Ensure ClamUI has notification permissions
+- Try the "Test EICAR" button (should trigger threat notification)
+
+---
+
+### Saving and Applying Settings
+
+After configuring any settings, you must explicitly save them.
+
+#### Save & Apply Page
+
+1. Open Preferences (`Ctrl+,`)
+2. Navigate to "Save & Apply" in the sidebar
+3. Review the "Current Status" indicator:
+   - **"Ready"** ✅ - Settings can be saved
+   - **"Saving..."** ⏳ - Save in progress
+   - **"Error"** ❌ - Previous save failed
+
+#### Applying Configuration Changes
+
+**To Save All Settings:**
+
+1. Click the **"Save & Apply"** button (blue/suggested-action style)
+2. **For ClamAV configuration changes** (Database Updates, Scanner Settings):
+   - Authentication dialog appears
+   - Enter your administrator/sudo password
+   - Click "Authenticate"
+3. Wait for confirmation: "Configuration Saved" dialog
+4. Click "OK" to dismiss confirmation
+
+**What Gets Saved:**
+
+| Settings Page | What Changes | Requires Admin Password |
+|---------------|--------------|-------------------------|
+| Database Updates | `/etc/clamav/freshclam.conf` | ✅ Yes |
+| Scanner Settings | `/etc/clamav/clamd.conf` | ✅ Yes |
+| Scan Backend | `~/.config/clamui/settings.json` | ❌ No |
+| Scheduled Scans | `~/.config/clamui/settings.json` + system schedule | ✅ Yes (for schedule) |
+| Exclusions | `~/.config/clamui/settings.json` | ❌ No |
+| Notifications | `~/.config/clamui/settings.json` | ❌ No |
+
+**Automatic Backups:**
+
+Before saving ClamAV configuration files, ClamUI creates backups:
+
+```
+/etc/clamav/freshclam.conf.bak  ← Previous version
+/etc/clamav/clamd.conf.bak      ← Previous version
+```
+
+💡 **Tip:** If changes cause problems, restore from backups:
+```bash
+sudo cp /etc/clamav/freshclam.conf.bak /etc/clamav/freshclam.conf
+sudo systemctl restart clamav-freshclam
+```
+
+#### Applying Changes to Services
+
+Some changes require service restarts to take effect:
+
+**After Changing Database Update Settings:**
+```bash
+# Restart freshclam service
+sudo systemctl restart clamav-freshclam
+
+# Or run a manual update
+sudo freshclam
+```
+
+**After Changing Scanner Settings:**
+```bash
+# Restart clamd service
+sudo systemctl restart clamav-daemon
+
+# Verify daemon is running
+systemctl status clamav-daemon
+```
+
+**After Changing Scheduled Scans:**
+No action needed - ClamUI automatically creates/updates systemd timers or crontab entries.
+
+**To Verify Schedule Changes:**
+```bash
+# View systemd timer
+systemctl --user list-timers clamui-scan
+
+# View crontab entry
+crontab -l | grep clamui
+```
+
+#### Troubleshooting Save Errors
+
+**Common Errors:**
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Authentication failed" | Wrong password | Re-enter correct sudo password |
+| "Permission denied" | Not in sudoers | Add user to sudo group: `sudo usermod -aG sudo USERNAME` |
+| "File not found" | Config file missing | Install ClamAV packages: `sudo apt install clamav clamav-daemon` |
+| "Invalid configuration" | Syntax error in settings | Review settings, check error message details |
+| "Failed to enable schedule" | Systemd/cron not available | Check system has systemd or cron installed |
+
+**If Save Fails:**
+
+1. Check the error message details in the dialog
+2. Verify ClamAV is installed: `clamscan --version`
+3. Check file permissions: `ls -l /etc/clamav/`
+4. Try manual config edit: `sudo nano /etc/clamav/freshclam.conf`
+5. Check ClamUI logs for detailed errors
+
+💡 **Tip:** Always save and test settings one page at a time. This makes it easier to identify which change caused an issue.
+
+---
+
+### Settings Storage Locations
+
+Understanding where settings are stored helps with backups and troubleshooting.
+
+**ClamUI Application Settings:**
+```
+~/.config/clamui/settings.json
+```
+Contains:
+- Scan backend preference
+- Notification enabled/disabled
+- Scheduled scan configuration
+- Global exclusion patterns
+- Minimize to tray settings
+
+**ClamAV System Configuration:**
+```
+/etc/clamav/freshclam.conf  ← Database updates
+/etc/clamav/clamd.conf      ← Scanner daemon
+```
+
+**Scan Profiles:**
+```
+~/.config/clamui/profiles.json
+```
+
+**Scheduled Scan Scripts:**
+```
+# Systemd user timer
+~/.config/systemd/user/clamui-scan.timer
+~/.config/systemd/user/clamui-scan.service
+
+# Or crontab entry (alternative)
+crontab -l
+```
+
+**Backup Recommendations:**
+
+To backup all your ClamUI settings:
+```bash
+# Backup ClamUI application settings
+cp -r ~/.config/clamui ~/clamui-settings-backup
+
+# Backup ClamAV system configuration (requires sudo)
+sudo cp /etc/clamav/freshclam.conf ~/freshclam.conf.backup
+sudo cp /etc/clamav/clamd.conf ~/clamd.conf.backup
+```
+
+To restore settings:
+```bash
+# Restore ClamUI application settings
+cp -r ~/clamui-settings-backup/* ~/.config/clamui/
+
+# Restore ClamAV system configuration (requires sudo)
+sudo cp ~/freshclam.conf.backup /etc/clamav/freshclam.conf
+sudo cp ~/clamd.conf.backup /etc/clamav/clamd.conf
+sudo systemctl restart clamav-freshclam clamav-daemon
+```
+
+---
+
+### Settings Best Practices
+
+**For Home Desktop Users:**
+- ✅ Scan Backend: "Auto (prefer daemon)"
+- ✅ Database Updates: 12-24 checks per day
+- ✅ Scanner: All file types enabled, balanced limits
+- ✅ Exclusions: Enable preset development directories if applicable
+- ✅ Notifications: Enabled
+
+**For Developers:**
+- ✅ Scan Backend: "Auto (prefer daemon)" for speed
+- ✅ Exclusions: Enable all preset patterns (node_modules, .git, etc.)
+- ✅ Custom Exclusions: Add project-specific build directories
+- ✅ Scanner Limits: Increase MaxFiles (20,000+) for large projects
+
+**For Security-Conscious Users:**
+- ✅ Scan Backend: "ClamAV Daemon (clamd)" if available
+- ✅ Database Updates: 24 checks per day (hourly)
+- ✅ Scanner: All file types enabled, high limits
+- ✅ Exclusions: Minimal - only media libraries
+- ✅ Logging: Verbose enabled for audit trail
+- ✅ Notifications: Enabled for immediate threat alerts
+
+**For Low-Bandwidth Connections:**
+- ✅ Database Updates: 4-6 checks per day
+- ✅ Scanner Limits: Lower MaxScanSize (200 MB) for faster scans
+- ✅ Consider local mirror if available
+
+💡 **Tip:** Start with default settings and adjust only when you have a specific need. ClamAV's defaults are chosen for good security and performance balance.
 
 ---
 

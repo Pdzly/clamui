@@ -1024,12 +1024,15 @@ This profile:
 
 ## Configuration Examples
 
-Below are complete configuration examples for common use cases.
+This section provides practical, real-world configuration examples for common deployment scenarios. Each example includes the complete settings.json configuration, deployment instructions, and use case explanations.
 
 ### Example 1: Minimal/Silent Operation
 
-For users who want ClamUI to run quietly in the background without notifications or tray integration:
+**Use Case:** Users who want ClamUI to run quietly without notifications or system tray integration. Ideal for users who manually trigger scans and don't want desktop interruptions.
 
+**Scenario:** Developer workstation where scans are run on-demand through the GUI, with minimal UI footprint.
+
+**Configuration** (`~/.config/clamui/settings.json`):
 ```json
 {
   "notifications_enabled": false,
@@ -1050,12 +1053,52 @@ For users who want ClamUI to run quietly in the background without notifications
 }
 ```
 
+**Key Features:**
+- ✅ No desktop notifications
+- ✅ No system tray icon
+- ✅ Normal window behavior (close = quit)
+- ✅ Automatic backend selection (daemon preferred, clamscan fallback)
+- ✅ No scheduled scans
+
+**Deployment:**
+```bash
+# Create config directory if it doesn't exist
+mkdir -p ~/.config/clamui
+
+# Copy this configuration to settings.json
+cat > ~/.config/clamui/settings.json << 'EOF'
+{
+  "notifications_enabled": false,
+  "minimize_to_tray": false,
+  "start_minimized": false,
+  "quarantine_directory": "",
+  "scheduled_scans_enabled": false,
+  "schedule_frequency": "weekly",
+  "schedule_time": "02:00",
+  "schedule_targets": [],
+  "schedule_skip_on_battery": true,
+  "schedule_auto_quarantine": false,
+  "schedule_day_of_week": 0,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [],
+  "scan_backend": "auto",
+  "daemon_socket_path": ""
+}
+EOF
+
+# Launch ClamUI
+clamui
+```
+
 ---
 
 ### Example 2: Daily Scheduled Scans with Auto-Quarantine
 
-For automated protection with daily scans of important directories:
+**Use Case:** Automated daily protection for workstations with important user data. Scans run automatically every night and quarantine threats without user intervention.
 
+**Scenario:** Office workstation or home PC where the user wants "set-it-and-forget-it" antivirus protection. Scans happen at 3 AM daily, automatically quarantining any threats found.
+
+**Configuration** (`~/.config/clamui/settings.json`):
 ```json
 {
   "notifications_enabled": true,
@@ -1084,12 +1127,83 @@ For automated protection with daily scans of important directories:
 }
 ```
 
+**Key Features:**
+- ✅ Daily scans at 3:00 AM
+- ✅ Automatic threat quarantine
+- ✅ Skips scans when on battery power
+- ✅ Notifications for scan results
+- ✅ Starts minimized to tray
+- ✅ Daemon backend for fast scans
+- ✅ Excludes cache and trash directories
+
+**Deployment:**
+```bash
+# Replace 'username' with your actual username
+USERNAME=$(whoami)
+
+# Create config directory
+mkdir -p ~/.config/clamui
+
+# Create configuration with proper username substitution
+cat > ~/.config/clamui/settings.json << EOF
+{
+  "notifications_enabled": true,
+  "minimize_to_tray": true,
+  "start_minimized": true,
+  "quarantine_directory": "",
+  "scheduled_scans_enabled": true,
+  "schedule_frequency": "daily",
+  "schedule_time": "03:00",
+  "schedule_targets": [
+    "/home/${USERNAME}/Documents",
+    "/home/${USERNAME}/Downloads",
+    "/home/${USERNAME}/Desktop"
+  ],
+  "schedule_skip_on_battery": true,
+  "schedule_auto_quarantine": true,
+  "schedule_day_of_week": 0,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [
+    "/home/${USERNAME}/.cache",
+    "/home/${USERNAME}/.local/share/Trash",
+    "*.iso"
+  ],
+  "scan_backend": "daemon",
+  "daemon_socket_path": ""
+}
+EOF
+
+# Ensure clamd daemon is running
+sudo systemctl enable clamav-daemon
+sudo systemctl start clamav-daemon
+
+# Launch ClamUI (will automatically create scheduled scans)
+clamui
+
+# Verify scheduled scan is created
+systemctl --user list-timers | grep clamui
+# OR for cron-based systems:
+crontab -l | grep clamui
+```
+
+**Important Notes:**
+- Replace `/home/username` with your actual home directory path
+- Ensure clamd is running for optimal performance
+- Check quarantine regularly: ClamUI GUI → Quarantine tab
+- Scheduled scans are created as systemd user timers (preferred) or crontab entries
+
 ---
 
 ### Example 3: Using Daemon Backend with Custom Socket
 
-For systems with custom clamd configurations:
+**Use Case:** Systems with non-standard clamd configurations or multiple clamd instances. Useful for custom ClamAV deployments with specific socket locations.
 
+**Scenario:** Server with clamd configured to use a custom socket path (e.g., `/var/run/custom/clamd.sock`). This might occur on systems with:
+- Multiple ClamAV instances
+- Custom security configurations
+- Non-standard distribution setups
+
+**Configuration** (`~/.config/clamui/settings.json`):
 ```json
 {
   "notifications_enabled": true,
@@ -1110,12 +1224,85 @@ For systems with custom clamd configurations:
 }
 ```
 
+**Key Features:**
+- ✅ Forces daemon backend (no fallback to clamscan)
+- ✅ Uses custom socket path
+- ✅ Desktop notifications enabled
+- ✅ Standard window behavior
+
+**Deployment:**
+```bash
+# First, verify your clamd socket path
+# Common locations to check:
+ls -la /var/run/clamav/clamd.ctl
+ls -la /var/run/clamd.scan/clamd.sock
+ls -la /run/clamav/clamd.sock
+
+# Or check clamd configuration
+grep "LocalSocket" /etc/clamav/clamd.conf
+
+# Suppose we found the socket at /var/run/clamav/clamd.ctl
+SOCKET_PATH="/var/run/clamav/clamd.ctl"
+
+# Create configuration with custom socket
+mkdir -p ~/.config/clamui
+cat > ~/.config/clamui/settings.json << EOF
+{
+  "notifications_enabled": true,
+  "minimize_to_tray": false,
+  "start_minimized": false,
+  "quarantine_directory": "",
+  "scheduled_scans_enabled": false,
+  "schedule_frequency": "weekly",
+  "schedule_time": "02:00",
+  "schedule_targets": [],
+  "schedule_skip_on_battery": true,
+  "schedule_auto_quarantine": false,
+  "schedule_day_of_week": 0,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [],
+  "scan_backend": "daemon",
+  "daemon_socket_path": "${SOCKET_PATH}"
+}
+EOF
+
+# Test daemon connectivity
+clamdscan --version --config-file=/dev/null --stream
+
+# Launch ClamUI
+clamui
+```
+
+**Troubleshooting:**
+```bash
+# If scans fail, verify socket permissions
+ls -la /custom/path/to/clamd.sock
+
+# Check if clamd is running
+sudo systemctl status clamav-daemon
+
+# Test socket manually
+echo "PING" | nc -U /custom/path/to/clamd.sock
+# Should respond with "PONG"
+
+# Check ClamUI logs for errors
+ls -lh ~/.local/share/clamui/logs/
+```
+
 ---
 
 ### Example 4: Enterprise Deployment (Pre-configured)
 
-For deploying ClamUI with centralized quarantine and weekly full system scans:
+**Use Case:** Centralized deployment of ClamUI across multiple workstations with standardized settings. Ideal for IT administrators managing multiple systems.
 
+**Scenario:** Corporate environment with 50+ Linux workstations. Requirements:
+- Weekly full scans on Sunday nights at 2 AM
+- Centralized quarantine directory on shared storage
+- Automatic threat quarantine
+- Scans run even on battery (laptops stay plugged in)
+- Consistent exclusions across all workstations
+
+**Configuration** (`~/.config/clamui/settings.json`):
 ```json
 {
   "notifications_enabled": true,
@@ -1144,6 +1331,397 @@ For deploying ClamUI with centralized quarantine and weekly full system scans:
   "scan_backend": "daemon",
   "daemon_socket_path": ""
 }
+```
+
+**Key Features:**
+- ✅ Weekly scans every Sunday at 2 AM
+- ✅ Centralized quarantine directory
+- ✅ Automatic threat quarantine
+- ✅ Scans run even on battery
+- ✅ Comprehensive scan targets (home dirs, apps, web files)
+- ✅ Standard exclusions for cache and temporary files
+- ✅ Daemon backend for performance
+
+**Enterprise Deployment Script:**
+
+```bash
+#!/bin/bash
+# deploy-clamui-config.sh
+# Deploy ClamUI configuration across enterprise workstations
+
+set -e
+
+# Configuration variables
+QUARANTINE_DIR="/opt/clamui/quarantine"
+CONFIG_DIR="/etc/skel/.config/clamui"  # For new users
+SCAN_TARGETS="/home /opt /var/www"
+
+echo "=== ClamUI Enterprise Deployment ==="
+
+# 1. Create centralized quarantine directory
+echo "[1/5] Creating centralized quarantine directory..."
+sudo mkdir -p "${QUARANTINE_DIR}"
+sudo chmod 1777 "${QUARANTINE_DIR}"  # Sticky bit for multi-user
+echo "✓ Quarantine directory created: ${QUARANTINE_DIR}"
+
+# 2. Create default configuration for new users
+echo "[2/5] Creating default configuration..."
+sudo mkdir -p "${CONFIG_DIR}"
+sudo tee "${CONFIG_DIR}/settings.json" > /dev/null << 'EOF'
+{
+  "notifications_enabled": true,
+  "minimize_to_tray": true,
+  "start_minimized": true,
+  "quarantine_directory": "/opt/clamui/quarantine",
+  "scheduled_scans_enabled": true,
+  "schedule_frequency": "weekly",
+  "schedule_time": "02:00",
+  "schedule_targets": [
+    "/home",
+    "/opt",
+    "/var/www"
+  ],
+  "schedule_skip_on_battery": false,
+  "schedule_auto_quarantine": true,
+  "schedule_day_of_week": 6,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [
+    "/home/*/.cache",
+    "/home/*/.local/share/Trash",
+    "/var/log",
+    "*.bak",
+    "*.tmp"
+  ],
+  "scan_backend": "daemon",
+  "daemon_socket_path": ""
+}
+EOF
+echo "✓ Default configuration created in /etc/skel"
+
+# 3. Deploy to existing users
+echo "[3/5] Deploying configuration to existing users..."
+for USER_HOME in /home/*; do
+    if [ -d "${USER_HOME}" ]; then
+        USERNAME=$(basename "${USER_HOME}")
+        USER_CONFIG_DIR="${USER_HOME}/.config/clamui"
+
+        echo "  → Deploying for user: ${USERNAME}"
+        sudo -u "${USERNAME}" mkdir -p "${USER_CONFIG_DIR}"
+        sudo cp "${CONFIG_DIR}/settings.json" "${USER_CONFIG_DIR}/"
+        sudo chown "${USERNAME}:${USERNAME}" "${USER_CONFIG_DIR}/settings.json"
+    fi
+done
+echo "✓ Configuration deployed to all existing users"
+
+# 4. Ensure ClamAV daemon is running
+echo "[4/5] Ensuring ClamAV daemon is running..."
+sudo systemctl enable clamav-daemon
+sudo systemctl start clamav-daemon
+sudo systemctl status clamav-daemon --no-pager
+echo "✓ ClamAV daemon is running"
+
+# 5. Update virus definitions
+echo "[5/5] Updating virus definitions..."
+sudo freshclam
+echo "✓ Virus definitions updated"
+
+echo ""
+echo "=== Deployment Complete ==="
+echo "Configuration location: ${CONFIG_DIR}/settings.json"
+echo "Quarantine directory: ${QUARANTINE_DIR}"
+echo "Schedule: Weekly scans on Sunday at 2:00 AM"
+echo ""
+echo "Next steps:"
+echo "  1. Users should launch ClamUI to activate scheduled scans"
+echo "  2. Monitor quarantine directory for threats: ${QUARANTINE_DIR}"
+echo "  3. Check scan logs: ~/.local/share/clamui/logs/"
+echo ""
+```
+
+**Make the script executable and run:**
+```bash
+chmod +x deploy-clamui-config.sh
+sudo ./deploy-clamui-config.sh
+```
+
+**Monitoring and Management:**
+```bash
+# Check scheduled scans on a workstation
+systemctl --user list-timers | grep clamui
+
+# View recent scan logs
+ls -lht ~/.local/share/clamui/logs/ | head
+
+# Check quarantine for threats (all users)
+sudo ls -lh /opt/clamui/quarantine/
+
+# View quarantine database
+sudo sqlite3 /opt/clamui/quarantine/quarantine.db "SELECT * FROM quarantined_files;"
+
+# Force a scan manually (testing)
+clamui-scheduled-scan
+```
+
+**Configuration Management with Ansible (Optional):**
+
+```yaml
+# ansible/clamui-deploy.yml
+---
+- name: Deploy ClamUI Enterprise Configuration
+  hosts: workstations
+  become: yes
+
+  vars:
+    quarantine_dir: "/opt/clamui/quarantine"
+    config_template: "templates/clamui-settings.json.j2"
+
+  tasks:
+    - name: Create centralized quarantine directory
+      file:
+        path: "{{ quarantine_dir }}"
+        state: directory
+        mode: '1777'
+
+    - name: Deploy ClamUI configuration to /etc/skel
+      template:
+        src: "{{ config_template }}"
+        dest: /etc/skel/.config/clamui/settings.json
+        mode: '0644'
+
+    - name: Deploy configuration to existing users
+      become_user: "{{ item.name }}"
+      template:
+        src: "{{ config_template }}"
+        dest: "{{ item.home }}/.config/clamui/settings.json"
+        mode: '0644'
+      loop: "{{ users }}"
+
+    - name: Ensure ClamAV daemon is enabled
+      systemd:
+        name: clamav-daemon
+        enabled: yes
+        state: started
+
+    - name: Update virus definitions
+      command: freshclam
+```
+
+**Centralized Monitoring Script:**
+
+```bash
+#!/bin/bash
+# monitor-quarantine.sh
+# Monitor centralized quarantine across all workstations
+
+QUARANTINE_DIR="/opt/clamui/quarantine"
+QUARANTINE_DB="${QUARANTINE_DIR}/quarantine.db"
+
+echo "=== ClamUI Quarantine Report ==="
+echo "Generated: $(date)"
+echo ""
+
+if [ -f "${QUARANTINE_DB}" ]; then
+    echo "Total quarantined files:"
+    sqlite3 "${QUARANTINE_DB}" "SELECT COUNT(*) FROM quarantined_files;"
+
+    echo ""
+    echo "Recent threats (last 7 days):"
+    sqlite3 "${QUARANTINE_DB}" \
+        "SELECT original_path, threat_name, quarantine_date
+         FROM quarantined_files
+         WHERE julianday('now') - julianday(quarantine_date) <= 7
+         ORDER BY quarantine_date DESC;"
+
+    echo ""
+    echo "Threats by type:"
+    sqlite3 "${QUARANTINE_DB}" \
+        "SELECT threat_name, COUNT(*) as count
+         FROM quarantined_files
+         GROUP BY threat_name
+         ORDER BY count DESC;"
+else
+    echo "No quarantine database found at ${QUARANTINE_DB}"
+fi
+
+echo ""
+echo "Disk usage:"
+du -sh "${QUARANTINE_DIR}"
+```
+
+---
+
+### Example 5: Laptop User (Battery-Aware Scanning)
+
+**Use Case:** Laptop users who want scheduled scans that respect battery status and minimize system impact during portable use.
+
+**Scenario:** Developer laptop that's sometimes docked, sometimes mobile. Scans should only run when plugged in and during off-hours.
+
+**Configuration** (`~/.config/clamui/settings.json`):
+```json
+{
+  "notifications_enabled": true,
+  "minimize_to_tray": true,
+  "start_minimized": false,
+  "quarantine_directory": "",
+  "scheduled_scans_enabled": true,
+  "schedule_frequency": "daily",
+  "schedule_time": "02:00",
+  "schedule_targets": [
+    "/home/username/Documents",
+    "/home/username/Projects",
+    "/home/username/Downloads"
+  ],
+  "schedule_skip_on_battery": true,
+  "schedule_auto_quarantine": false,
+  "schedule_day_of_week": 0,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [
+    "/home/username/.cache",
+    "/home/username/node_modules",
+    "/home/username/.venv",
+    "*.iso",
+    "*.img"
+  ],
+  "scan_backend": "auto",
+  "daemon_socket_path": ""
+}
+```
+
+**Key Features:**
+- ✅ Skips scans when on battery power
+- ✅ Scheduled for 2 AM (user likely has laptop docked/plugged in)
+- ✅ No auto-quarantine (manual review for important work files)
+- ✅ Excludes development dependencies and large disk images
+- ✅ Auto backend selection (works with or without clamd)
+
+**Deployment:**
+```bash
+USERNAME=$(whoami)
+
+mkdir -p ~/.config/clamui
+cat > ~/.config/clamui/settings.json << EOF
+{
+  "notifications_enabled": true,
+  "minimize_to_tray": true,
+  "start_minimized": false,
+  "quarantine_directory": "",
+  "scheduled_scans_enabled": true,
+  "schedule_frequency": "daily",
+  "schedule_time": "02:00",
+  "schedule_targets": [
+    "/home/${USERNAME}/Documents",
+    "/home/${USERNAME}/Projects",
+    "/home/${USERNAME}/Downloads"
+  ],
+  "schedule_skip_on_battery": true,
+  "schedule_auto_quarantine": false,
+  "schedule_day_of_week": 0,
+  "schedule_day_of_month": 1,
+  "exclusion_patterns": [
+    "/home/${USERNAME}/.cache",
+    "/home/${USERNAME}/node_modules",
+    "/home/${USERNAME}/.venv",
+    "*.iso",
+    "*.img"
+  ],
+  "scan_backend": "auto",
+  "daemon_socket_path": ""
+}
+EOF
+
+clamui
+```
+
+---
+
+## Applying Configuration Changes
+
+### Method 1: Direct File Edit
+
+1. **Stop ClamUI** (if running)
+2. **Edit settings.json:**
+   ```bash
+   nano ~/.config/clamui/settings.json
+   # or
+   vim ~/.config/clamui/settings.json
+   ```
+3. **Verify JSON syntax:**
+   ```bash
+   python3 -m json.tool ~/.config/clamui/settings.json
+   ```
+4. **Restart ClamUI** to apply changes
+
+### Method 2: Preferences Dialog
+
+1. Launch ClamUI
+2. Click **Preferences** (gear icon or menu)
+3. Modify settings through the GUI
+4. Changes are saved automatically
+
+### Method 3: Programmatic Deployment
+
+```python
+#!/usr/bin/env python3
+# deploy-config.py - Programmatically deploy ClamUI configuration
+
+import json
+from pathlib import Path
+
+# Configuration to deploy
+config = {
+    "notifications_enabled": True,
+    "minimize_to_tray": True,
+    "start_minimized": True,
+    "scheduled_scans_enabled": True,
+    "schedule_frequency": "daily",
+    "schedule_time": "03:00",
+    # ... rest of configuration
+}
+
+# Target path
+config_dir = Path.home() / ".config" / "clamui"
+config_file = config_dir / "settings.json"
+
+# Create directory if needed
+config_dir.mkdir(parents=True, exist_ok=True)
+
+# Write configuration
+with open(config_file, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print(f"✓ Configuration deployed to {config_file}")
+```
+
+---
+
+## Validation and Testing
+
+After deploying a configuration, verify it's working correctly:
+
+```bash
+# 1. Validate JSON syntax
+python3 -m json.tool ~/.config/clamui/settings.json > /dev/null && echo "✓ Valid JSON"
+
+# 2. Check scheduled scans (systemd)
+systemctl --user list-timers | grep clamui
+
+# 3. Check scheduled scans (cron)
+crontab -l | grep clamui
+
+# 4. Verify daemon socket (if using daemon backend)
+ls -la /var/run/clamav/clamd.ctl
+
+# 5. Test scan manually
+clamui-scheduled-scan  # Runs scan using current settings
+
+# 6. Check logs
+ls -lh ~/.local/share/clamui/logs/
+cat ~/.local/share/clamui/logs/scan_*.json | jq .
+
+# 7. Verify quarantine directory permissions
+ls -ld ~/.local/share/clamui/quarantine
+# or for custom directory:
+ls -ld /opt/clamui/quarantine
 ```
 
 ---

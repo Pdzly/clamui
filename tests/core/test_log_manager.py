@@ -1682,3 +1682,318 @@ class TestLogManagerIndexMaintenance:
             assert "details" not in entry
             assert "path" not in entry
             assert "duration" not in entry
+
+
+class TestLogManagerIndexValidation:
+    """Tests for index validation and automatic rebuild functionality."""
+
+    def test_validate_index_with_valid_index(self, tmp_path):
+        """Test that _validate_index returns True for a valid index."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create some log entries
+        for i in range(5):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Load the index
+        index_data = log_manager._load_index()
+
+        # Validate it
+        assert log_manager._validate_index(index_data) is True
+
+    def test_validate_index_with_empty_index_and_empty_directory(self, tmp_path):
+        """Test that _validate_index returns True for empty index with no logs."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Empty index
+        index_data = {"version": 1, "entries": []}
+
+        # Should be valid (no logs, no index entries)
+        assert log_manager._validate_index(index_data) is True
+
+    def test_validate_index_with_entry_count_mismatch_extra_entries(self, tmp_path):
+        """Test that _validate_index returns False when index has more entries than files."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 3 log entries
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Load the index and add extra bogus entries
+        index_data = log_manager._load_index()
+        index_data["entries"].append({
+            "id": "bogus-id-1",
+            "timestamp": "2024-01-01T00:00:00",
+            "type": "scan"
+        })
+        index_data["entries"].append({
+            "id": "bogus-id-2",
+            "timestamp": "2024-01-01T00:00:00",
+            "type": "scan"
+        })
+
+        # Should be invalid (5 index entries, 3 actual files)
+        assert log_manager._validate_index(index_data) is False
+
+    def test_validate_index_with_entry_count_mismatch_fewer_entries(self, tmp_path):
+        """Test that _validate_index returns False when index has fewer entries than files."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 5 log entries
+        for i in range(5):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Load the index and remove some entries
+        index_data = log_manager._load_index()
+        index_data["entries"] = index_data["entries"][:3]
+
+        # Should be invalid (3 index entries, 5 actual files)
+        assert log_manager._validate_index(index_data) is False
+
+    def test_validate_index_with_missing_files_above_threshold(self, tmp_path):
+        """Test that _validate_index returns False when >20% of files are missing."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 10 log entries
+        log_ids = []
+        for i in range(10):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            log_ids.append(entry.id)
+
+        # Delete 3 log files (30% missing - above 20% threshold)
+        for i in range(3):
+            log_file = tmp_path / f"{log_ids[i]}.json"
+            log_file.unlink()
+
+        # Load the index (which still has all 10 entries)
+        index_data = log_manager._load_index()
+
+        # Should be invalid (30% missing > 20% threshold)
+        assert log_manager._validate_index(index_data) is False
+
+    def test_validate_index_with_missing_files_below_threshold(self, tmp_path):
+        """Test that _validate_index returns False even with few missing files due to count mismatch."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 10 log entries
+        log_ids = []
+        for i in range(10):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            log_ids.append(entry.id)
+
+        # Delete 1 log file (10% missing - below 20% threshold)
+        log_file = tmp_path / f"{log_ids[0]}.json"
+        log_file.unlink()
+
+        # Load the index (which still has all 10 entries)
+        index_data = log_manager._load_index()
+
+        # Should be invalid due to count mismatch (10 entries, 9 files)
+        # even though missing percentage is below threshold
+        assert log_manager._validate_index(index_data) is False
+
+    def test_validate_index_with_nonexistent_directory(self, tmp_path):
+        """Test that _validate_index handles non-existent directory gracefully."""
+        # Create log manager with non-existent directory
+        log_manager = LogManager(str(tmp_path / "nonexistent"))
+
+        # Index with entries (but directory doesn't exist)
+        index_data = {
+            "version": 1,
+            "entries": [
+                {"id": "test-id", "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+            ]
+        }
+
+        # Should be invalid (directory doesn't exist but index has entries)
+        assert log_manager._validate_index(index_data) is False
+
+    def test_validate_index_with_large_index_uses_sampling(self, tmp_path):
+        """Test that _validate_index uses sampling for large indices (>50 entries)."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 60 log entries
+        log_ids = []
+        for i in range(60):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            log_ids.append(entry.id)
+
+        # Load the index
+        index_data = log_manager._load_index()
+
+        # All files exist, should be valid
+        assert log_manager._validate_index(index_data) is True
+
+        # Delete 15 files (25% missing)
+        for i in range(15):
+            log_file = tmp_path / f"{log_ids[i]}.json"
+            log_file.unlink()
+
+        # Reload index (still has all 60 entries)
+        index_data = log_manager._load_index()
+
+        # Should be invalid due to count mismatch first
+        # (60 entries, 45 files)
+        assert log_manager._validate_index(index_data) is False
+
+    def test_get_logs_triggers_rebuild_on_stale_index_count_mismatch(self, tmp_path):
+        """Test that get_logs() triggers automatic rebuild when index has count mismatch."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 5 log entries
+        for i in range(5):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Manually corrupt the index by adding bogus entries
+        index_data = log_manager._load_index()
+        original_count = len(index_data["entries"])
+        index_data["entries"].append({
+            "id": "bogus-id",
+            "timestamp": "2024-01-01T00:00:00",
+            "type": "scan"
+        })
+        log_manager._save_index(index_data)
+
+        # Call get_logs() - should detect stale index and rebuild
+        logs = log_manager.get_logs()
+
+        # Should return all valid logs
+        assert len(logs) == 5
+
+        # Verify index was rebuilt (should have correct count now)
+        rebuilt_index = log_manager._load_index()
+        assert len(rebuilt_index["entries"]) == original_count
+
+    def test_get_logs_triggers_rebuild_on_missing_files(self, tmp_path):
+        """Test that get_logs() triggers automatic rebuild when many files are missing."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 10 log entries
+        log_ids = []
+        for i in range(10):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            log_ids.append(entry.id)
+
+        # Delete 3 log files (30% missing - above threshold)
+        for i in range(3):
+            log_file = tmp_path / f"{log_ids[i]}.json"
+            log_file.unlink()
+
+        # Call get_logs() - should detect stale index and rebuild
+        logs = log_manager.get_logs()
+
+        # Should return only the 7 remaining valid logs
+        assert len(logs) == 7
+
+        # Verify index was rebuilt with correct count
+        rebuilt_index = log_manager._load_index()
+        assert len(rebuilt_index["entries"]) == 7
+
+    def test_get_logs_handles_validation_error_gracefully(self, tmp_path):
+        """Test that get_logs() handles validation errors gracefully."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create some log entries
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Test scan {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Mock _validate_index to raise an exception
+        original_validate = log_manager._validate_index
+
+        def mock_validate(index_data):
+            raise Exception("Validation error")
+
+        log_manager._validate_index = mock_validate
+
+        # get_logs() should handle the error and fall back to full scan
+        logs = log_manager.get_logs()
+
+        # Should still return logs via fallback
+        assert len(logs) == 3
+
+        # Restore original method
+        log_manager._validate_index = original_validate
+
+    def test_validate_index_handles_permission_error(self, tmp_path):
+        """Test that _validate_index handles permission errors gracefully."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create a log entry
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Test scan",
+            details="Details",
+        )
+        log_manager.save_log(entry)
+
+        # Load the index
+        index_data = log_manager._load_index()
+
+        # Mock glob to raise PermissionError
+        original_glob = tmp_path.glob
+
+        def mock_glob(pattern):
+            raise PermissionError("Permission denied")
+
+        log_manager._log_dir.glob = mock_glob
+
+        # Should return False on error
+        assert log_manager._validate_index(index_data) is False
+
+        # Restore original glob
+        log_manager._log_dir.glob = original_glob

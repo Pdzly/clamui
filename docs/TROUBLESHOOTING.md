@@ -178,9 +178,14 @@ sudo pacman -Syu clamav
 
 ### Host ClamAV not accessible
 
-**Symptoms**: Flatpak version can't find ClamAV
+**Symptoms**:
+- Error message "ClamAV is not installed"
+- Error message "clamscan command not found"
+- ClamUI can't detect ClamAV despite it being installed
 
-**Solution**: Install ClamAV on the **host system** (not inside Flatpak)
+**Cause**: ClamUI Flatpak runs in a sandbox and needs ClamAV installed on the **host system** (not inside Flatpak)
+
+**Solution**: Install ClamAV on your host OS (outside Flatpak)
 
 ```bash
 # Install on your host OS (outside Flatpak)
@@ -189,32 +194,51 @@ sudo dnf install clamav  # Fedora
 sudo pacman -S clamav    # Arch
 ```
 
-ClamUI uses `flatpak-spawn --host` to access host ClamAV binaries.
+**How it works**: ClamUI uses `flatpak-spawn --host` to access host ClamAV binaries. This allows the sandboxed Flatpak app to use the ClamAV installation on your host system.
+
+**Verify it works**:
+```bash
+# Test that ClamAV is accessible from the host
+flatpak run --command=sh com.github.rooki.ClamUI -c "flatpak-spawn --host clamscan --version"
+```
 
 ### Permission denied when scanning files
 
-**Symptoms**: "Permission denied" when scanning directories
+**Symptoms**:
+- "Permission denied" when scanning directories
+- "Cannot read" error messages
+- Files/folders not appearing in scan results
+- Quarantine operations fail
 
-**Solution**: Grant Flatpak access to the directory
+**Cause**: Flatpak sandbox restricts filesystem access by default
+
+**Solution**: Grant Flatpak access to the directories you want to scan
 
 ```bash
 # Grant read-only access to a specific directory
 flatpak override --user --filesystem=/path/to/directory:ro com.github.rooki.ClamUI
 
-# Grant full access (if needed for quarantine)
+# Grant full access (needed for quarantine operations)
 flatpak override --user --filesystem=/path/to/directory com.github.rooki.ClamUI
 ```
 
-Common directories to grant access:
+**Common directories to grant access**:
 
 ```bash
 # Home directory (usually already granted)
 flatpak override --user --filesystem=home com.github.rooki.ClamUI
 
-# External drives
+# External drives and USB devices
 flatpak override --user --filesystem=/media com.github.rooki.ClamUI
 flatpak override --user --filesystem=/mnt com.github.rooki.ClamUI
+flatpak override --user --filesystem=/run/media com.github.rooki.ClamUI
+
+# Additional common locations
+flatpak override --user --filesystem=/var com.github.rooki.ClamUI  # For system scans
+flatpak override --user --filesystem=/opt com.github.rooki.ClamUI  # For installed apps
 ```
+
+**Note**: Read-only access (`:ro`) is sufficient for scanning, but quarantine operations require full write access.
 
 ### Granting additional filesystem access
 
@@ -222,31 +246,92 @@ flatpak override --user --filesystem=/mnt com.github.rooki.ClamUI
 
 **Solution**: View and modify Flatpak permissions
 
+**Command line method**:
+
 ```bash
 # View current permissions
 flatpak info --show-permissions com.github.rooki.ClamUI
 
-# Grant access to all files (use with caution)
+# Grant access to a specific directory
+flatpak override --user --filesystem=/path/to/directory com.github.rooki.ClamUI
+
+# Grant access to all files (use with caution - reduces sandbox security)
 flatpak override --user --filesystem=host com.github.rooki.ClamUI
+
+# Remove a specific permission
+flatpak override --user --nofilesystem=/path/to/directory com.github.rooki.ClamUI
 
 # Reset permissions to default
 flatpak override --user --reset com.github.rooki.ClamUI
 ```
 
+**GUI method (Flatseal)**:
+
+For easier permission management, install Flatseal:
+
+```bash
+flatpak install flathub com.github.tchx84.Flatseal
+```
+
+Then use Flatseal to:
+1. Find "ClamUI" in the application list
+2. Scroll to "Filesystem" section
+3. Toggle access for specific directories
+4. Click the "+" button to add custom paths
+
 ### D-Bus and portal permission issues
 
-**Symptoms**: Notifications not working or file dialogs failing
+**Symptoms**:
+- Notifications not appearing
+- File picker dialogs not working
+- "Open with file manager" button doesn't work
+- Desktop integration features fail
 
-**Solution**: Ensure D-Bus permissions are set
+**Cause**: Missing D-Bus or portal permissions
+
+**Solution 1**: Ensure D-Bus permissions are set
 
 ```bash
 # Verify D-Bus access
-flatpak info --show-permissions com.github.rooki.ClamUI | grep talk-name
+flatpak info --show-permissions com.github.rooki.ClamUI | grep -E 'talk-name|system-talk-name'
 
-# If missing, reinstall the Flatpak
+# Expected permissions should include:
+# - org.freedesktop.Notifications (for notifications)
+# - org.freedesktop.portal.* (for file picker and desktop integration)
+```
+
+**Solution 2**: Fix missing permissions
+
+If D-Bus permissions are missing, reinstall the Flatpak:
+
+```bash
 flatpak uninstall com.github.rooki.ClamUI
 flatpak install flathub com.github.rooki.ClamUI
 ```
+
+**Solution 3**: Grant portal access manually (if needed)
+
+```bash
+# Grant portal access
+flatpak override --user --talk-name=org.freedesktop.Notifications com.github.rooki.ClamUI
+flatpak override --user --talk-name=org.freedesktop.portal.Desktop com.github.rooki.ClamUI
+flatpak override --user --talk-name=org.freedesktop.portal.FileChooser com.github.rooki.ClamUI
+```
+
+**Troubleshooting notifications**:
+
+If notifications still don't work:
+
+1. Check that your desktop environment supports notifications
+2. Verify notification daemon is running:
+   ```bash
+   ps aux | grep notification
+   ```
+3. Test notifications from the Flatpak:
+   ```bash
+   flatpak run --command=sh com.github.rooki.ClamUI -c \
+     "notify-send 'Test' 'This is a test notification'"
+   ```
 
 ---
 

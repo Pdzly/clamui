@@ -7,6 +7,9 @@ This script MUST be run as a separate Python process to avoid GTK3/GTK4
 version conflicts. It loads GTK3 first (required by AyatanaAppIndicator3)
 and communicates with the main GTK4 application via JSON messages on stdin/stdout.
 
+For detailed architecture documentation including process boundaries, IPC protocol,
+threading model, and sequence diagrams, see: docs/architecture/tray-subprocess.md
+
 Protocol:
 - Input (stdin): JSON commands like {"action": "update_status", "status": "scanning"}
 - Output (stdout): JSON responses like {"event": "menu_action", "action": "quick_scan"}

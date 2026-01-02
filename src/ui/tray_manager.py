@@ -5,6 +5,9 @@ Manager for the system tray indicator subprocess.
 This module spawns and communicates with the tray_service subprocess,
 which runs with GTK3 to avoid GTK4 version conflicts. Communication
 is done via JSON messages over stdin/stdout.
+
+For detailed architecture documentation including process boundaries, IPC protocol,
+threading model, and sequence diagrams, see: docs/architecture/tray-subprocess.md
 """
 
 import json

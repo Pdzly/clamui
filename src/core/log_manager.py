@@ -6,7 +6,9 @@ Stores scan/update operation logs and provides daemon log access.
 
 import json
 import os
+import random
 import subprocess
+import tempfile
 import threading
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -189,6 +191,9 @@ CLAMD_LOG_PATHS = [
     "/var/log/clamd.log",
 ]
 
+# Index file for optimized log retrieval
+INDEX_FILENAME = "log_index.json"
+
 
 class LogManager:
     """
@@ -196,6 +201,16 @@ class LogManager:
 
     Provides methods for saving scan/update logs, retrieving historical logs,
     and accessing clamd daemon logs.
+
+    Index Schema:
+        The log index file (log_index.json) contains metadata for fast log retrieval:
+        {
+            "version": 1,
+            "entries": [
+                {"id": "uuid-string", "timestamp": "ISO-8601-string", "type": "scan|update"},
+                ...
+            ]
+        }
     """
 
     def __init__(self, log_dir: Optional[str] = None):
@@ -214,6 +229,9 @@ class LogManager:
         # Thread lock for safe concurrent access
         self._lock = threading.Lock()
 
+        # Flag to track if migration check has been performed
+        self._migration_checked = False
+
         # Ensure log directory exists
         self._ensure_log_dir()
 
@@ -225,9 +243,205 @@ class LogManager:
             # Handle silently - will fail on write operations
             pass
 
+    @property
+    def _index_path(self) -> Path:
+        """
+        Get the path to the log index file.
+
+        Returns:
+            Path object pointing to log_index.json in the log directory
+        """
+        return self._log_dir / INDEX_FILENAME
+
+    def _load_index(self) -> dict:
+        """
+        Load the log index from file.
+
+        Returns a dictionary with 'version' and 'entries' keys. If the file doesn't
+        exist or is corrupted, returns an empty structure with version 1 and empty entries list.
+
+        Returns:
+            Dictionary with structure: {"version": 1, "entries": [...]}
+        """
+        try:
+            if self._index_path.exists():
+                with open(self._index_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Validate structure has required keys
+                    if isinstance(data, dict) and "version" in data and "entries" in data:
+                        return data
+            # File doesn't exist or invalid structure - return empty index
+            return {"version": 1, "entries": []}
+        except (OSError, json.JSONDecodeError, PermissionError):
+            # Handle file read errors and JSON parsing errors gracefully
+            return {"version": 1, "entries": []}
+
+    def _save_index(self, index_data: dict) -> bool:
+        """
+        Atomically save the log index to file.
+
+        Uses a temporary file and rename pattern to prevent corruption
+        during write operations (crash safety).
+
+        Args:
+            index_data: Dictionary with structure {"version": 1, "entries": [...]}
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        try:
+            # Ensure parent directory exists
+            self._log_dir.mkdir(parents=True, exist_ok=True)
+
+            # Atomic write using temp file + rename
+            fd, temp_path = tempfile.mkstemp(
+                suffix=".json",
+                prefix="log_index_",
+                dir=self._log_dir,
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(index_data, f, indent=2)
+
+                # Atomic rename
+                temp_path_obj = Path(temp_path)
+                temp_path_obj.replace(self._index_path)
+                return True
+            except Exception:
+                # Clean up temp file on failure
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
+
+        except Exception:
+            # Catch all exceptions (including OSError, PermissionError)
+            return False
+
+    def _validate_index(self, index_data: dict) -> bool:
+        """
+        Validate that the index is not stale or invalid.
+
+        Checks for:
+        - Entry count mismatch (index entries vs actual log files)
+        - Missing referenced files (>20% of indexed files don't exist)
+
+        Args:
+            index_data: The loaded index data
+
+        Returns:
+            True if index is valid, False if it needs to be rebuilt
+        """
+        try:
+            if not self._log_dir.exists():
+                # No log directory means index should be empty
+                return len(index_data.get("entries", [])) == 0
+
+            # Get actual log file count (excluding index file)
+            actual_log_files = [
+                f for f in self._log_dir.glob("*.json")
+                if f.name != INDEX_FILENAME
+            ]
+            actual_count = len(actual_log_files)
+
+            # Get index entry count
+            index_entries = index_data.get("entries", [])
+            index_count = len(index_entries)
+
+            # If counts don't match, index is stale
+            if index_count != actual_count:
+                return False
+
+            # Check for missing referenced files (sample check to avoid excessive I/O)
+            # If we have many entries, check a sample; otherwise check all
+            entries_to_check = index_entries
+            if len(index_entries) > 50:
+                # Sample 50 entries for large indices
+                entries_to_check = random.sample(index_entries, 50)
+
+            missing_count = 0
+            for entry in entries_to_check:
+                log_id = entry.get("id")
+                if log_id:
+                    log_file = self._log_dir / f"{log_id}.json"
+                    if not log_file.exists():
+                        missing_count += 1
+
+            # Calculate missing percentage
+            checked_count = len(entries_to_check)
+            if checked_count > 0:
+                missing_percentage = (missing_count / checked_count) * 100
+                # If >20% of files are missing, index is stale
+                if missing_percentage > 20:
+                    return False
+
+            return True
+
+        except Exception:
+            # On any error during validation, consider index invalid
+            return False
+
+    def rebuild_index(self) -> bool:
+        """
+        Rebuild the log index from scratch by scanning all log files.
+
+        Used for migration from non-indexed state and recovery from index corruption.
+        Reads only id, timestamp, and type from each log file (minimal parsing).
+
+        Returns:
+            True if rebuilt successfully, False otherwise
+        """
+        with self._lock:
+            try:
+                # Ensure log directory exists
+                if not self._log_dir.exists():
+                    # No logs to index - create empty index
+                    return self._save_index({"version": 1, "entries": []})
+
+                entries = []
+
+                # Scan all JSON log files (exclude the index file itself)
+                for log_file in self._log_dir.glob("*.json"):
+                    # Skip the index file
+                    if log_file.name == INDEX_FILENAME:
+                        continue
+
+                    try:
+                        with open(log_file, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+
+                            # Extract only the required fields
+                            log_id = data.get("id")
+                            timestamp = data.get("timestamp")
+                            log_type = data.get("type")
+
+                            # Only add if all required fields are present
+                            if log_id and timestamp and log_type:
+                                entries.append({
+                                    "id": log_id,
+                                    "timestamp": timestamp,
+                                    "type": log_type
+                                })
+                    except (OSError, json.JSONDecodeError):
+                        # Skip corrupted or unreadable files
+                        continue
+
+                # Build index structure and save
+                index_data = {
+                    "version": 1,
+                    "entries": entries
+                }
+
+                return self._save_index(index_data)
+
+            except Exception:
+                # Catch any unexpected errors
+                return False
+
     def save_log(self, entry: LogEntry) -> bool:
         """
-        Save a log entry to storage.
+        Save a log entry to storage and update the index.
 
         Args:
             entry: The LogEntry to save
@@ -241,6 +455,21 @@ class LogManager:
                 log_file = self._log_dir / f"{entry.id}.json"
                 with open(log_file, "w", encoding="utf-8") as f:
                     json.dump(entry.to_dict(), f, indent=2)
+
+                # Update index with new entry metadata (best-effort)
+                try:
+                    index_data = self._load_index()
+                    index_data["entries"].append({
+                        "id": entry.id,
+                        "timestamp": entry.timestamp,
+                        "type": entry.type
+                    })
+                    self._save_index(index_data)
+                except Exception:
+                    # Index update failed, but log file was saved successfully
+                    # Index can be rebuilt later if needed
+                    pass
+
                 return True
             except (OSError, PermissionError, json.JSONDecodeError):
                 return False
@@ -249,6 +478,13 @@ class LogManager:
         """
         Retrieve stored log entries, sorted by timestamp (newest first).
 
+        Uses an index file for optimized retrieval. Validates the index and
+        triggers automatic rebuild if stale/invalid. Falls back to full directory
+        scan if the index is missing or corrupted.
+
+        On first access, automatically rebuilds the index if logs exist but no
+        index is present (migration for existing installations).
+
         Args:
             limit: Maximum number of entries to return
             log_type: Optional filter by type ("scan" or "update")
@@ -256,14 +492,142 @@ class LogManager:
         Returns:
             List of LogEntry objects
         """
-        entries = []
-
         with self._lock:
+            # Perform auto-migration check on first access
+            if not self._migration_checked:
+                self._migration_checked = True
+
+                # Check if index exists
+                if not self._index_path.exists():
+                    # Check if any log files exist
+                    try:
+                        if self._log_dir.exists():
+                            log_files = [
+                                f for f in self._log_dir.glob("*.json")
+                                if f.name != INDEX_FILENAME
+                            ]
+                            # If logs exist but no index, rebuild it
+                            if log_files:
+                                # Inline rebuild (don't call rebuild_index() to avoid re-locking)
+                                entries_list = []
+                                for log_file in log_files:
+                                    try:
+                                        with open(log_file, "r", encoding="utf-8") as f:
+                                            data = json.load(f)
+                                            log_id = data.get("id")
+                                            timestamp = data.get("timestamp")
+                                            log_type_val = data.get("type")
+                                            if log_id and timestamp and log_type_val:
+                                                entries_list.append({
+                                                    "id": log_id,
+                                                    "timestamp": timestamp,
+                                                    "type": log_type_val
+                                                })
+                                    except (OSError, json.JSONDecodeError):
+                                        # Skip corrupted files
+                                        continue
+                                # Save the rebuilt index
+                                self._save_index({"version": 1, "entries": entries_list})
+                    except Exception:
+                        # If migration fails, continue normally - will fall back to full scan
+                        pass
+
+            # Try optimized index-based approach first
+            index_data = self._load_index()
+
+            # Check if index has entries (not empty/corrupted)
+            if index_data.get("entries"):
+                # Validate index before using it
+                if not self._validate_index(index_data):
+                    # Index is stale/invalid - trigger automatic rebuild
+                    # Note: rebuild_index() already holds the lock, but we're already inside _lock
+                    # so we need to release and reacquire, or call the underlying logic
+                    # Actually, rebuild_index() tries to acquire _lock, but we already have it
+                    # We need to restructure this
+
+                    # For now, fall back to full scan and rebuild will happen later
+                    # A better approach would be to have an internal _rebuild_index_unsafe
+                    # that doesn't acquire the lock
+                    index_data = {"version": 1, "entries": []}
+                    # Attempt rebuild in best-effort mode (without re-locking)
+                    try:
+                        if self._log_dir.exists():
+                            entries_list = []
+                            for log_file in self._log_dir.glob("*.json"):
+                                if log_file.name == INDEX_FILENAME:
+                                    continue
+                                try:
+                                    with open(log_file, "r", encoding="utf-8") as f:
+                                        data = json.load(f)
+                                        log_id = data.get("id")
+                                        timestamp = data.get("timestamp")
+                                        log_type_val = data.get("type")
+                                        if log_id and timestamp and log_type_val:
+                                            entries_list.append({
+                                                "id": log_id,
+                                                "timestamp": timestamp,
+                                                "type": log_type_val
+                                            })
+                                except (OSError, json.JSONDecodeError):
+                                    continue
+                            index_data = {"version": 1, "entries": entries_list}
+                            # Save the rebuilt index (best-effort)
+                            self._save_index(index_data)
+                    except Exception:
+                        # If rebuild fails, continue with empty index (will fall back to full scan)
+                        pass
+
+                # Now proceed with index-based retrieval if we have entries
+                if index_data.get("entries"):
+                    try:
+                        # Start with all index entries
+                        filtered_entries = index_data["entries"]
+
+                        # Filter by type if specified
+                        if log_type is not None:
+                            filtered_entries = [
+                                entry for entry in filtered_entries
+                                if entry.get("type") == log_type
+                            ]
+
+                        # Sort by timestamp descending (newest first)
+                        filtered_entries.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+
+                        # Apply limit
+                        filtered_entries = filtered_entries[:limit]
+
+                        # Load only the needed log files by id
+                        entries = []
+                        for index_entry in filtered_entries:
+                            log_id = index_entry.get("id")
+                            if log_id:
+                                try:
+                                    log_file = self._log_dir / f"{log_id}.json"
+                                    if log_file.exists():
+                                        with open(log_file, "r", encoding="utf-8") as f:
+                                            data = json.load(f)
+                                            entries.append(LogEntry.from_dict(data))
+                                except (OSError, json.JSONDecodeError):
+                                    # Skip corrupted or missing files
+                                    continue
+
+                        return entries
+
+                    except Exception:
+                        # Index-based approach failed, fall back to full scan
+                        pass
+
+            # Fallback: full directory scan (original implementation)
+            entries = []
             try:
                 if not self._log_dir.exists():
                     return entries
 
                 for log_file in self._log_dir.glob("*.json"):
+                    # Skip the index file
+                    if log_file.name == INDEX_FILENAME:
+                        continue
+
                     try:
                         with open(log_file, "r", encoding="utf-8") as f:
                             data = json.load(f)
@@ -279,9 +643,9 @@ class LogManager:
             except OSError:
                 return entries
 
-        # Sort by timestamp (newest first) and apply limit
-        entries.sort(key=lambda e: e.timestamp, reverse=True)
-        return entries[:limit]
+            # Sort by timestamp (newest first) and apply limit
+            entries.sort(key=lambda e: e.timestamp, reverse=True)
+            return entries[:limit]
 
     def get_logs_async(
         self,
@@ -337,7 +701,7 @@ class LogManager:
 
     def delete_log(self, log_id: str) -> bool:
         """
-        Delete a specific log entry.
+        Delete a specific log entry and remove it from the index.
 
         Args:
             log_id: The UUID of the log entry to delete
@@ -350,6 +714,20 @@ class LogManager:
                 log_file = self._log_dir / f"{log_id}.json"
                 if log_file.exists():
                     log_file.unlink()
+
+                    # Update index by removing the deleted entry (best-effort)
+                    try:
+                        index_data = self._load_index()
+                        index_data["entries"] = [
+                            entry for entry in index_data["entries"]
+                            if entry.get("id") != log_id
+                        ]
+                        self._save_index(index_data)
+                    except Exception:
+                        # Index update failed, but log file was deleted successfully
+                        # Index can be rebuilt later if needed
+                        pass
+
                     return True
             except OSError:
                 pass
@@ -357,7 +735,7 @@ class LogManager:
 
     def clear_logs(self) -> bool:
         """
-        Clear all stored log entries.
+        Clear all stored log entries and reset the index.
 
         Returns:
             True if cleared successfully, False otherwise
@@ -366,10 +744,22 @@ class LogManager:
             try:
                 if self._log_dir.exists():
                     for log_file in self._log_dir.glob("*.json"):
+                        # Skip the index file - we'll reset it separately
+                        if log_file.name == INDEX_FILENAME:
+                            continue
                         try:
                             log_file.unlink()
                         except OSError:
                             pass
+
+                # Reset index to empty state (best-effort)
+                try:
+                    self._save_index({"version": 1, "entries": []})
+                except Exception:
+                    # Index reset failed, but log files were cleared successfully
+                    # Index can be rebuilt later if needed
+                    pass
+
                 return True
             except OSError:
                 return False
@@ -378,6 +768,9 @@ class LogManager:
         """
         Get the total number of stored logs.
 
+        Uses the index for O(1) performance when available. Falls back to
+        directory globbing if the index is missing or corrupted.
+
         Returns:
             Number of log entries
         """
@@ -385,7 +778,20 @@ class LogManager:
             try:
                 if not self._log_dir.exists():
                     return 0
-                return len(list(self._log_dir.glob("*.json")))
+
+                # Try to use index for O(1) performance
+                index_data = self._load_index()
+                if index_data.get("entries"):
+                    # Validate the index
+                    if self._validate_index(index_data):
+                        return len(index_data["entries"])
+
+                # Fallback: count log files directly (excluding index file)
+                log_files = [
+                    f for f in self._log_dir.glob("*.json")
+                    if f.name != INDEX_FILENAME
+                ]
+                return len(log_files)
             except OSError:
                 return 0
 

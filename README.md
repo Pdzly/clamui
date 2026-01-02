@@ -103,6 +103,7 @@ For complete reference including all 15 settings, scan profiles, file locations,
 |----------|-------------|
 | [Installation Guide](./docs/INSTALL.md) | Flatpak, .deb, context menu, and tray setup |
 | [Development Guide](./docs/DEVELOPMENT.md) | Dev environment, testing, and contributing |
+| [Scan Backend Guide](./docs/SCAN_BACKENDS.md) | Backend options, performance comparison, and selection guide |
 | [Debian Packaging](./DEBIAN_PACKAGING.md) | Building .deb packages |
 | [Flatpak Submission](./FLATPAK_SUBMISSION.md) | Flathub submission guide |
 | [Security Policy](./SECURITY.txt) | Security contact and reporting |

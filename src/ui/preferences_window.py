@@ -21,6 +21,7 @@ from src.core.clamav_config import (
 )
 from src.core.scheduler import Scheduler, ScheduleFrequency
 from src.core.scanner import validate_pattern
+from src.ui.utils import add_row_icon
 
 
 # Preset exclusion templates for common development directories
@@ -691,7 +692,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         group = Adw.PreferencesGroup()
         group.set_title("Scan Backend")
-        group.set_description("Choose how ClamUI performs virus scans")
+        group.set_description(
+            "Choose how ClamUI communicates with ClamAV to perform virus scans. "
+            "The backend affects scan speed, memory usage, and setup requirements. "
+            "Auto mode (recommended) intelligently selects the best available backend."
+        )
 
         # Scan backend dropdown
         backend_row = Adw.ComboRow()
@@ -701,12 +706,14 @@ class PreferencesWindow(Adw.PreferencesWindow):
         backend_model.append("Standalone Scanner (clamscan)")
         backend_row.set_model(backend_model)
         backend_row.set_title("Scan Backend")
-        backend_row.set_subtitle("Select the scanning method")
 
         # Set current selection from settings
         current_backend = self._settings_manager.get("scan_backend", "auto")
         backend_map = {"auto": 0, "daemon": 1, "clamscan": 2}
         backend_row.set_selected(backend_map.get(current_backend, 0))
+
+        # Set initial subtitle based on current selection
+        self._update_backend_subtitle(backend_row, backend_map.get(current_backend, 0))
 
         # Connect to selection changes
         backend_row.connect("notify::selected", self._on_backend_changed)
@@ -721,11 +728,15 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Check daemon connection
         is_connected, message = check_clamd_connection()
         if is_connected:
-            status_row.set_subtitle("Connected to clamd")
+            status_row.set_subtitle(
+                "✓ Daemon is running and accessible — Auto mode will use daemon for faster scans"
+            )
             status_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
             status_icon.add_css_class("success")
         else:
-            status_row.set_subtitle(f"Not available: {message}")
+            status_row.set_subtitle(
+                f"⚠ Daemon not available ({message}) — Auto mode will use clamscan backend"
+            )
             status_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
             status_icon.add_css_class("warning")
 
@@ -741,7 +752,37 @@ class PreferencesWindow(Adw.PreferencesWindow):
         refresh_button.connect("clicked", self._on_refresh_daemon_status)
         status_row.add_suffix(refresh_button)
 
+        # Learn more row - links to documentation
+        learn_more_row = Adw.ActionRow()
+        learn_more_row.set_title("Learn More")
+        learn_more_row.set_subtitle("View detailed documentation about scan backends")
+        add_row_icon(learn_more_row, "help-about-symbolic")
+        learn_more_row.set_activatable(True)
+        learn_more_row.connect("activated", self._on_learn_more_clicked)
+
+        # Add chevron to indicate it's clickable
+        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron.add_css_class("dim-label")
+        learn_more_row.add_suffix(chevron)
+
+        group.add(learn_more_row)
+
         page.add(group)
+
+    def _update_backend_subtitle(self, row: Adw.ComboRow, selected: int):
+        """
+        Update the backend row subtitle based on the selected backend.
+
+        Args:
+            row: The ComboRow widget to update
+            selected: Index of the selected backend (0=auto, 1=daemon, 2=clamscan)
+        """
+        subtitles = {
+            0: "Recommended — Automatically uses daemon if available, falls back to clamscan for reliability",
+            1: "Fastest — Instant startup with in-memory database, requires clamd service running",
+            2: "Most compatible — Works anywhere, loads database each scan (3-10 sec startup)"
+        }
+        row.set_subtitle(subtitles.get(selected, subtitles[0]))
 
     def _on_backend_changed(self, row: Adw.ComboRow, _pspec):
         """Handle scan backend selection change."""
@@ -749,6 +790,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         selected = row.get_selected()
         backend = backend_reverse_map.get(selected, "auto")
         self._settings_manager.set("scan_backend", backend)
+
+        # Update subtitle to reflect the selected backend's characteristics
+        self._update_backend_subtitle(row, selected)
 
     def _on_refresh_daemon_status(self, button: Gtk.Button):
         """Refresh the daemon connection status."""
@@ -758,7 +802,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # Update status row
         if is_connected:
-            self._daemon_status_row.set_subtitle("Connected to clamd")
+            self._daemon_status_row.set_subtitle(
+                "✓ Daemon is running and accessible — Auto mode will use daemon for faster scans"
+            )
             # Update icon
             for child in list(self._daemon_status_row):
                 if isinstance(child, Gtk.Image):
@@ -767,13 +813,61 @@ class PreferencesWindow(Adw.PreferencesWindow):
                     child.add_css_class("success")
                     break
         else:
-            self._daemon_status_row.set_subtitle(f"Not available: {message}")
+            self._daemon_status_row.set_subtitle(
+                f"⚠ Daemon not available ({message}) — Auto mode will use clamscan backend"
+            )
             for child in list(self._daemon_status_row):
                 if isinstance(child, Gtk.Image):
                     child.set_from_icon_name("dialog-warning-symbolic")
                     child.remove_css_class("success")
                     child.add_css_class("warning")
                     break
+
+    def _on_learn_more_clicked(self, row: Adw.ActionRow):
+        """
+        Open the scan backends documentation file.
+
+        Opens docs/SCAN_BACKENDS.md in the user's default application
+        (typically a web browser or text editor) using xdg-open.
+
+        Args:
+            row: The ActionRow that was activated (unused but required by signal)
+        """
+        import subprocess
+
+        # Get the path to the documentation file
+        # From src/ui/preferences_window.py -> src/ui/ -> src/ -> project_root/
+        docs_path = Path(__file__).parent.parent.parent / "docs" / "SCAN_BACKENDS.md"
+
+        # Check if file exists
+        if not docs_path.exists():
+            # Show error if documentation doesn't exist
+            dialog = Adw.AlertDialog()
+            dialog.set_heading("Documentation Not Found")
+            dialog.set_body(
+                "The scan backends documentation file could not be found. "
+                "It may have been moved or deleted."
+            )
+            dialog.add_response("ok", "OK")
+            dialog.set_default_response("ok")
+            dialog.present(self)
+            return
+
+        try:
+            # Use xdg-open on Linux to open file in default application
+            subprocess.Popen(
+                ['xdg-open', str(docs_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            # Show error dialog if opening fails
+            dialog = Adw.AlertDialog()
+            dialog.set_heading("Error Opening Documentation")
+            dialog.set_body(f"Could not open documentation file: {str(e)}")
+            dialog.add_response("ok", "OK")
+            dialog.set_default_response("ok")
+            dialog.present(self)
 
     def _create_scheduled_scans_page(self):
         """

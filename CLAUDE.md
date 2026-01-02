@@ -287,6 +287,28 @@ def test_something(mock_gi_modules):
 }
 ```
 
+#### Scan Backend Options
+The `scan_backend` setting determines how ClamUI communicates with ClamAV to perform virus scans. This affects scan performance, memory usage, and system requirements.
+
+**Available Options:**
+- **`"auto"`** (default, recommended): Intelligently selects daemon backend if available, falls back to clamscan otherwise. Runs daemon availability check at the start of each scan (adds ~50-100ms overhead). Provides best experience for most users with zero configuration.
+
+- **`"daemon"`**: Uses ClamAV daemon (clamd) for fast scanning with in-memory virus database. Provides instant scan startup and parallel scanning capabilities via `--multiscan` and `--fdpass`. Requires clamd service to be running and configured. Best for frequent scanning, servers, and performance-critical environments.
+
+- **`"clamscan"`**: Uses standalone clamscan command-line tool. Loads virus database for each scan (3-10 second startup overhead). No daemon required - always available on any ClamAV installation. Best for occasional scanning, troubleshooting, or when daemon setup is impractical.
+
+**Performance Characteristics:**
+- **Daemon**: Instant startup, ~100-500 MB persistent memory, parallel scanning support
+- **Clamscan**: 3-10 sec startup, ~200-400 MB per scan (released after scan), single-threaded
+- **Auto**: Variable performance based on daemon availability
+
+**For detailed information**, see [docs/SCAN_BACKENDS.md](../docs/SCAN_BACKENDS.md) which includes:
+- Comprehensive pros/cons for each backend
+- Performance comparison tables and real-world examples
+- Setup instructions for daemon backend
+- Troubleshooting common issues
+- Technical implementation details
+
 ## CI/CD Workflows
 
 ### test.yml

@@ -1175,3 +1175,510 @@ class TestLogManagerIndexInfrastructure:
         # Verify final index is valid
         index = log_manager._load_index()
         assert len(index["entries"]) == 5
+
+
+class TestLogManagerIndexMaintenance:
+    """Tests for index maintenance during log operations."""
+
+    @pytest.fixture
+    def temp_log_dir(self):
+        """Create a temporary directory for log storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def log_manager(self, temp_log_dir):
+        """Create a LogManager with a temporary directory."""
+        return LogManager(log_dir=temp_log_dir)
+
+    def test_save_log_updates_index(self, log_manager):
+        """Test that save_log adds entry metadata to index."""
+        # Create and save a log entry
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Test scan",
+            details="Details here",
+        )
+        result = log_manager.save_log(entry)
+        assert result is True
+
+        # Verify index was updated
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 1
+        assert index["entries"][0]["id"] == entry.id
+        assert index["entries"][0]["timestamp"] == entry.timestamp
+        assert index["entries"][0]["type"] == entry.type
+
+    def test_save_log_updates_index_multiple_entries(self, log_manager):
+        """Test that save_log correctly maintains index with multiple entries."""
+        entries = []
+        for i in range(5):
+            entry = LogEntry.create(
+                log_type="scan" if i % 2 == 0 else "update",
+                status="clean",
+                summary=f"Entry {i}",
+                details="Details",
+            )
+            entries.append(entry)
+            log_manager.save_log(entry)
+
+        # Verify all entries are in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 5
+
+        # Verify all IDs are present
+        index_ids = {e["id"] for e in index["entries"]}
+        for entry in entries:
+            assert entry.id in index_ids
+
+    def test_save_log_preserves_existing_index(self, log_manager):
+        """Test that save_log preserves existing index entries."""
+        # Save first entry
+        entry1 = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Entry 1",
+            details="Details",
+        )
+        log_manager.save_log(entry1)
+
+        # Save second entry
+        entry2 = LogEntry.create(
+            log_type="update",
+            status="success",
+            summary="Entry 2",
+            details="Details",
+        )
+        log_manager.save_log(entry2)
+
+        # Verify both entries are in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 2
+        ids = {e["id"] for e in index["entries"]}
+        assert entry1.id in ids
+        assert entry2.id in ids
+
+    def test_save_log_continues_on_index_failure(self, log_manager, temp_log_dir):
+        """Test that save_log succeeds even if index update fails."""
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Test scan",
+            details="Details",
+        )
+
+        # Mock _save_index to fail
+        with mock.patch.object(log_manager, "_save_index", return_value=False):
+            result = log_manager.save_log(entry)
+            # Log file should still be saved
+            assert result is True
+
+            # Verify log file exists
+            log_file = Path(temp_log_dir) / f"{entry.id}.json"
+            assert log_file.exists()
+
+    def test_delete_log_removes_from_index(self, log_manager):
+        """Test that delete_log removes entry from index."""
+        # Create and save entries
+        entry1 = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Entry 1",
+            details="Details",
+        )
+        entry2 = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Entry 2",
+            details="Details",
+        )
+        log_manager.save_log(entry1)
+        log_manager.save_log(entry2)
+
+        # Verify both are in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 2
+
+        # Delete first entry
+        result = log_manager.delete_log(entry1.id)
+        assert result is True
+
+        # Verify only second entry remains in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 1
+        assert index["entries"][0]["id"] == entry2.id
+
+    def test_delete_log_handles_nonexistent_entry_in_index(self, log_manager):
+        """Test delete_log handles entry not in index gracefully."""
+        # Create an entry and save it
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Entry",
+            details="Details",
+        )
+        log_manager.save_log(entry)
+
+        # Manually remove from index but leave file
+        index = log_manager._load_index()
+        index["entries"] = []
+        log_manager._save_index(index)
+
+        # Delete should still succeed
+        result = log_manager.delete_log(entry.id)
+        assert result is True
+
+    def test_delete_log_continues_on_index_failure(self, log_manager, temp_log_dir):
+        """Test that delete_log succeeds even if index update fails."""
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Test scan",
+            details="Details",
+        )
+        log_manager.save_log(entry)
+
+        # Mock _save_index to fail
+        with mock.patch.object(log_manager, "_save_index", return_value=False):
+            result = log_manager.delete_log(entry.id)
+            # Log file should still be deleted
+            assert result is True
+
+            # Verify log file is gone
+            log_file = Path(temp_log_dir) / f"{entry.id}.json"
+            assert not log_file.exists()
+
+    def test_clear_logs_resets_index(self, log_manager):
+        """Test that clear_logs resets index to empty state."""
+        # Create multiple entries
+        for i in range(5):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Entry {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Verify entries exist in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 5
+
+        # Clear all logs
+        result = log_manager.clear_logs()
+        assert result is True
+
+        # Verify index is reset to empty
+        index = log_manager._load_index()
+        assert index["version"] == 1
+        assert index["entries"] == []
+
+    def test_clear_logs_skips_index_file_during_deletion(self, log_manager, temp_log_dir):
+        """Test that clear_logs doesn't delete the index file itself."""
+        # Create entries
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Entry {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+
+        # Get index path
+        index_path = Path(temp_log_dir) / "log_index.json"
+        assert index_path.exists()
+
+        # Clear logs
+        log_manager.clear_logs()
+
+        # Verify index file still exists (but is empty)
+        assert index_path.exists()
+        index = log_manager._load_index()
+        assert index["entries"] == []
+
+    def test_clear_logs_continues_on_index_failure(self, log_manager, temp_log_dir):
+        """Test that clear_logs succeeds even if index reset fails."""
+        # Create entries
+        entry = LogEntry.create(
+            log_type="scan",
+            status="clean",
+            summary="Entry",
+            details="Details",
+        )
+        log_manager.save_log(entry)
+
+        # Mock _save_index to fail
+        with mock.patch.object(log_manager, "_save_index", return_value=False):
+            result = log_manager.clear_logs()
+            # Clear operation should still succeed
+            assert result is True
+
+            # Verify log files are gone
+            json_files = list(Path(temp_log_dir).glob("*.json"))
+            # Only index file should remain (if any)
+            for f in json_files:
+                assert f.name == "log_index.json"
+
+    def test_concurrent_save_operations_maintain_index(self, log_manager):
+        """Test that concurrent save operations correctly maintain index."""
+        entries = []
+        errors = []
+
+        def save_entry(index):
+            try:
+                entry = LogEntry.create(
+                    log_type="scan",
+                    status="clean",
+                    summary=f"Concurrent entry {index}",
+                    details="Details",
+                )
+                entries.append(entry)
+                result = log_manager.save_log(entry)
+                if not result:
+                    errors.append(f"Failed to save entry {index}")
+            except Exception as e:
+                errors.append(str(e))
+
+        # Create multiple threads
+        threads = []
+        for i in range(20):
+            t = threading.Thread(target=save_entry, args=(i,))
+            threads.append(t)
+
+        # Start all threads
+        for t in threads:
+            t.start()
+
+        # Wait for completion
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+
+        # Verify index contains all entries
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 20
+
+        # Verify all entry IDs are in index
+        index_ids = {e["id"] for e in index["entries"]}
+        for entry in entries:
+            assert entry.id in index_ids
+
+    def test_concurrent_delete_operations_maintain_index(self, log_manager):
+        """Test that concurrent delete operations correctly maintain index."""
+        # Create entries first
+        entries = []
+        for i in range(20):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Entry {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            entries.append(entry)
+
+        # Verify all are in index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 20
+
+        errors = []
+
+        def delete_entry(entry):
+            try:
+                result = log_manager.delete_log(entry.id)
+                if not result:
+                    errors.append(f"Failed to delete {entry.id}")
+            except Exception as e:
+                errors.append(str(e))
+
+        # Delete from multiple threads
+        threads = []
+        for entry in entries:
+            t = threading.Thread(target=delete_entry, args=(entry,))
+            threads.append(t)
+
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+
+        # Verify index is empty
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 0
+
+    def test_concurrent_mixed_operations_maintain_index(self, log_manager):
+        """Test that mixed concurrent operations don't corrupt index."""
+        # Pre-populate with some entries
+        initial_entries = []
+        for i in range(10):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Initial {i}",
+                details="Details",
+            )
+            log_manager.save_log(entry)
+            initial_entries.append(entry)
+
+        saved_entries = []
+        errors = []
+
+        def save_entry(index):
+            try:
+                entry = LogEntry.create(
+                    log_type="update",
+                    status="success",
+                    summary=f"New {index}",
+                    details="Details",
+                )
+                saved_entries.append(entry)
+                if not log_manager.save_log(entry):
+                    errors.append(f"Save failed {index}")
+            except Exception as e:
+                errors.append(f"Save error: {e}")
+
+        def delete_entry(entry):
+            try:
+                if not log_manager.delete_log(entry.id):
+                    errors.append(f"Delete failed {entry.id}")
+            except Exception as e:
+                errors.append(f"Delete error: {e}")
+
+        # Mix of save and delete operations
+        threads = []
+
+        # Add 10 new entries
+        for i in range(10):
+            t = threading.Thread(target=save_entry, args=(i,))
+            threads.append(t)
+
+        # Delete 5 initial entries
+        for entry in initial_entries[:5]:
+            t = threading.Thread(target=delete_entry, args=(entry,))
+            threads.append(t)
+
+        # Shuffle to mix operations
+        import random
+        random.shuffle(threads)
+
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+
+        # Verify index integrity
+        index = log_manager._load_index()
+        # Should have: 10 initial - 5 deleted + 10 new = 15 entries
+        assert len(index["entries"]) == 15
+
+        # Verify structure is valid
+        assert "version" in index
+        assert "entries" in index
+        for entry in index["entries"]:
+            assert "id" in entry
+            assert "timestamp" in entry
+            assert "type" in entry
+
+    def test_concurrent_save_and_rebuild_maintain_index(self, log_manager):
+        """Test that concurrent save and rebuild operations don't corrupt index."""
+        errors = []
+        saved_entries = []
+
+        def save_entries():
+            try:
+                for i in range(10):
+                    entry = LogEntry.create(
+                        log_type="scan",
+                        status="clean",
+                        summary=f"Entry {i}",
+                        details="Details",
+                    )
+                    saved_entries.append(entry)
+                    log_manager.save_log(entry)
+                    time.sleep(0.001)  # Small delay to allow interleaving
+            except Exception as e:
+                errors.append(f"Save error: {e}")
+
+        def rebuild_index():
+            try:
+                for _ in range(5):
+                    log_manager.rebuild_index()
+                    time.sleep(0.002)  # Small delay
+            except Exception as e:
+                errors.append(f"Rebuild error: {e}")
+
+        # Run save and rebuild concurrently
+        save_thread = threading.Thread(target=save_entries)
+        rebuild_thread = threading.Thread(target=rebuild_index)
+
+        save_thread.start()
+        rebuild_thread.start()
+
+        save_thread.join()
+        rebuild_thread.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+
+        # Final rebuild to ensure consistency
+        log_manager.rebuild_index()
+
+        # Verify all saved entries are in final index
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 10
+
+        index_ids = {e["id"] for e in index["entries"]}
+        for entry in saved_entries:
+            assert entry.id in index_ids
+
+    def test_index_entries_have_correct_structure(self, log_manager):
+        """Test that index entries have the correct structure after operations."""
+        # Save various types of entries
+        scan_entry = LogEntry.create(
+            log_type="scan",
+            status="infected",
+            summary="Found threats",
+            details="Details",
+            path="/home/user",
+            duration=15.5,
+        )
+        update_entry = LogEntry.create(
+            log_type="update",
+            status="success",
+            summary="Database updated",
+            details="Details",
+            duration=30.0,
+        )
+
+        log_manager.save_log(scan_entry)
+        log_manager.save_log(update_entry)
+
+        # Verify index entries have only required metadata (not full entry data)
+        index = log_manager._load_index()
+        assert len(index["entries"]) == 2
+
+        for entry in index["entries"]:
+            # Should have exactly these three fields
+            assert set(entry.keys()) == {"id", "timestamp", "type"}
+            assert isinstance(entry["id"], str)
+            assert isinstance(entry["timestamp"], str)
+            assert entry["type"] in ["scan", "update"]
+
+            # Should NOT include full entry data
+            assert "status" not in entry
+            assert "summary" not in entry
+            assert "details" not in entry
+            assert "path" not in entry
+            assert "duration" not in entry

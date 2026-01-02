@@ -2779,89 +2779,1433 @@ sudo systemctl list-timers | grep clamav
 
 ## Scheduled Scanning Issues
 
+ClamUI supports scheduled scanning via systemd user timers (preferred) or cron (fallback). This section covers common issues with both scheduling systems.
+
 ### Systemd user timers not working
 
-**Symptoms**: Scheduled scans don't run automatically
+**Symptoms:**
+- Scheduled scans don't run automatically at the configured time
+- Timer appears in `systemctl --user list-timers` but never triggers
+- Error: "Failed to enable timer: Unit file ... not found"
+- Service file or timer file missing in `~/.config/systemd/user/`
+- Scans only run when logged in (not when system is running but user logged out)
 
-**Solution**: Check systemd timer status
+**Diagnostic Steps:**
+
+1. **Check if systemd user session is running:**
 
 ```bash
-# List user timers
-systemctl --user list-timers
+# Verify systemd user session
+systemctl --user status
 
-# Check specific timer
-systemctl --user status clamui-scan-*.timer
-
-# View timer logs
-journalctl --user -u clamui-scan-*.timer
-
-# Enable linger for scans to run when logged out
-loginctl enable-linger $USER
+# Expected output should show "Active: active (running)"
+# If you see "Failed to connect to bus" or "No such file or directory",
+# systemd user session is not available
 ```
+
+2. **List all user timers:**
+
+```bash
+# Show all systemd user timers (including ClamUI)
+systemctl --user list-timers --all
+
+# Expected output should include:
+# NEXT                          LEFT        LAST  PASSED  UNIT                         ACTIVATES
+# Thu 2024-01-04 02:00:00 EST   12h left    -     -       clamui-scheduled-scan.timer  clamui-scheduled-scan.service
+```
+
+3. **Check timer status:**
+
+```bash
+# Check if timer is active
+systemctl --user is-active clamui-scheduled-scan.timer
+
+# Expected output: "active" (if running) or "inactive" (if not)
+
+# Get detailed timer status
+systemctl --user status clamui-scheduled-scan.timer
+
+# Expected output shows:
+#   Active: active (waiting)
+#   Trigger: [next scheduled time]
+```
+
+4. **View timer and service files:**
+
+```bash
+# Check if files exist
+ls -lh ~/.config/systemd/user/clamui-scheduled-scan.*
+
+# Expected files:
+# clamui-scheduled-scan.service
+# clamui-scheduled-scan.timer
+
+# View timer file contents
+cat ~/.config/systemd/user/clamui-scheduled-scan.timer
+
+# View service file contents
+cat ~/.config/systemd/user/clamui-scheduled-scan.service
+```
+
+5. **Check timer logs for errors:**
+
+```bash
+# View timer unit logs
+journalctl --user -u clamui-scheduled-scan.timer --since today
+
+# View service unit logs (shows actual scan execution)
+journalctl --user -u clamui-scheduled-scan.service --since "3 days ago"
+
+# Look for errors like:
+# - "Failed to execute command"
+# - "Permission denied"
+# - "No such file or directory"
+```
+
+**Solutions:**
+
+**Solution 1: Enable user lingering (scans run when logged out)**
+
+By default, systemd user services only run while you're logged in. To allow scheduled scans to run even when you're logged out:
+
+```bash
+# Enable lingering for your user
+loginctl enable-linger $USER
+
+# Verify linger is enabled
+loginctl show-user $USER | grep Linger
+
+# Expected output:
+# Linger=yes
+```
+
+This allows your systemd user instance to continue running after logout, enabling scheduled scans to execute.
+
+**Solution 2: Reload systemd daemon and restart timer**
+
+If you've manually edited timer/service files or they seem out of sync:
+
+```bash
+# Reload systemd user daemon
+systemctl --user daemon-reload
+
+# Restart the timer
+systemctl --user restart clamui-scheduled-scan.timer
+
+# Verify timer is active
+systemctl --user is-active clamui-scheduled-scan.timer
+
+# Check next scheduled run time
+systemctl --user list-timers clamui-scheduled-scan.timer
+```
+
+**Solution 3: Manually enable the timer**
+
+If the timer exists but isn't enabled:
+
+```bash
+# Enable and start the timer
+systemctl --user enable --now clamui-scheduled-scan.timer
+
+# Verify it's running
+systemctl --user status clamui-scheduled-scan.timer
+```
+
+**Solution 4: Recreate timer/service files via ClamUI**
+
+If files are missing or corrupted:
+
+1. Open ClamUI → Preferences → Scheduled Scans
+2. Disable scheduled scanning (if enabled)
+3. Wait a few seconds
+4. Re-enable scheduled scanning with your desired settings
+5. ClamUI will recreate the systemd files
+
+Verify the files were created:
+```bash
+ls -lh ~/.config/systemd/user/clamui-scheduled-scan.*
+systemctl --user daemon-reload
+systemctl --user status clamui-scheduled-scan.timer
+```
+
+**Solution 5: Check clamui-scheduled-scan command is available**
+
+The service file needs to find the `clamui-scheduled-scan` command:
+
+```bash
+# Check if command is in PATH
+which clamui-scheduled-scan
+
+# Expected output: /usr/bin/clamui-scheduled-scan or /usr/local/bin/clamui-scheduled-scan
+
+# If not found, verify ClamUI installation
+pip show clamui  # For pip installation
+
+# For Flatpak, the command should be wrapped via flatpak-spawn
+# (ClamUI handles this automatically)
+```
+
+If the command is not found, reinstall ClamUI or check your installation method.
+
+**Solution 6: Fix service file permissions**
+
+```bash
+# Ensure service/timer files are readable
+chmod 644 ~/.config/systemd/user/clamui-scheduled-scan.*
+
+# Reload and restart
+systemctl --user daemon-reload
+systemctl --user restart clamui-scheduled-scan.timer
+```
+
+**Solution 7: Test timer manually**
+
+```bash
+# Manually trigger the service (doesn't wait for timer)
+systemctl --user start clamui-scheduled-scan.service
+
+# Watch the logs in real-time
+journalctl --user -u clamui-scheduled-scan.service -f
+
+# If this works but timer doesn't, check timer's OnCalendar specification:
+systemctl --user cat clamui-scheduled-scan.timer | grep OnCalendar
+```
+
+**Flatpak-Specific Considerations:**
+
+When using ClamUI as a Flatpak:
+- The timer runs on the host system via `flatpak-spawn --host`
+- Systemd files are created in the host user directory
+- The service executes: `flatpak run --command=clamui-scheduled-scan com.github.rooki.clamui`
+
+Check Flatpak-specific issues:
+```bash
+# Verify Flatpak can spawn host commands
+flatpak-spawn --host systemctl --user status
+
+# Check ClamUI Flatpak is installed
+flatpak list | grep clamui
+```
+
+---
 
 ### Cron fallback configuration
 
-**Symptoms**: Systemd not available, need cron-based scheduling
+**Symptoms:**
+- ClamUI detects "cron" as scheduler backend instead of systemd
+- Systemd is not available on your system (minimal installations, containers)
+- Manual cron configuration needed
+- Cron jobs not executing scheduled scans
+- Error: "crontab: command not found"
 
-**Solution**: Manually configure cron
+**Diagnostic Steps:**
+
+1. **Check which scheduler backend ClamUI is using:**
+
+Open ClamUI and check the Preferences → Scheduled Scans section. It will indicate whether systemd or cron is being used.
+
+2. **Verify cron is installed and running:**
+
+```bash
+# Check if crontab command exists
+which crontab
+
+# Expected output: /usr/bin/crontab
+
+# Check if cron daemon is running
+# Ubuntu/Debian:
+systemctl status cron
+
+# Fedora/RHEL:
+systemctl status crond
+
+# Expected output: Active: active (running)
+```
+
+3. **List current crontab entries:**
+
+```bash
+# View your crontab
+crontab -l
+
+# Look for ClamUI entries marked with:
+# ClamUI Scheduled Scan
+
+# If no crontab exists, you'll see:
+# "no crontab for [username]"
+```
+
+4. **Check cron logs:**
+
+```bash
+# Ubuntu/Debian:
+grep CRON /var/log/syslog | grep clamui | tail -20
+
+# Fedora/RHEL/Arch:
+journalctl -u crond | grep clamui
+
+# Look for execution entries like:
+# (username) CMD (/path/to/clamui-scheduled-scan ...)
+```
+
+**Solutions:**
+
+**Solution 1: Install cron if missing**
+
+```bash
+# Ubuntu/Debian:
+sudo apt update
+sudo apt install cron
+
+# Fedora/RHEL:
+sudo dnf install cronie
+sudo systemctl enable --now crond
+
+# Arch Linux:
+sudo pacman -S cronie
+sudo systemctl enable --now cronie
+```
+
+Verify installation:
+```bash
+crontab -l
+# Should show "no crontab" or existing entries (not "command not found")
+```
+
+**Solution 2: Configure scheduled scan via ClamUI**
+
+1. Open ClamUI → Preferences → Scheduled Scans
+2. Enable scheduled scanning
+3. Configure frequency (daily/weekly/monthly) and time
+4. Select scan targets
+5. Apply settings
+
+ClamUI will automatically create a crontab entry.
+
+Verify the entry was created:
+```bash
+crontab -l | grep -A 1 "ClamUI Scheduled Scan"
+
+# Expected output (example for daily at 2 AM):
+# ClamUI Scheduled Scan
+# 0 2 * * * /usr/bin/clamui-scheduled-scan --skip-on-battery --target /home/username
+```
+
+**Solution 3: Manually create cron entry**
+
+If ClamUI's automatic cron creation fails, you can create it manually:
 
 ```bash
 # Edit crontab
 crontab -e
 
-# Add scheduled scan (example: daily at 2 AM)
-0 2 * * * /usr/bin/clamui-scheduled-scan --profile "Full Scan"
+# Add entry for daily scan at 2 AM:
+# ClamUI Scheduled Scan
+0 2 * * * /usr/bin/clamui-scheduled-scan --skip-on-battery --target "$HOME" 2>&1 | logger -t clamui-scan
 
-# Verify cron entry
-crontab -l
+# Add entry for weekly scan (every Monday at 3 AM):
+# ClamUI Scheduled Scan
+0 3 * * 1 /usr/bin/clamui-scheduled-scan --target "$HOME/Documents" --auto-quarantine 2>&1 | logger -t clamui-scan
+
+# Add entry for monthly scan (1st of month at 4 AM):
+# ClamUI Scheduled Scan
+0 4 1 * * /usr/bin/clamui-scheduled-scan --target "$HOME" 2>&1 | logger -t clamui-scan
 ```
+
+Cron time format: `minute hour day month day_of_week command`
+- `0 2 * * *` = Daily at 2:00 AM
+- `0 3 * * 1` = Weekly on Monday at 3:00 AM (0=Sunday, 1=Monday, ..., 6=Saturday)
+- `0 4 1 * *` = Monthly on the 1st at 4:00 AM
+- `0 * * * *` = Hourly at minute 0
+
+**Solution 4: Verify clamui-scheduled-scan command path**
+
+Cron has a limited PATH, so use absolute paths:
+
+```bash
+# Find full path to command
+which clamui-scheduled-scan
+
+# Common locations:
+# /usr/bin/clamui-scheduled-scan (system install)
+# /usr/local/bin/clamui-scheduled-scan (local install)
+# ~/.local/bin/clamui-scheduled-scan (pip user install)
+
+# Update crontab with absolute path
+crontab -e
+
+# Use the full path found above
+0 2 * * * /usr/bin/clamui-scheduled-scan --target "$HOME"
+```
+
+**Solution 5: Add environment variables to crontab**
+
+Cron runs with minimal environment. Add necessary variables:
+
+```bash
+crontab -e
+
+# Add at the top of the crontab:
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME=/home/yourusername
+SHELL=/bin/bash
+
+# ClamUI Scheduled Scan
+0 2 * * * /usr/bin/clamui-scheduled-scan --target "$HOME"
+```
+
+**Solution 6: Test cron command manually**
+
+```bash
+# Run the exact command from your crontab
+/usr/bin/clamui-scheduled-scan --target "$HOME" --verbose
+
+# Check for errors in output
+# Common issues:
+# - "Command not found" → Use absolute path
+# - "Permission denied" → Check file permissions
+# - "ClamAV not available" → ClamAV not in cron's PATH
+```
+
+**Solution 7: Enable cron logging for debugging**
+
+```bash
+# Create a crontab entry that logs output
+crontab -e
+
+# Redirect output to a log file:
+# ClamUI Scheduled Scan
+0 2 * * * /usr/bin/clamui-scheduled-scan --target "$HOME" --verbose >> /tmp/clamui-cron.log 2>&1
+
+# Check the log file after scheduled time:
+cat /tmp/clamui-cron.log
+```
+
+**Cron vs Systemd Trade-offs:**
+
+**Systemd advantages:**
+- Better logging via journalctl
+- Service dependencies and ordering
+- User lingering for logged-out execution
+- Randomized delay to avoid resource spikes
+
+**Cron advantages:**
+- Available on all systems (including older/minimal installs)
+- Simpler configuration (one-line entries)
+- Works without systemd user session
+
+**Flatpak with Cron:**
+
+```bash
+# Flatpak cron entry example
+crontab -e
+
+# Add:
+# ClamUI Scheduled Scan
+0 2 * * * flatpak run --command=clamui-scheduled-scan com.github.rooki.clamui --target "$HOME" 2>&1 | logger -t clamui-scan
+```
+
+---
 
 ### Battery detection issues
 
-**Symptoms**: Scans run on battery when configured not to
+**Symptoms:**
+- Scheduled scans run on battery power even with "Skip scans on battery" enabled
+- Scans never run because battery is always detected as "on battery" (even when plugged in)
+- Error in logs: "psutil not available" or "Failed to detect battery status"
+- Desktop system incorrectly detected as having battery
+- Battery status always shows "unknown" or incorrect percentage
 
-**Solution**: Check battery detection
+**Diagnostic Steps:**
+
+1. **Check if psutil is installed:**
+
+ClamUI uses the `psutil` Python library for battery detection:
 
 ```bash
-# Verify battery status detection
-cat /sys/class/power_supply/BAT*/status
+# Check if psutil is available
+python3 -c "import psutil; print(f'psutil version: {psutil.__version__}')"
 
-# Check ClamUI battery settings
-# Preferences → Scheduled Scans → "Skip scans on battery"
+# Expected output:
+# psutil version: 5.9.x
+
+# If you see "ModuleNotFoundError: No module named 'psutil'",
+# psutil is not installed
 ```
+
+2. **Test battery detection directly:**
+
+```bash
+# Test battery status using Python
+python3 -c "
+import psutil
+battery = psutil.sensors_battery()
+if battery is None:
+    print('No battery detected (desktop system)')
+else:
+    print(f'Battery detected:')
+    print(f'  Percent: {battery.percent}%')
+    print(f'  Plugged in: {battery.power_plugged}')
+    print(f'  Time remaining: {battery.secsleft}s')
+"
+
+# Expected output for laptop on AC power:
+# Battery detected:
+#   Percent: 85.0%
+#   Plugged in: True
+#   Time remaining: -2
+
+# Expected output for desktop:
+# No battery detected (desktop system)
+```
+
+3. **Check system power supply information:**
+
+```bash
+# List power supply devices
+ls /sys/class/power_supply/
+
+# Expected output (laptop):
+# AC  BAT0
+
+# Expected output (desktop):
+# (empty or only AC adapter)
+
+# Check battery status (laptop only)
+cat /sys/class/power_supply/BAT*/status 2>/dev/null
+
+# Possible outputs:
+# Charging    - Battery charging
+# Discharging - Running on battery
+# Full        - Battery full, on AC
+# Unknown     - Status cannot be determined
+
+# Check AC adapter status
+cat /sys/class/power_supply/AC*/online 2>/dev/null
+
+# Output:
+# 1 = AC power connected
+# 0 = AC power disconnected
+```
+
+4. **Check scheduled scan logs for battery skip events:**
+
+```bash
+# View recent scheduled scan logs
+cat ~/.local/share/clamui/logs/scan_$(date +%Y%m%d).json 2>/dev/null | jq '.[] | select(.summary | contains("battery"))'
+
+# Or check all recent logs:
+grep -r "battery" ~/.local/share/clamui/logs/ | tail -10
+
+# Look for entries like:
+# "Scheduled scan skipped (on battery power)"
+# "Battery level: 45%"
+```
+
+5. **Test clamui-scheduled-scan battery detection:**
+
+```bash
+# Run scheduled scan manually with battery skip enabled
+clamui-scheduled-scan --skip-on-battery --target /tmp --verbose --dry-run
+
+# Expected output if on battery:
+# [timestamp] Checking battery status...
+# [timestamp] Skipping scan: running on battery power (45%)
+
+# Expected output if on AC:
+# [timestamp] Checking battery status...
+# [timestamp] Scanning 1 target(s)...
+```
+
+**Solutions:**
+
+**Solution 1: Install psutil**
+
+If psutil is not installed, battery detection won't work:
+
+```bash
+# Install via pip (if using native installation)
+pip install psutil
+
+# Or via distribution package manager
+# Ubuntu/Debian:
+sudo apt install python3-psutil
+
+# Fedora:
+sudo dnf install python3-psutil
+
+# Arch Linux:
+sudo pacman -S python-psutil
+
+# Verify installation
+python3 -c "import psutil; print(psutil.__version__)"
+```
+
+For Flatpak installations, psutil should be bundled. If it's missing:
+```bash
+# Reinstall ClamUI Flatpak
+flatpak update com.github.rooki.clamui
+```
+
+**Solution 2: Verify battery detection is working**
+
+After installing psutil, test battery detection:
+
+```bash
+# Test battery manager
+python3 << 'EOF'
+from src.core.battery_manager import BatteryManager
+
+bm = BatteryManager()
+status = bm.get_status()
+
+print(f"Has battery: {status.has_battery}")
+print(f"Is plugged: {status.is_plugged}")
+print(f"Percent: {status.percent}")
+print(f"On battery: {bm.is_on_battery()}")
+print(f"Should skip scan: {bm.should_skip_scan(skip_on_battery=True)}")
+EOF
+
+# Expected output (desktop):
+# Has battery: False
+# Is plugged: True
+# Percent: None
+# On battery: False
+# Should skip scan: False
+
+# Expected output (laptop on AC):
+# Has battery: True
+# Is plugged: True
+# Percent: 85.0
+# On battery: False
+# Should skip scan: False
+
+# Expected output (laptop on battery):
+# Has battery: True
+# Is plugged: False
+# Percent: 45.0
+# On battery: True
+# Should skip scan: True
+```
+
+**Solution 3: Disable battery skip if detection is unreliable**
+
+If battery detection is incorrect or unavailable:
+
+1. Open ClamUI → Preferences → Scheduled Scans
+2. Disable "Skip scans on battery" option
+3. Scans will always run regardless of power status
+
+Or via command line:
+```bash
+# Run scheduled scan without battery check
+clamui-scheduled-scan --target "$HOME"
+# (omit --skip-on-battery flag)
+
+# Update crontab/systemd to remove --skip-on-battery
+```
+
+**Solution 4: Fix battery status reporting (laptop)**
+
+If battery exists but status is incorrect:
+
+```bash
+# Check for ACPI errors in kernel logs
+dmesg | grep -i "acpi\|battery" | tail -20
+
+# Look for errors like:
+# "ACPI: battery: fail to get battery information"
+# "ACPI: battery: [Firmware Bug]"
+
+# Update ACPI/power management packages
+# Ubuntu/Debian:
+sudo apt update
+sudo apt install acpi acpi-support
+
+# Fedora:
+sudo dnf install acpi
+
+# Test ACPI battery detection
+acpi -b
+
+# Expected output:
+# Battery 0: Discharging, 45%, 02:30:00 remaining
+```
+
+**Solution 5: Desktop systems (no battery)**
+
+For desktop systems incorrectly detecting a battery:
+
+```bash
+# Verify no battery in /sys
+ls -la /sys/class/power_supply/
+
+# If phantom battery devices appear, check hardware/BIOS
+# Some desktop motherboards report a phantom CMOS battery
+
+# ClamUI should detect no battery and always assume AC power:
+python3 -c "
+from src.core.battery_manager import BatteryManager
+bm = BatteryManager()
+print(f'Has battery: {bm.has_battery}')  # Should be False
+print(f'Is plugged: {bm.is_plugged}')    # Should be True
+"
+```
+
+**Solution 6: Force battery check in scheduled scans**
+
+Add explicit battery logging to diagnose issues:
+
+```bash
+# Create wrapper script for debugging
+cat > ~/debug-clamui-scan.sh << 'EOF'
+#!/bin/bash
+echo "=== Battery Status Debug ===" >> /tmp/clamui-battery-debug.log
+date >> /tmp/clamui-battery-debug.log
+
+# Check /sys battery status
+echo "Battery status:" >> /tmp/clamui-battery-debug.log
+cat /sys/class/power_supply/BAT*/status 2>/dev/null >> /tmp/clamui-battery-debug.log
+
+# Check AC status
+echo "AC online:" >> /tmp/clamui-battery-debug.log
+cat /sys/class/power_supply/AC*/online 2>/dev/null >> /tmp/clamui-battery-debug.log
+
+# Run psutil check
+python3 -c "
+import psutil
+battery = psutil.sensors_battery()
+print(f'psutil battery: {battery}')
+" >> /tmp/clamui-battery-debug.log 2>&1
+
+# Run scheduled scan
+/usr/bin/clamui-scheduled-scan --skip-on-battery --target /tmp --verbose >> /tmp/clamui-battery-debug.log 2>&1
+EOF
+
+chmod +x ~/debug-clamui-scan.sh
+
+# Run manually
+~/debug-clamui-scan.sh
+
+# Check debug log
+cat /tmp/clamui-battery-debug.log
+```
+
+**Behavior Summary:**
+
+| System Type | has_battery | is_plugged | is_on_battery() | should_skip_scan() |
+|-------------|-------------|------------|-----------------|-------------------|
+| Desktop | False | True | False | False (never skip) |
+| Laptop on AC | True | True | False | False (never skip) |
+| Laptop on battery | True | False | True | True (skip if enabled) |
+| psutil unavailable | False | True | False | False (assume AC) |
+
+**Default Behavior When Detection Fails:**
+- If psutil is not available: Assumes desktop (no battery, always on AC power)
+- If battery detection fails: Assumes AC power (scan proceeds)
+- **This is safe:** Scans will run unless battery is explicitly detected and user opted to skip
+
+---
 
 ### Scheduled scans not running
 
-**Symptoms**: Timer/cron configured but scans don't execute
+**Symptoms:**
+- Timer/cron is configured but scans never execute
+- No log entries for scheduled scans in `~/.local/share/clamui/logs/`
+- Systemd timer shows "active (waiting)" but service never runs
+- Crontab entry exists but no execution in syslog/journal
+- Manual execution of `clamui-scheduled-scan` works, but automated doesn't
+- Error in logs: "Could not find clamui-scheduled-scan command"
 
-**Solution**: Debug scheduled scan execution
+**Diagnostic Steps:**
+
+1. **Verify scheduler is configured:**
 
 ```bash
-# Test manual execution
-clamui-scheduled-scan --profile "Quick Scan"
+# For systemd:
+systemctl --user list-timers | grep clamui
 
-# Check logs
-journalctl --user -u clamui-scan-* --since today
+# Expected output:
+# NEXT                         LEFT          LAST                         PASSED       UNIT                         ACTIVATES
+# Thu 2024-01-04 02:00:00 EST  8h left       Wed 2024-01-03 02:00:05 EST  16h ago      clamui-scheduled-scan.timer  clamui-scheduled-scan.service
 
-# Verify scan profile exists
-clamui  # Open app and check Profiles
+# For cron:
+crontab -l | grep -A 1 "ClamUI"
+
+# Expected output:
+# # ClamUI Scheduled Scan
+# 0 2 * * * /usr/bin/clamui-scheduled-scan --target /home/user
 ```
+
+2. **Check when the scan last ran:**
+
+```bash
+# Systemd - check service last execution
+systemctl --user status clamui-scheduled-scan.service
+
+# Look for:
+#   Active: inactive (dead) since [timestamp]
+#   Main PID: [pid] (code=exited, status=0/SUCCESS)
+
+# Systemd - check timer last trigger
+systemctl --user list-timers --all clamui-scheduled-scan.timer
+
+# Cron - check syslog/journal
+# Ubuntu/Debian:
+grep "clamui-scheduled-scan" /var/log/syslog | tail -10
+
+# Systemd-based systems:
+journalctl -t CRON | grep clamui | tail -10
+```
+
+3. **Check for execution errors in logs:**
+
+```bash
+# Systemd logs
+journalctl --user -u clamui-scheduled-scan.service --since "3 days ago"
+
+# Look for errors:
+# - "Failed to execute command: No such file or directory"
+# - "Permission denied"
+# - "ClamAV not available"
+# - "Error: No valid scan targets found"
+
+# ClamUI scan logs
+ls -lh ~/.local/share/clamui/logs/
+# Check if recent scan_YYYYMMDD.json files exist
+
+# View most recent log
+ls -t ~/.local/share/clamui/logs/scan_*.json | head -1 | xargs cat | jq '.'
+```
+
+4. **Test manual execution:**
+
+```bash
+# Run the scheduled scan command manually
+clamui-scheduled-scan --target "$HOME/Documents" --verbose
+
+# Expected successful output:
+# [timestamp] ClamUI scheduled scan starting...
+# [timestamp] Scanning 1 target(s)...
+# [timestamp]   - /home/user/Documents
+# [timestamp] ClamAV version: 1.0.x
+# [timestamp] Scanning: /home/user/Documents
+# [timestamp]   Clean (XXX files scanned)
+# [timestamp] Scan completed in X.X seconds
+# [timestamp] No threats found (XXX files scanned, no threats)
+
+# Common errors to watch for:
+# - "ClamAV not available" → clamscan not found
+# - "No valid scan targets found" → paths don't exist
+# - "psutil not available" → battery detection disabled
+```
+
+5. **Verify target paths exist:**
+
+```bash
+# Extract target paths from systemd service
+systemctl --user cat clamui-scheduled-scan.service | grep ExecStart
+
+# Or from crontab
+crontab -l | grep clamui-scheduled-scan
+
+# Check if each target exists
+ls -ld /home/user/Documents /home/user/Downloads  # example paths
+
+# If path doesn't exist, scan will fail with:
+# "Error: No valid scan targets found"
+```
+
+**Solutions:**
+
+**Solution 1: Verify clamui-scheduled-scan is accessible**
+
+```bash
+# Check command exists
+which clamui-scheduled-scan
+
+# Expected: /usr/bin/clamui-scheduled-scan or /usr/local/bin/clamui-scheduled-scan
+
+# If not found, check installation
+pip show clamui
+
+# Reinstall if necessary
+pip install --upgrade --force-reinstall clamui
+```
+
+**Solution 2: Fix systemd timer/service configuration**
+
+If timer exists but service doesn't run:
+
+```bash
+# Check timer file
+systemctl --user cat clamui-scheduled-scan.timer
+
+# Ensure it has:
+# [Timer]
+# OnCalendar=*-*-* 02:00:00  (or your configured time)
+# Persistent=true
+
+# Check service file
+systemctl --user cat clamui-scheduled-scan.service
+
+# Ensure ExecStart command is correct and uses full path
+
+# Reload and restart
+systemctl --user daemon-reload
+systemctl --user restart clamui-scheduled-scan.timer
+systemctl --user status clamui-scheduled-scan.timer
+```
+
+**Solution 3: Enable user lingering (systemd only)**
+
+Scans won't run when logged out unless lingering is enabled:
+
+```bash
+# Enable lingering
+loginctl enable-linger $USER
+
+# Verify
+loginctl show-user $USER | grep Linger
+# Should show: Linger=yes
+
+# This allows your systemd user instance to remain running after logout
+```
+
+**Solution 4: Fix cron PATH issues**
+
+Cron runs with minimal PATH. Update crontab:
+
+```bash
+crontab -e
+
+# Add PATH at the top:
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Use absolute paths in cron entries:
+# ClamUI Scheduled Scan
+0 2 * * * /usr/bin/clamui-scheduled-scan --target "$HOME/Documents" 2>&1 | logger -t clamui-scan
+
+# Test cron command directly:
+/usr/bin/clamui-scheduled-scan --target "$HOME/Documents" --verbose
+```
+
+**Solution 5: Check ClamAV is installed and accessible**
+
+The scheduled scan requires ClamAV to be installed:
+
+```bash
+# Verify ClamAV installation
+clamscan --version
+
+# Expected output:
+# ClamAV 1.0.x/...
+
+# If not found:
+# Ubuntu/Debian:
+sudo apt install clamav
+
+# Fedora:
+sudo dnf install clamav clamav-update
+
+# Arch:
+sudo pacman -S clamav
+
+# For Flatpak ClamUI, ClamAV must be on host:
+flatpak-spawn --host clamscan --version
+```
+
+**Solution 6: Validate scan targets**
+
+Ensure paths configured in scheduled scan exist:
+
+```bash
+# Open ClamUI → Preferences → Scheduled Scans
+# Check "Scan Targets" section
+
+# Verify paths exist:
+ls -ld ~/Documents ~/Downloads  # or your configured paths
+
+# If paths don't exist, remove them or create them:
+mkdir -p ~/Documents ~/Downloads
+
+# Recreate schedule via ClamUI UI to update paths
+```
+
+**Solution 7: Check for conflicting schedule**
+
+Multiple schedules can interfere:
+
+```bash
+# Systemd - check for duplicate timers
+systemctl --user list-timers --all | grep clamui
+
+# If you see multiple timers, disable extras:
+systemctl --user disable --now clamui-scan-old.timer
+
+# Cron - check for duplicate entries
+crontab -l | grep -n clamui
+
+# Edit and remove duplicates:
+crontab -e
+```
+
+**Solution 8: Test timer trigger manually**
+
+```bash
+# Manually start the service (bypasses timer)
+systemctl --user start clamui-scheduled-scan.service
+
+# Watch logs in real-time
+journalctl --user -u clamui-scheduled-scan.service -f
+
+# If manual start works but timer doesn't:
+# Check timer's OnCalendar specification
+systemctl --user cat clamui-scheduled-scan.timer | grep OnCalendar
+
+# Verify time format is correct:
+# Daily:   *-*-* 02:00:00
+# Weekly:  Mon *-*-* 03:00:00
+# Monthly: *-*-01 04:00:00
+```
+
+**Solution 9: Enable verbose logging**
+
+Update service/cron to include `--verbose` flag:
+
+```bash
+# Systemd - edit service file manually
+mkdir -p ~/.config/systemd/user
+nano ~/.config/systemd/user/clamui-scheduled-scan.service
+
+# Add --verbose to ExecStart:
+ExecStart=/usr/bin/clamui-scheduled-scan --target /home/user --verbose
+
+# Reload
+systemctl --user daemon-reload
+systemctl --user restart clamui-scheduled-scan.timer
+
+# Cron - update crontab
+crontab -e
+
+# Add --verbose and redirect to log:
+0 2 * * * /usr/bin/clamui-scheduled-scan --target "$HOME" --verbose >> /tmp/clamui-scan.log 2>&1
+```
+
+**Solution 10: Check notification issues**
+
+If scans ARE running but you're not seeing notifications:
+
+```bash
+# Verify notify-send is installed
+which notify-send
+
+# Install if missing (Ubuntu/Debian):
+sudo apt install libnotify-bin
+
+# Fedora:
+sudo dnf install libnotify
+
+# Test notification manually
+notify-send "Test" "ClamUI scheduled scan test"
+
+# For Flatpak, notifications require D-Bus permissions (usually granted by default)
+```
+
+**Scheduled Scan Exit Codes:**
+
+The `clamui-scheduled-scan` command returns:
+- `0` = Success (clean scan, no threats found)
+- `1` = Threats found (but scan completed)
+- `2` = Error (ClamAV unavailable, target not found, etc.)
+
+Check service/cron exit codes:
+```bash
+# Systemd - check last exit code
+systemctl --user show clamui-scheduled-scan.service -p ExecMainStatus
+
+# Cron logs show exit code in some configurations
+journalctl -t CRON | grep clamui
+```
+
+**Common Failure Reasons Summary:**
+
+| Issue | Systemd Symptom | Cron Symptom | Solution |
+|-------|----------------|--------------|----------|
+| Command not found | "No such file or directory" | No execution in logs | Use absolute path |
+| User not lingering | Only runs when logged in | N/A | `loginctl enable-linger` |
+| ClamAV missing | "ClamAV not available" | "ClamAV not available" | Install ClamAV |
+| Invalid targets | "No valid targets found" | "No valid targets found" | Fix paths in config |
+| Timer not enabled | Not in `list-timers` | N/A | `systemctl --user enable` |
+| Cron daemon not running | N/A | No execution | Start cron daemon |
+
+---
 
 ### Verifying scheduled scan logs
 
-**Symptoms**: Want to confirm scans are running
+**Symptoms:**
+- Want to confirm scheduled scans are running as expected
+- Need to review scan results from automated scans
+- Verify no threats were found during unattended scans
+- Check performance/duration of scheduled scans
+- Audit scan history for compliance purposes
 
-**Solution**: Check scan history
+**Log Locations and Formats:**
+
+ClamUI stores scheduled scan logs in multiple locations:
+
+1. **ClamUI application logs:** `~/.local/share/clamui/logs/`
+2. **Systemd journal:** `journalctl --user -u clamui-scheduled-scan.*`
+3. **Syslog/cron logs:** `/var/log/syslog` or `journalctl -t CRON`
+
+**Diagnostic Steps:**
+
+1. **Check ClamUI scan history logs:**
 
 ```bash
-# View ClamUI scan logs
+# List all scan log files
 ls -lh ~/.local/share/clamui/logs/
 
-# View recent log file
+# Expected output:
+# scan_20240103.json
+# scan_20240104.json
+# scan_20240105.json
+
+# Files are named scan_YYYYMMDD.json and contain all scans for that day
+```
+
+2. **View recent scan log:**
+
+```bash
+# View today's scan log
 cat ~/.local/share/clamui/logs/scan_$(date +%Y%m%d).json
 
-# Check systemd logs
-journalctl --user -u clamui-scan-* --since "1 week ago"
+# Pretty-print with jq (if installed)
+cat ~/.local/share/clamui/logs/scan_$(date +%Y%m%d).json | jq '.'
+
+# Expected format:
+# [
+#   {
+#     "timestamp": "2024-01-03T02:00:15",
+#     "type": "scan",
+#     "status": "clean",
+#     "summary": "Scheduled scan completed - 15432 files scanned, no threats",
+#     "details": "Scan Duration: 145.2 seconds\nFiles Scanned: 15432\nThreats Found: 0...",
+#     "path": "/home/user/Documents",
+#     "duration": 145.2,
+#     "scheduled": true
+#   }
+# ]
+```
+
+3. **Check for scheduled scans specifically:**
+
+```bash
+# Filter for scheduled scans only (scheduled: true)
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true)'
+
+# Or grep for "Scheduled scan"
+grep -h "Scheduled scan" ~/.local/share/clamui/logs/scan_*.json
+
+# Count scheduled scan executions in the last 7 days
+find ~/.local/share/clamui/logs/ -name "scan_*.json" -mtime -7 -exec cat {} \; | jq -r '.[] | select(.scheduled == true) | .timestamp' | wc -l
+```
+
+4. **View systemd journal logs (systemd scheduler only):**
+
+```bash
+# View all scheduled scan service logs
+journalctl --user -u clamui-scheduled-scan.service --since "7 days ago"
+
+# View only today's scans
+journalctl --user -u clamui-scheduled-scan.service --since today
+
+# View timer activations (when timer triggered)
+journalctl --user -u clamui-scheduled-scan.timer --since "7 days ago"
+
+# Follow logs in real-time
+journalctl --user -u clamui-scheduled-scan.service -f
+```
+
+5. **Check cron execution logs (cron scheduler only):**
+
+```bash
+# Ubuntu/Debian - check syslog for cron executions
+grep "clamui-scheduled-scan" /var/log/syslog | tail -20
+
+# Systemd-based systems - check cron via journalctl
+journalctl -t CRON | grep clamui-scheduled-scan | tail -20
+
+# Expected output:
+# Jan  3 02:00:01 hostname CRON[12345]: (username) CMD (/usr/bin/clamui-scheduled-scan --target /home/user)
+```
+
+6. **Verify last scan time via ClamUI GUI:**
+
+1. Open ClamUI application
+2. Navigate to "Logs" or "History" view
+3. Check for entries marked as "Scheduled Scan"
+4. Verify timestamp matches your schedule
+
+**Detailed Log Analysis:**
+
+**Check scan status:**
+
+```bash
+# Count clean scans
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true and .status == "clean")' | wc -l
+
+# Find scans with threats
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true and .status == "infected")'
+
+# Find scans with errors
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true and .status == "error")'
+
+# Find scans skipped due to battery
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.status == "skipped" and .summary | contains("battery"))'
+```
+
+**Check scan performance:**
+
+```bash
+# Get average scan duration
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true and .duration != null) | .duration' | awk '{sum+=$1; count++} END {print "Average duration:", sum/count, "seconds"}'
+
+# Find longest scan
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true) | "\(.duration)s - \(.timestamp)"' | sort -n | tail -5
+
+# Find scans that took longer than 5 minutes (300 seconds)
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true and .duration > 300)'
+```
+
+**Verify scan targets:**
+
+```bash
+# List all scanned paths
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true) | .path' | sort -u
+
+# Check if specific path was scanned
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true and .path | contains("/home/user/Documents"))'
+```
+
+**Check threat details:**
+
+```bash
+# View all threats found in scheduled scans
+cat ~/.local/share/clamui/logs/scan_*.json | jq '.[] | select(.scheduled == true and .status == "infected") | .details'
+
+# Extract infected file paths
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true and .status == "infected") | .details' | grep -E "^\s+/"
+
+# Count total threats found in last 30 days
+find ~/.local/share/clamui/logs/ -name "scan_*.json" -mtime -30 -exec cat {} \; | jq '.[] | select(.scheduled == true and .status == "infected")' | grep -c '"status"'
+```
+
+**Solutions:**
+
+**Solution 1: View comprehensive scan history via ClamUI**
+
+1. Open ClamUI application
+2. Navigate to **Logs** view (in navigation sidebar)
+3. Filter by "Scheduled Scans" (if filter available)
+4. Review entries sorted by date
+5. Click on individual entries to see full details
+
+This provides a user-friendly way to review scan history without command line.
+
+**Solution 2: Generate scan summary report**
+
+Create a script to summarize scheduled scan activity:
+
+```bash
+cat > ~/clamui-scan-report.sh << 'EOF'
+#!/bin/bash
+# ClamUI Scheduled Scan Summary Report
+
+LOGS_DIR="$HOME/.local/share/clamui/logs"
+
+echo "=== ClamUI Scheduled Scan Summary Report ==="
+echo "Generated: $(date)"
+echo ""
+
+# Total scheduled scans
+total=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true)' | grep -c '"timestamp"')
+echo "Total scheduled scans: $total"
+
+# Scans by status
+clean=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true and .status == "clean")' | grep -c '"timestamp"')
+infected=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true and .status == "infected")' | grep -c '"timestamp"')
+errors=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true and .status == "error")' | grep -c '"timestamp"')
+skipped=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.status == "skipped")' | grep -c '"timestamp"')
+
+echo "  Clean: $clean"
+echo "  Threats found: $infected"
+echo "  Errors: $errors"
+echo "  Skipped (battery): $skipped"
+echo ""
+
+# Last scan
+last_scan=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true) | .timestamp' | sort | tail -1)
+echo "Last scheduled scan: $last_scan"
+
+# Average duration
+avg_duration=$(cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true and .duration != null) | .duration' | awk '{sum+=$1; count++} END {if(count>0) print sum/count; else print "N/A"}')
+echo "Average scan duration: ${avg_duration} seconds"
+echo ""
+
+# Recent threats
+echo "=== Recent Threats (if any) ==="
+cat $LOGS_DIR/scan_*.json 2>/dev/null | jq -r '.[] | select(.scheduled == true and .status == "infected") | "\(.timestamp): \(.summary)"' | tail -5
+EOF
+
+chmod +x ~/clamui-scan-report.sh
+
+# Run report
+~/clamui-scan-report.sh
+```
+
+**Solution 3: Set up log rotation**
+
+Prevent log directory from growing too large:
+
+```bash
+# Create logrotate configuration
+mkdir -p ~/.config/logrotate
+
+cat > ~/.config/logrotate/clamui.conf << 'EOF'
+~/.local/share/clamui/logs/*.json {
+    rotate 90
+    daily
+    compress
+    delaycompress
+    missingok
+    notifempty
+}
+EOF
+
+# Run logrotate manually
+logrotate -f ~/.config/logrotate/clamui.conf
+
+# Add to crontab for automatic rotation (weekly)
+crontab -e
+
+# Add:
+0 3 * * 0 logrotate -f ~/.config/logrotate/clamui.conf
+```
+
+**Solution 4: Export logs for external analysis**
+
+```bash
+# Export all scheduled scans to CSV
+echo "Timestamp,Status,Summary,Duration,Path" > ~/clamui-scans.csv
+cat ~/.local/share/clamui/logs/scan_*.json | jq -r '.[] | select(.scheduled == true) | [.timestamp, .status, .summary, .duration, .path] | @csv' >> ~/clamui-scans.csv
+
+# View in spreadsheet application
+libreoffice ~/clamui-scans.csv  # or your preferred spreadsheet app
+```
+
+**Solution 5: Monitor for threats in real-time**
+
+Set up a notification for any threats found:
+
+```bash
+cat > ~/.config/systemd/user/clamui-threat-alert.service << 'EOF'
+[Unit]
+Description=ClamUI Threat Alert Monitor
+After=clamui-scheduled-scan.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if journalctl --user -u clamui-scheduled-scan.service -n 1 | grep -q "threat"; then notify-send -u critical "ClamUI Alert" "Threats detected in scheduled scan!"; fi'
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable clamui-threat-alert.service
+```
+
+**Solution 6: Verify scheduled scans are running on time**
+
+Check if scans execute at the configured time:
+
+```bash
+# List timer next/last run times
+systemctl --user list-timers clamui-scheduled-scan.timer
+
+# Expected output shows:
+# NEXT: [future time when next scan will run]
+# LAST: [past time when last scan ran]
+# PASSED: [time since last scan]
+
+# Compare LAST time with your schedule
+# If LAST is "n/a" or very old, timer isn't firing
+
+# For cron, check execution times in logs
+grep "clamui-scheduled-scan" /var/log/syslog | awk '{print $1, $2, $3}' | sort -u
+
+# Should show execution dates/times matching your cron schedule
+```
+
+**Solution 7: Enable desktop notifications for scan completion**
+
+Ensure you're notified when scheduled scans complete:
+
+1. Open ClamUI → Preferences
+2. Enable "Show notifications"
+3. Scheduled scans will send desktop notifications showing:
+   - Clean scans: "Scheduled Scan Complete - No threats found"
+   - Threats found: "Scheduled Scan: Threats Detected!"
+   - Errors: "Scheduled Scan Completed - Scan completed with some errors"
+
+Verify notifications work:
+```bash
+# Send test notification
+notify-send -u normal "ClamUI Test" "Notification test successful"
+
+# If notifications don't appear, check notification daemon:
+# GNOME:
+systemctl --user status gnome-shell.service
+
+# Other DEs may use different notification daemons
+```
+
+**Log Retention Recommendations:**
+
+- **Keep logs for at least 30 days** for routine monitoring
+- **Keep logs for 90+ days** for compliance/audit purposes
+- **Archive old logs** by compressing or moving to backup storage
+- **Monitor log directory size**: `du -sh ~/.local/share/clamui/logs/`
+
+**Expected Log Size:**
+
+- Typical scan log entry: 1-5 KB (clean scan)
+- Scan with threats: 10-50 KB (includes threat details)
+- Daily storage (1 scan/day): 30-150 KB/month
+- Weekly storage: 10-20 KB/month
+
+**Troubleshooting Missing Logs:**
+
+If scheduled scans should have run but no logs appear:
+
+```bash
+# Verify log directory exists and is writable
+ls -ld ~/.local/share/clamui/logs/
+# Should show: drwxr-xr-x (755 permissions)
+
+# Check disk space
+df -h ~/.local/share/
+
+# Recreate log directory if missing
+mkdir -p ~/.local/share/clamui/logs/
+chmod 755 ~/.local/share/clamui/logs/
+
+# Run manual scan to verify logging works
+clamui-scheduled-scan --target /tmp --verbose
+
+# Check if log was created
+ls -lh ~/.local/share/clamui/logs/scan_$(date +%Y%m%d).json
 ```
 
 ---

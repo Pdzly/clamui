@@ -374,7 +374,7 @@ class LogManager:
 
     def save_log(self, entry: LogEntry) -> bool:
         """
-        Save a log entry to storage.
+        Save a log entry to storage and update the index.
 
         Args:
             entry: The LogEntry to save
@@ -388,6 +388,21 @@ class LogManager:
                 log_file = self._log_dir / f"{entry.id}.json"
                 with open(log_file, "w", encoding="utf-8") as f:
                     json.dump(entry.to_dict(), f, indent=2)
+
+                # Update index with new entry metadata (best-effort)
+                try:
+                    index_data = self._load_index()
+                    index_data["entries"].append({
+                        "id": entry.id,
+                        "timestamp": entry.timestamp,
+                        "type": entry.type
+                    })
+                    self._save_index(index_data)
+                except Exception:
+                    # Index update failed, but log file was saved successfully
+                    # Index can be rebuilt later if needed
+                    pass
+
                 return True
             except (OSError, PermissionError, json.JSONDecodeError):
                 return False

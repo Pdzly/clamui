@@ -4,12 +4,31 @@ Statistics calculator module for ClamUI providing scan statistics aggregation.
 Calculates metrics across different timeframes from stored scan logs.
 """
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 
 from .log_manager import LogEntry, LogManager
+
+
+# Pre-compiled regex patterns for extracting file counts
+# These patterns are used to parse scan log entries for file count information
+FILES_SCANNED_PATTERNS = [
+    re.compile(r"(\d+)\s*files?\s*scanned", re.IGNORECASE),
+    re.compile(r"scanned\s*(\d+)\s*files?", re.IGNORECASE),
+    re.compile(r"files[:\s]+(\d+)", re.IGNORECASE),
+    re.compile(r"(\d+)\s*files?", re.IGNORECASE),
+]
+
+# Pre-compiled regex patterns for extracting threat counts
+# These patterns are used to parse scan log entries for threat/infection counts
+THREATS_FOUND_PATTERNS = [
+    re.compile(r"(\d+)\s*(?:threats?|infections?|infected)", re.IGNORECASE),
+    re.compile(r"found\s*(\d+)", re.IGNORECASE),
+    re.compile(r"detected\s*(\d+)", re.IGNORECASE),
+]
 
 
 class Timeframe(Enum):
@@ -196,22 +215,11 @@ class StatisticsCalculator:
         Returns:
             Number of files scanned, or 0 if not found
         """
-        # Try to extract from summary or details
-        # Look for patterns like "Scanned X files" or "Files: X"
-        import re
-
         text = f"{entry.summary} {entry.details}"
 
-        # Pattern: "X files scanned" or "Scanned X files"
-        patterns = [
-            r"(\d+)\s*files?\s*scanned",
-            r"scanned\s*(\d+)\s*files?",
-            r"files[:\s]+(\d+)",
-            r"(\d+)\s*files?",
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
+        # Use pre-compiled patterns for faster matching
+        for pattern in FILES_SCANNED_PATTERNS:
+            match = pattern.search(text)
             if match:
                 try:
                     return int(match.group(1))
@@ -230,21 +238,13 @@ class StatisticsCalculator:
         Returns:
             Number of threats found, or 0 if not found
         """
-        import re
-
         # If status indicates infection, try to count
         if entry.status == "infected":
             text = f"{entry.summary} {entry.details}"
 
-            # Pattern: "X threats" or "X infected" or "Found X"
-            patterns = [
-                r"(\d+)\s*(?:threats?|infections?|infected)",
-                r"found\s*(\d+)",
-                r"detected\s*(\d+)",
-            ]
-
-            for pattern in patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
+            # Use pre-compiled patterns for faster matching
+            for pattern in THREATS_FOUND_PATTERNS:
+                match = pattern.search(text)
                 if match:
                     try:
                         return int(match.group(1))

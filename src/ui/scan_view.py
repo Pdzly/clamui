@@ -144,23 +144,35 @@ class ScanView(Gtk.Box):
                 font-weight: bold;
             }
 
+            /* Critical severity: Ransomware, rootkits, bootkits - most dangerous threats
+               Uses @error_bg_color (red) to indicate danger and urgency
+               Adapts to theme (darker in light mode, lighter in dark mode) */
             .severity-critical {
-                background-color: #e01b24;
+                background-color: @error_bg_color;
                 color: white;
             }
 
+            /* High severity: Trojans, worms, backdoors, exploits - serious threats
+               Uses lighter(@error_bg_color) to create orange tone (between red and yellow)
+               Semantically between critical error and medium warning */
             .severity-high {
-                background-color: #ff7800;
+                background-color: lighter(@error_bg_color);
                 color: white;
             }
 
+            /* Medium severity: Adware, PUAs (Potentially Unwanted Applications), spyware
+               Uses @warning_bg_color and @warning_fg_color (yellow/amber) for caution
+               Standard warning semantics for concerning but less severe threats */
             .severity-medium {
-                background-color: #f5c211;
-                color: #3d3846;
+                background-color: @warning_bg_color;
+                color: @warning_fg_color;
             }
 
+            /* Low severity: Test signatures (EICAR), generic/heuristic detections
+               Uses @accent_bg_color (blue) for informational, low-risk items
+               Accent color indicates "note this" without alarm */
             .severity-low {
-                background-color: #3584e4;
+                background-color: @accent_bg_color;
                 color: white;
             }
 

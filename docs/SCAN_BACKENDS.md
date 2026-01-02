@@ -81,7 +81,6 @@ Auto mode implements a two-stage detection process that runs **at the start of e
 - ✅ **Development-friendly**: Automatically uses faster daemon during development if available
 
 **Disadvantages**:
-- ⚠️ **No manual control**: Cannot force specific backend - selection is always automatic
 - ⚠️ **Variable performance**: Scan startup time may vary (instant vs 3-10 sec) if daemon availability changes
 - ⚠️ **Detection overhead**: Adds approximately 50-100ms overhead per scan for daemon availability check (negligible for typical scans)
 - ⚠️ **Potential confusion**: Users may wonder why scan speed varies between runs if daemon starts/stops

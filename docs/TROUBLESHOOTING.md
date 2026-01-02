@@ -522,14 +522,6 @@ sudo apt install xdg-desktop-portal-gtk   # GNOME/GTK-based
 sudo apt install xdg-desktop-portal-kde   # KDE
 ```
 
-**Verify tray service is running**:
-
-```bash
-# Check if tray subprocess starts
-flatpak run com.github.rooki.ClamUI
-# Look for messages like: "Starting tray service" or "Tray service is ready"
-```
-
 ### Tray icon status not updating
 
 **Symptoms**:

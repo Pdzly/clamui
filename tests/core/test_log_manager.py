@@ -2470,6 +2470,17 @@ class TestLogManagerOptimizedGetLogs:
 class TestLogManagerAutoMigration:
     """Tests for auto-migration on first get_logs() access."""
 
+    @pytest.fixture
+    def temp_log_dir(self):
+        """Create a temporary directory for log storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def log_manager(self, temp_log_dir):
+        """Create a LogManager with a temporary directory."""
+        return LogManager(log_dir=temp_log_dir)
+
     def test_auto_migration_when_logs_exist_without_index(self, temp_log_dir):
         """Test that index is automatically created when logs exist but no index."""
         # Create LogManager

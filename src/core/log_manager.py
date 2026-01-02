@@ -533,7 +533,7 @@ class LogManager:
 
     def clear_logs(self) -> bool:
         """
-        Clear all stored log entries.
+        Clear all stored log entries and reset the index.
 
         Returns:
             True if cleared successfully, False otherwise
@@ -542,10 +542,22 @@ class LogManager:
             try:
                 if self._log_dir.exists():
                     for log_file in self._log_dir.glob("*.json"):
+                        # Skip the index file - we'll reset it separately
+                        if log_file.name == INDEX_FILENAME:
+                            continue
                         try:
                             log_file.unlink()
                         except OSError:
                             pass
+
+                # Reset index to empty state (best-effort)
+                try:
+                    self._save_index({"version": 1, "entries": []})
+                except Exception:
+                    # Index reset failed, but log files were cleared successfully
+                    # Index can be rebuilt later if needed
+                    pass
+
                 return True
             except OSError:
                 return False

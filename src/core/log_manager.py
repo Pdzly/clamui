@@ -189,6 +189,9 @@ CLAMD_LOG_PATHS = [
     "/var/log/clamd.log",
 ]
 
+# Index file for optimized log retrieval
+INDEX_FILENAME = "log_index.json"
+
 
 class LogManager:
     """
@@ -196,6 +199,16 @@ class LogManager:
 
     Provides methods for saving scan/update logs, retrieving historical logs,
     and accessing clamd daemon logs.
+
+    Index Schema:
+        The log index file (log_index.json) contains metadata for fast log retrieval:
+        {
+            "version": 1,
+            "entries": [
+                {"id": "uuid-string", "timestamp": "ISO-8601-string", "type": "scan|update"},
+                ...
+            ]
+        }
     """
 
     def __init__(self, log_dir: Optional[str] = None):
@@ -224,6 +237,16 @@ class LogManager:
         except (OSError, PermissionError):
             # Handle silently - will fail on write operations
             pass
+
+    @property
+    def _index_path(self) -> Path:
+        """
+        Get the path to the log index file.
+
+        Returns:
+            Path object pointing to log_index.json in the log directory
+        """
+        return self._log_dir / INDEX_FILENAME
 
     def save_log(self, entry: LogEntry) -> bool:
         """

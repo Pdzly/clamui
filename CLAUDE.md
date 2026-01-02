@@ -72,6 +72,31 @@ clamui/
 └── install.sh                  # Installation script
 ```
 
+## Architecture Documentation
+
+For detailed technical documentation on specific architectural patterns:
+
+### System Tray Subprocess Architecture
+**Location**: [`docs/architecture/tray-subprocess.md`](docs/architecture/tray-subprocess.md)
+
+ClamUI uses a unique subprocess architecture for system tray integration:
+- **Main process** (GTK4): `ClamUIApp` and `TrayManager`
+- **Subprocess** (GTK3): `TrayService` running AppIndicator
+- **IPC**: JSON messages over stdin/stdout pipes
+
+This split is necessary because GTK3 and GTK4 cannot coexist in the same process. The documentation includes:
+- Runtime architecture diagrams showing process boundaries and threading models
+- Complete IPC protocol specification (commands, events, message formats)
+- Sequence diagrams for startup, status updates, and menu actions
+- Component relationships between `app.py`, `tray_manager.py`, `tray_service.py`, and `tray_icons.py`
+- Security considerations and troubleshooting guides
+
+**When to reference this:**
+- Implementing features that update the system tray (status, progress, icons)
+- Debugging IPC communication issues between main app and tray
+- Understanding why certain operations require thread-safe callbacks
+- Contributing to tray-related code in `src/ui/tray_*.py`
+
 ## Development Commands
 
 ### Setup

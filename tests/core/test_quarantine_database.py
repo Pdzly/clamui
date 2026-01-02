@@ -748,3 +748,426 @@ class TestQuarantineDatabaseErrorHandling:
         with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
             result = db.entry_exists("/test.exe")
             assert result is False
+
+
+class TestQuarantineDatabaseConnectionPooling:
+    """Tests for connection pool integration in QuarantineDatabase."""
+
+    @pytest.fixture
+    def temp_db_dir(self):
+        """Create a temporary directory for database storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    def test_init_with_pooling_disabled(self, temp_db_dir):
+        """Test QuarantineDatabase with pool_size=0 (pooling disabled)."""
+        db_path = os.path.join(temp_db_dir, "no_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        # Verify pool is not created
+        assert db._pool is None
+
+        # Verify database operations still work without pooling
+        entry_id = db.add_entry(
+            original_path="/test/file.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="TestThreat",
+            file_size=1024,
+            file_hash="testhash",
+        )
+        assert entry_id is not None
+        assert entry_id > 0
+
+        # Verify retrieval works
+        entry = db.get_entry(entry_id)
+        assert entry is not None
+        assert entry.original_path == "/test/file.exe"
+
+        db.close()
+
+    def test_init_with_pooling_enabled(self, temp_db_dir):
+        """Test QuarantineDatabase with pool_size=3 (pooling enabled)."""
+        db_path = os.path.join(temp_db_dir, "with_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Verify pool is created
+        assert db._pool is not None
+
+        # Verify database operations work with pooling
+        entry_id = db.add_entry(
+            original_path="/pooled/file.exe",
+            quarantine_path="/quarantine/pooled.quar",
+            threat_name="PooledThreat",
+            file_size=2048,
+            file_hash="pooledhash",
+        )
+        assert entry_id is not None
+        assert entry_id > 0
+
+        # Verify retrieval works
+        entry = db.get_entry(entry_id)
+        assert entry is not None
+        assert entry.original_path == "/pooled/file.exe"
+
+        db.close()
+
+    def test_default_pool_size(self, temp_db_dir):
+        """Test that default pool_size is 3."""
+        db_path = os.path.join(temp_db_dir, "default.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Verify pool is created with default size
+        assert db._pool is not None
+
+        db.close()
+
+    def test_operations_work_with_pooling_disabled(self, temp_db_dir):
+        """Test all database operations work correctly with pooling disabled."""
+        db_path = os.path.join(temp_db_dir, "no_pool_ops.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        # Test add_entry
+        entry_id_1 = db.add_entry(
+            original_path="/file1.exe",
+            quarantine_path="/quarantine/file1.quar",
+            threat_name="Threat1",
+            file_size=1000,
+            file_hash="hash1",
+        )
+        entry_id_2 = db.add_entry(
+            original_path="/file2.exe",
+            quarantine_path="/quarantine/file2.quar",
+            threat_name="Threat2",
+            file_size=2000,
+            file_hash="hash2",
+        )
+
+        # Test get_entry
+        entry = db.get_entry(entry_id_1)
+        assert entry.original_path == "/file1.exe"
+
+        # Test get_entry_by_original_path
+        entry = db.get_entry_by_original_path("/file2.exe")
+        assert entry.threat_name == "Threat2"
+
+        # Test get_all_entries
+        entries = db.get_all_entries()
+        assert len(entries) == 2
+
+        # Test get_entry_count
+        count = db.get_entry_count()
+        assert count == 2
+
+        # Test get_total_size
+        total_size = db.get_total_size()
+        assert total_size == 3000
+
+        # Test entry_exists
+        assert db.entry_exists("/file1.exe") is True
+        assert db.entry_exists("/nonexistent.exe") is False
+
+        # Test remove_entry
+        result = db.remove_entry(entry_id_1)
+        assert result is True
+        assert db.get_entry_count() == 1
+
+        db.close()
+
+    def test_operations_work_with_pooling_enabled(self, temp_db_dir):
+        """Test all database operations work correctly with pooling enabled."""
+        db_path = os.path.join(temp_db_dir, "with_pool_ops.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Test add_entry
+        entry_id_1 = db.add_entry(
+            original_path="/pooled1.exe",
+            quarantine_path="/quarantine/pooled1.quar",
+            threat_name="PooledThreat1",
+            file_size=1500,
+            file_hash="poolhash1",
+        )
+        entry_id_2 = db.add_entry(
+            original_path="/pooled2.exe",
+            quarantine_path="/quarantine/pooled2.quar",
+            threat_name="PooledThreat2",
+            file_size=2500,
+            file_hash="poolhash2",
+        )
+
+        # Test get_entry
+        entry = db.get_entry(entry_id_1)
+        assert entry.original_path == "/pooled1.exe"
+
+        # Test get_entry_by_original_path
+        entry = db.get_entry_by_original_path("/pooled2.exe")
+        assert entry.threat_name == "PooledThreat2"
+
+        # Test get_all_entries
+        entries = db.get_all_entries()
+        assert len(entries) == 2
+
+        # Test get_entry_count
+        count = db.get_entry_count()
+        assert count == 2
+
+        # Test get_total_size
+        total_size = db.get_total_size()
+        assert total_size == 4000
+
+        # Test entry_exists
+        assert db.entry_exists("/pooled1.exe") is True
+        assert db.entry_exists("/nonexistent.exe") is False
+
+        # Test remove_entry
+        result = db.remove_entry(entry_id_1)
+        assert result is True
+        assert db.get_entry_count() == 1
+
+        db.close()
+
+    def test_close_with_pooling_disabled(self, temp_db_dir):
+        """Test close() is safe when pooling is disabled."""
+        db_path = os.path.join(temp_db_dir, "no_pool_close.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        # Add an entry
+        db.add_entry(
+            original_path="/test.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="Test",
+            file_size=100,
+            file_hash="hash",
+        )
+
+        # Close should be safe (no-op)
+        db.close()
+        assert db._pool is None
+
+        # Operations should still work (new connections created per-operation)
+        count = db.get_entry_count()
+        assert count == 1
+
+        # Close again should be safe
+        db.close()
+
+    def test_close_with_pooling_enabled(self, temp_db_dir):
+        """Test close() properly cleans up connection pool."""
+        db_path = os.path.join(temp_db_dir, "with_pool_close.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Add some entries to ensure pool has connections
+        for i in range(5):
+            db.add_entry(
+                original_path=f"/file{i}.exe",
+                quarantine_path=f"/quarantine/file{i}.quar",
+                threat_name=f"Threat{i}",
+                file_size=100 * i,
+                file_hash=f"hash{i}",
+            )
+
+        # Verify pool exists
+        assert db._pool is not None
+
+        # Close the database
+        db.close()
+
+        # Verify pool is set to None
+        assert db._pool is None
+
+        # After close, operations should still work (fallback to per-operation connections)
+        count = db.get_entry_count()
+        assert count == 5
+
+        # Close again should be safe
+        db.close()
+        assert db._pool is None
+
+    def test_close_multiple_times_with_pooling(self, temp_db_dir):
+        """Test that close() can be called multiple times safely with pooling."""
+        db_path = os.path.join(temp_db_dir, "multi_close.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Close multiple times
+        db.close()
+        db.close()
+        db.close()
+
+        # Should be safe, no exceptions
+        assert db._pool is None
+
+    def test_rapid_operations_with_pooling(self, temp_db_dir):
+        """Test rapid database operations benefit from connection pooling."""
+        db_path = os.path.join(temp_db_dir, "rapid_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Simulate UI making multiple rapid calls (common pattern)
+        for i in range(10):
+            db.add_entry(
+                original_path=f"/rapid/file{i}.exe",
+                quarantine_path=f"/quarantine/rapid{i}.quar",
+                threat_name=f"RapidThreat{i}",
+                file_size=100,
+                file_hash=f"rapidhash{i}",
+            )
+
+        # Make rapid sequential queries (like UI would)
+        entries = db.get_all_entries()
+        count = db.get_entry_count()
+        total_size = db.get_total_size()
+
+        # Verify results
+        assert len(entries) == 10
+        assert count == 10
+        assert total_size == 1000
+
+        db.close()
+
+    def test_concurrent_operations_with_pooling_disabled(self, temp_db_dir):
+        """Test concurrent operations work with pooling disabled."""
+        db_path = os.path.join(temp_db_dir, "concurrent_no_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        errors = []
+
+        def add_entries(thread_id):
+            try:
+                for i in range(5):
+                    db.add_entry(
+                        original_path=f"/thread{thread_id}/file{i}.exe",
+                        quarantine_path=f"/quarantine/thread{thread_id}_file{i}.quar",
+                        threat_name=f"Threat{thread_id}_{i}",
+                        file_size=100,
+                        file_hash=f"hash{thread_id}_{i}",
+                    )
+            except Exception as e:
+                errors.append(str(e))
+
+        # Create multiple threads
+        threads = []
+        for i in range(5):
+            t = threading.Thread(target=add_entries, args=(i,))
+            threads.append(t)
+            t.start()
+
+        # Wait for completion
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+        assert db.get_entry_count() == 25
+
+        db.close()
+
+    def test_concurrent_operations_with_pooling_enabled(self, temp_db_dir):
+        """Test concurrent operations work with pooling enabled."""
+        db_path = os.path.join(temp_db_dir, "concurrent_with_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        errors = []
+
+        def add_entries(thread_id):
+            try:
+                for i in range(5):
+                    db.add_entry(
+                        original_path=f"/poolthread{thread_id}/file{i}.exe",
+                        quarantine_path=f"/quarantine/poolthread{thread_id}_file{i}.quar",
+                        threat_name=f"PoolThreat{thread_id}_{i}",
+                        file_size=100,
+                        file_hash=f"poolhash{thread_id}_{i}",
+                    )
+            except Exception as e:
+                errors.append(str(e))
+
+        # Create multiple threads
+        threads = []
+        for i in range(5):
+            t = threading.Thread(target=add_entries, args=(i,))
+            threads.append(t)
+            t.start()
+
+        # Wait for completion
+        for t in threads:
+            t.join()
+
+        # Verify no errors
+        assert len(errors) == 0
+        assert db.get_entry_count() == 25
+
+        db.close()
+
+    def test_pooling_with_old_entries_operations(self, temp_db_dir):
+        """Test that old entries operations work with pooling."""
+        db_path = os.path.join(temp_db_dir, "old_entries_pool.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Insert old entry via direct SQL
+        conn = sqlite3.connect(db_path)
+        old_date = (datetime.now() - timedelta(days=60)).isoformat()
+        conn.execute(
+            """
+            INSERT INTO quarantine
+            (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("/old.exe", "/quarantine/old.quar", "OldThreat", old_date, 100, "oldhash"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Add recent entry
+        db.add_entry(
+            original_path="/recent.exe",
+            quarantine_path="/quarantine/recent.quar",
+            threat_name="RecentThreat",
+            file_size=200,
+            file_hash="recenthash",
+        )
+
+        # Test get_old_entries
+        old_entries = db.get_old_entries(days=30)
+        assert len(old_entries) == 1
+        assert old_entries[0].original_path == "/old.exe"
+
+        # Test cleanup_old_entries
+        removed = db.cleanup_old_entries(days=30)
+        assert removed == 1
+        assert db.get_entry_count() == 1
+
+        db.close()
+
+    def test_pooling_consistency_across_operations(self, temp_db_dir):
+        """Test that pooling and non-pooling produce identical results."""
+        # Create two databases with same data
+        db_path_no_pool = os.path.join(temp_db_dir, "consistency_no_pool.db")
+        db_path_with_pool = os.path.join(temp_db_dir, "consistency_with_pool.db")
+
+        db_no_pool = QuarantineDatabase(db_path=db_path_no_pool, pool_size=0)
+        db_with_pool = QuarantineDatabase(db_path=db_path_with_pool, pool_size=3)
+
+        # Add same entries to both
+        test_data = [
+            ("/file1.exe", "/quarantine/file1.quar", "Threat1", 1000, "hash1"),
+            ("/file2.exe", "/quarantine/file2.quar", "Threat2", 2000, "hash2"),
+            ("/file3.exe", "/quarantine/file3.quar", "Threat3", 3000, "hash3"),
+        ]
+
+        for original_path, quarantine_path, threat_name, file_size, file_hash in test_data:
+            db_no_pool.add_entry(original_path, quarantine_path, threat_name, file_size, file_hash)
+            db_with_pool.add_entry(original_path, quarantine_path, threat_name, file_size, file_hash)
+
+        # Verify identical results
+        assert db_no_pool.get_entry_count() == db_with_pool.get_entry_count()
+        assert db_no_pool.get_total_size() == db_with_pool.get_total_size()
+
+        entries_no_pool = db_no_pool.get_all_entries()
+        entries_with_pool = db_with_pool.get_all_entries()
+        assert len(entries_no_pool) == len(entries_with_pool)
+
+        for e1, e2 in zip(entries_no_pool, entries_with_pool):
+            assert e1.original_path == e2.original_path
+            assert e1.threat_name == e2.threat_name
+            assert e1.file_size == e2.file_size
+
+        db_no_pool.close()
+        db_with_pool.close()

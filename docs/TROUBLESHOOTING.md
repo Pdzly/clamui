@@ -1035,86 +1035,827 @@ update-desktop-database ~/.local/share/applications
 
 ### Permission denied errors
 
-**Symptoms**: "Permission denied" when scanning files or directories
+**Symptoms**:
+- Error message: `"Permission denied: Cannot read /path/to/file"`
+- Error message: `"Permission denied: Cannot access directory contents of /path/to/directory"`
+- Files or directories skipped during scan
+- Scan completes but shows fewer files than expected
+- Quarantine operations fail with permission errors
 
-**Solutions**:
+**Cause**: Insufficient permissions to access files, directories, or in Flatpak sandbox restrictions
 
-1. **Check file permissions**:
-   ```bash
-   ls -la /path/to/file
-   ```
+**Diagnostic steps**:
 
-2. **For Flatpak**: Grant filesystem access (see [Flatpak-Specific Issues](#flatpak-specific-issues))
+```bash
+# Check file/directory permissions
+ls -la /path/to/file
 
-3. **For system files**: Some system directories require root access:
-   ```bash
-   # Run with elevated permissions (use with caution)
-   sudo -E clamui
-   ```
+# Check if you can read the file
+cat /path/to/file > /dev/null
+# If this fails with "Permission denied", you don't have read access
+
+# For directories, check if you can list contents
+ls /path/to/directory
+# If this fails, you don't have execute permission on the directory
+
+# Check ownership
+stat /path/to/file
+```
+
+**Solution 1: Fix file permissions** (for native installation)
+
+```bash
+# Check current permissions
+ls -la /path/to/file
+
+# If the file is owned by another user, you may need to:
+# Option A: Run scan with sudo (use with caution)
+sudo -E clamui
+
+# Option B: Change file ownership (if you own the parent directory)
+sudo chown $USER:$USER /path/to/file
+
+# Option C: Add read permissions for your user
+sudo chmod +r /path/to/file  # For files
+sudo chmod +rx /path/to/directory  # For directories
+```
+
+**Solution 2: Grant Flatpak filesystem access** (for Flatpak installation)
+
+If you're using the Flatpak version, the sandbox restricts file access by default.
+
+```bash
+# Grant read-only access to a specific directory
+flatpak override --user --filesystem=/path/to/directory:ro com.github.rooki.ClamUI
+
+# Grant full access (needed for quarantine operations)
+flatpak override --user --filesystem=/path/to/directory com.github.rooki.ClamUI
+
+# Common directories that may need access
+flatpak override --user --filesystem=/media com.github.rooki.ClamUI  # External drives
+flatpak override --user --filesystem=/mnt com.github.rooki.ClamUI    # Mount points
+flatpak override --user --filesystem=/var com.github.rooki.ClamUI    # System files
+
+# Verify permissions were granted
+flatpak info --show-permissions com.github.rooki.ClamUI | grep filesystem
+```
+
+**Solution 3: Check SELinux/AppArmor restrictions** (advanced)
+
+```bash
+# Check if SELinux is enforcing
+getenforce
+
+# View SELinux denials
+sudo ausearch -m avc -ts recent | grep clamui
+
+# Check AppArmor status
+sudo aa-status | grep clamui
+
+# Temporarily disable SELinux for testing (re-enable after!)
+sudo setenforce 0
+# Re-enable with: sudo setenforce 1
+```
+
+**Solution 4: Verify file isn't locked by another process**
+
+```bash
+# Check if file is open by another process
+lsof /path/to/file
+
+# Check for file locks
+flock /path/to/file echo "Testing lock"
+```
+
+**Verification**:
+
+```bash
+# Test if ClamUI can now access the path
+# For native installation:
+clamscan /path/to/file
+
+# For Flatpak:
+flatpak run com.github.rooki.ClamUI /path/to/file
+
+# Check ClamUI logs for permission errors
+journalctl --user -u clamui --since "5 minutes ago" | grep -i "permission denied"
+```
 
 ### Path validation failures
 
-**Symptoms**: "Invalid path" errors
+**Symptoms**:
+- Error message: `"No path specified"`
+- Error message: `"Path does not exist: /path/to/scan"`
+- Error message: `"Invalid path format"`
+- Error message: `"Error resolving path"`
+- Scan button disabled or grayed out
+- Path field shows red border or warning icon
 
-**Solution**: Ensure paths are:
-- Absolute (start with `/`)
-- Don't contain null bytes or newlines
-- Actually exist on the filesystem
+**Cause**: Invalid, non-existent, or malformed filesystem paths
+
+**Diagnostic steps**:
+
+```bash
+# Verify the path exists
+ls -la /path/to/scan
+
+# Check if path is valid
+test -e /path/to/scan && echo "Path exists" || echo "Path does not exist"
+
+# For files, verify it's readable
+test -r /path/to/scan && echo "Path is readable" || echo "Path is not readable"
+
+# Check for special characters or encoding issues
+echo "/path/to/scan" | od -c  # Shows character encoding
+
+# Verify path doesn't contain null bytes
+echo "/path/to/scan" | grep -q $'\0' && echo "Contains null bytes!" || echo "No null bytes"
+```
+
+**Common causes and solutions**:
+
+**Cause 1: Path doesn't exist**
 
 ```bash
 # Verify path exists
 ls -la /path/to/scan
+
+# Check for typos in the path
+# Correct: /home/user/Documents
+# Wrong: /home/user/Documens (typo)
+# Wrong: /Home/user/Documents (case mismatch on case-sensitive filesystems)
+
+# If path should exist, check parent directory
+ls -la /home/user/
+```
+
+**Cause 2: Relative path instead of absolute path**
+
+ClamUI expects absolute paths starting with `/` or `~`.
+
+```bash
+# Wrong: Documents/file.txt (relative path)
+# Correct: /home/user/Documents/file.txt (absolute path)
+# Correct: ~/Documents/file.txt (home directory shorthand)
+
+# Convert relative to absolute
+realpath Documents/file.txt
+# Output: /home/user/Documents/file.txt
+```
+
+**Cause 3: Special characters in path**
+
+```bash
+# Paths with spaces need to be valid
+# Correct: /home/user/My Documents/file.txt
+# The UI should handle this automatically
+
+# Check for hidden characters
+cat -A <<< "/path/to/scan"
+# Look for: ^M (carriage return), ^@ (null), or other control characters
+```
+
+**Cause 4: Broken symbolic link**
+
+```bash
+# Check if path is a broken symlink
+file /path/to/scan
+# If output says "broken symbolic link", the target doesn't exist
+
+# Find what the symlink points to
+readlink -f /path/to/scan
+
+# If the symlink is broken, either:
+# 1. Fix the symlink target
+# 2. Remove the broken symlink: rm /path/to/scan
+# 3. Scan the intended target directly
+```
+
+**Cause 5: Network or remote paths**
+
+```bash
+# ClamUI cannot scan remote/network paths directly
+# Wrong: smb://server/share/file.txt
+# Wrong: ftp://server/path/file.txt
+
+# Mount the network share first, then scan the mount point
+# Example for SMB/CIFS:
+sudo mount -t cifs //server/share /mnt/network -o username=user
+clamui /mnt/network
+```
+
+**Verification**:
+
+```bash
+# Test path validation manually
+test -e /path/to/scan && test -r /path/to/scan && echo "Path is valid for scanning" || echo "Path is invalid"
+
+# Try scanning with clamscan directly
+clamscan /path/to/scan
+
+# Expected output if path is valid:
+# -------  SCAN SUMMARY -------
+# Known viruses: ...
+# Engine version: ...
 ```
 
 ### Symlink security warnings
 
-**Symptoms**: Warnings about symbolic links during scans
+**Symptoms**:
+- Warning message: `"Path is a symlink: /path/link -> /path/target"`
+- Error message: `"Symlink target does not exist: /path/link -> /path/target"`
+- Error message: `"Symlink escapes to protected directory: /path/link -> /system/path"`
+- Scan proceeds but shows warning in logs
+- Some symlinked directories skipped during scan
 
-**Solution**: This is expected behavior for security. ClamUI validates symlinks to prevent:
-- Directory traversal attacks
-- Scanning the same file multiple times
+**Cause**: ClamUI validates symlinks for security to prevent directory traversal attacks and scanning system files unintentionally
 
-To scan symlink targets, scan the actual target directory instead.
+**Understanding symlink security checks**:
+
+ClamUI performs three levels of symlink validation:
+
+1. **Target existence**: Verifies the symlink points to an existing file/directory
+2. **Escape detection**: Prevents symlinks from escaping user directories to system directories
+3. **Circular reference prevention**: Avoids infinite loops from circular symlinks
+
+**Protected system directories** that symlinks cannot escape to from user directories:
+- `/etc` - System configuration
+- `/var` - Variable data
+- `/usr` - System binaries
+- `/bin`, `/sbin` - Essential commands
+- `/lib`, `/lib64` - System libraries
+- `/boot` - Boot files
+- `/root` - Root user's home
+
+**Diagnostic steps**:
+
+```bash
+# Check if path is a symlink
+ls -la /path/to/check
+# Look for: lrwxrwxrwx ... /path/to/check -> /path/to/target
+
+# Find where the symlink points
+readlink -f /path/to/check
+
+# Check if target exists
+test -e "$(readlink -f /path/to/check)" && echo "Target exists" || echo "Target missing"
+
+# Find all symlinks in a directory
+find /path/to/directory -type l
+
+# Find broken symlinks
+find /path/to/directory -type l ! -exec test -e {} \; -print
+```
+
+**Solution 1: Scan the actual target instead of the symlink**
+
+```bash
+# Instead of scanning the symlink:
+# /home/user/link -> /home/user/Documents
+
+# Scan the actual target:
+clamui /home/user/Documents
+
+# Or resolve the symlink first:
+clamui "$(readlink -f /home/user/link)"
+```
+
+**Solution 2: Fix broken symlinks**
+
+```bash
+# Check what the symlink points to
+ls -la /path/to/symlink
+
+# If target doesn't exist, either:
+# 1. Create the missing target
+mkdir -p /path/to/target
+
+# 2. Update the symlink to point to the correct location
+ln -sf /correct/path /path/to/symlink
+
+# 3. Remove the broken symlink
+rm /path/to/symlink
+```
+
+**Solution 3: Understanding escape warnings**
+
+If you see: `"Symlink escapes to protected directory"`
+
+```bash
+# Example scenario:
+# /home/user/etc_link -> /etc
+# This is flagged as potentially dangerous
+
+# This is EXPECTED BEHAVIOR to protect you from:
+# - Accidentally scanning system files
+# - Potential privilege escalation attacks
+# - Malware using symlinks for directory traversal
+
+# If you genuinely need to scan system directories:
+# 1. Use the actual path, not the symlink
+sudo clamui /etc
+
+# 2. Or grant explicit permission (Flatpak)
+flatpak override --user --filesystem=/etc:ro com.github.rooki.ClamUI
+```
+
+**Solution 4: Scan with follow-symlinks disabled**
+
+ClamAV follows symlinks by default. To disable:
+
+```bash
+# For command-line scanning:
+clamscan --no-follow-symlinks /path/to/scan
+
+# Note: ClamUI doesn't currently expose this option in the UI
+# Follow symlinks is generally safe for user directories
+```
+
+**Common symlink scenarios**:
+
+**Scenario 1: Symlink to another user directory** (✓ Safe)
+```bash
+/home/user/shared -> /home/user/Documents/Shared
+# This is safe and will be scanned normally
+```
+
+**Scenario 2: Symlink to external drive** (✓ Safe)
+```bash
+/home/user/usb -> /media/user/USB_DRIVE
+# Safe, but ensure Flatpak has access to /media
+```
+
+**Scenario 3: Symlink escaping to /etc** (⚠ Blocked)
+```bash
+/home/user/etc_link -> /etc
+# Blocked for security - scan /etc directly with appropriate permissions
+```
+
+**Scenario 4: Circular symlink** (⚠ Detected)
+```bash
+/home/user/a -> /home/user/b
+/home/user/b -> /home/user/a
+# ClamAV detects circular references and skips
+```
+
+**Verification**:
+
+```bash
+# Test symlink validation
+readlink -f /path/to/symlink && echo "Symlink is valid"
+
+# Scan the symlink target directly
+clamscan "$(readlink -f /path/to/symlink)"
+
+# Check scan logs for symlink warnings
+journalctl --user -u clamui --since "10 minutes ago" | grep -i symlink
+```
 
 ### Daemon connection failures
 
-**Symptoms**: "Failed to connect to clamd" errors
+**Symptoms**:
+- Error message: `"Failed to connect to clamd"`
+- Error message: `"Daemon not responding"`
+- Error message: `"Could not find clamd socket"`
+- Error message: `"Connection to clamd timed out"`
+- Error message: `"clamdscan executable not found"`
+- Scan falls back to slower clamscan mode
+- Backend shows as "unavailable" in preferences
 
-**Solution**: Check daemon status and socket path
+**Cause**: ClamAV daemon (clamd) not running, not installed, socket permission issues, or socket path misconfiguration
+
+**Diagnostic steps**:
 
 ```bash
-# Verify daemon is running
+# Check if clamd daemon is installed
+which clamdscan
+dpkg -l | grep clamav-daemon  # Ubuntu/Debian
+rpm -qa | grep clamd          # Fedora
+
+# Check if daemon is running
+sudo systemctl status clamav-daemon  # Ubuntu/Debian
+sudo systemctl status clamd@scan     # Fedora
+sudo systemctl status clamd          # Arch
+
+# Test daemon connection with ping
+clamdscan --ping 3
+# Expected output: "PONG"
+
+# Check socket file exists
+ls -la /var/run/clamav/clamd.ctl      # Ubuntu/Debian
+ls -la /run/clamav/clamd.ctl          # Alternative location
+ls -la /var/run/clamd.scan/clamd.sock # Fedora
+
+# Check socket permissions
+stat /var/run/clamav/clamd.ctl
+
+# View daemon logs for errors
+sudo journalctl -u clamav-daemon --since "10 minutes ago"
+sudo journalctl -u clamd@scan --since "10 minutes ago"
+
+# Check clamd configuration
+sudo cat /etc/clamav/clamd.conf | grep -E "LocalSocket|TCPSocket"
+```
+
+**Solution 1: Install and start the daemon**
+
+**Ubuntu/Debian:**
+```bash
+# Install daemon package
+sudo apt install clamav-daemon
+
+# Enable and start the service
+sudo systemctl enable clamav-daemon
+sudo systemctl start clamav-daemon
+
+# Verify it's running
 sudo systemctl status clamav-daemon
 
-# Check socket exists
-ls -la /var/run/clamav/clamd.ctl  # Debian/Ubuntu
-ls -la /var/run/clamd.scan/clamd.sock  # Fedora
+# Test connection
+clamdscan --ping 3
+```
 
-# Switch to clamscan backend in ClamUI preferences
-# Settings → Scan Backend → "Direct scan (clamscan)"
+**Fedora:**
+```bash
+# Install clamd
+sudo dnf install clamd
+
+# Enable and start the service
+sudo systemctl enable clamd@scan
+sudo systemctl start clamd@scan
+
+# Verify it's running
+sudo systemctl status clamd@scan
+
+# Test connection
+clamdscan --ping 3
+```
+
+**Arch Linux:**
+```bash
+# Install ClamAV (includes daemon)
+sudo pacman -S clamav
+
+# Enable and start the service
+sudo systemctl enable clamd
+sudo systemctl start clamd
+
+# Verify it's running
+sudo systemctl status clamd
+
+# Test connection
+clamdscan --ping 3
+```
+
+**Solution 2: Fix daemon startup issues**
+
+If daemon fails to start:
+
+```bash
+# View detailed error messages
+sudo journalctl -u clamav-daemon -n 50 --no-pager
+
+# Common issue: Database not found
+# Error: "Database initialization error: Can't find file"
+# Solution: Update virus database first
+sudo freshclam
+# Then restart daemon
+sudo systemctl restart clamav-daemon
+
+# Common issue: Port/socket already in use
+# Check what's using the socket
+sudo lsof /var/run/clamav/clamd.ctl
+# Kill the conflicting process or change socket path in /etc/clamav/clamd.conf
+
+# Common issue: Permission denied on database directory
+sudo chown -R clamav:clamav /var/lib/clamav
+sudo systemctl restart clamav-daemon
+```
+
+**Solution 3: Socket permission issues**
+
+```bash
+# Check socket permissions
+ls -la /var/run/clamav/clamd.ctl
+
+# Socket should be accessible by clamav group
+# srwxrwxr-x 1 clamav clamav ... /var/run/clamav/clamd.ctl
+
+# Add your user to clamav group (for native installation)
+sudo usermod -aG clamav $USER
+
+# Log out and log back in for group membership to take effect
+# Verify group membership
+groups | grep clamav
+
+# If still having issues, check socket directory permissions
+sudo chmod 755 /var/run/clamav
+```
+
+**Solution 4: Flatpak-specific daemon connection**
+
+For Flatpak installations, the daemon must be running on the **host system**:
+
+```bash
+# Install daemon on host OS (not inside Flatpak)
+sudo apt install clamav-daemon  # Ubuntu/Debian
+sudo dnf install clamd          # Fedora
+
+# Start daemon on host
+sudo systemctl start clamav-daemon
+
+# Test from Flatpak
+flatpak run --command=sh com.github.rooki.ClamUI -c \
+  "flatpak-spawn --host clamdscan --ping 3"
+
+# Expected output: "PONG"
+```
+
+**Solution 5: Switch to clamscan backend**
+
+If you can't get the daemon working, use direct scanning instead:
+
+```bash
+# Open ClamUI
+# Go to: Preferences → General → Scan Backend
+# Select: "Direct scan (clamscan)"
+# Click: Apply
+
+# Verify backend change
+# The scan will now use clamscan instead of clamdscan
+# Note: Scans will be slower but don't require the daemon
+```
+
+**Solution 6: Verify clamd configuration**
+
+```bash
+# Check daemon configuration file
+sudo cat /etc/clamav/clamd.conf
+
+# Important settings:
+# LocalSocket /var/run/clamav/clamd.ctl  # Socket path
+# TCPSocket 3310                          # Or TCP port if using network
+# LocalSocketMode 666                     # Socket permissions
+
+# If you changed the config, restart daemon
+sudo systemctl restart clamav-daemon
+
+# Test with verbose output
+clamdscan --version
+```
+
+**Verification**:
+
+```bash
+# Test daemon is responding
+clamdscan --ping 3
+# Expected: "PONG"
+
+# Test a simple scan via daemon
+echo "test" > /tmp/test.txt
+clamdscan /tmp/test.txt
+# Expected: "Infected files: 0"
+
+# Verify ClamUI can connect
+# Open ClamUI → Preferences
+# Check that "Daemon (clamdscan)" backend shows as available
+
+# Check ClamUI logs
+journalctl --user -u clamui --since "5 minutes ago" | grep -i daemon
 ```
 
 ### Scan timeout issues
 
-**Symptoms**: Scans fail with timeout errors on large files
+**Symptoms**:
+- Scan freezes or hangs on large files
+- Error message: `"Scan timed out"`
+- Progress bar stops moving for extended periods
+- ClamUI becomes unresponsive during scan
+- Scan aborts with timeout error on archives or large files
+- System resource usage spikes during scan
 
-**Solution**: Increase timeout or use daemon mode
+**Cause**: Large files, slow I/O, insufficient timeout limits, or resource constraints
 
-1. **Enable daemon mode** (faster for large files):
-   - Open ClamUI preferences
-   - Set Scan Backend to "Daemon (clamdscan)" or "Auto"
+**Diagnostic steps**:
 
-2. **For very large files**, configure clamd timeout:
-   ```bash
-   # Edit /etc/clamav/clamd.conf
-   sudo nano /etc/clamav/clamd.conf
+```bash
+# Check file size that's timing out
+ls -lh /path/to/large/file
+# Files > 1GB can take several minutes
 
-   # Increase timeout (in milliseconds)
-   ReadTimeout 300000
+# Check system resources during scan
+htop
+# Look for high CPU or I/O wait
 
-   # Restart daemon
-   sudo systemctl restart clamav-daemon
-   ```
+# Monitor scan in real-time
+clamscan -v /path/to/large/file
+# Watch for files taking excessive time
+
+# Check disk I/O
+iostat -x 1
+# High %util indicates I/O bottleneck
+
+# Test scan with time measurement
+time clamscan /path/to/large/file
+```
+
+**Solution 1: Use daemon mode for faster scanning**
+
+The daemon keeps the virus database in memory, significantly improving scan speed:
+
+```bash
+# Install and start daemon (if not already)
+sudo apt install clamav-daemon
+sudo systemctl enable --now clamav-daemon
+
+# Configure ClamUI to use daemon
+# Preferences → Scan Backend → "Daemon (clamdscan)" or "Auto"
+
+# Verify daemon is being used
+# The scan should be 3-10x faster for large files
+```
+
+**Solution 2: Increase clamd timeout limits**
+
+If using daemon mode and still timing out:
+
+```bash
+# Edit clamd configuration
+sudo nano /etc/clamav/clamd.conf
+
+# Increase timeout values (in milliseconds):
+ReadTimeout 300000        # Default: 120000 (2 minutes) → 300000 (5 minutes)
+CommandReadTimeout 30000  # Default: 30000 (30 seconds)
+SendBufTimeout 500        # Default: 200
+
+# For very large archives:
+MaxScanTime 600000        # Maximum time for scanning a file (10 minutes)
+MaxScanSize 500M          # Maximum file size to scan
+
+# Save and restart daemon
+sudo systemctl restart clamav-daemon
+
+# Verify settings took effect
+sudo systemctl status clamav-daemon
+```
+
+**Solution 3: Optimize ClamAV scan settings**
+
+```bash
+# Edit clamd configuration for better performance
+sudo nano /etc/clamav/clamd.conf
+
+# Performance optimizations:
+MaxThreads 4              # Use multiple CPU cores (adjust based on your CPU)
+MaxQueue 200              # Increase queue size
+MaxFileSize 100M          # Skip files larger than this (adjust as needed)
+MaxScanSize 500M          # Maximum data to scan per file
+StreamMaxLength 100M      # For network scanning
+
+# For archives that timeout:
+MaxRecursion 10           # Limit archive nesting depth (default: 16)
+MaxFiles 5000             # Maximum files in archive (default: 10000)
+
+# Restart daemon
+sudo systemctl restart clamav-daemon
+```
+
+**Solution 4: Exclude problematic files/directories**
+
+```bash
+# If specific large files always timeout, exclude them
+
+# In ClamUI:
+# 1. Create or edit a scan profile
+# 2. Add exclusion patterns for:
+#    - Large video files: *.mkv, *.mp4, *.avi
+#    - Large archives: *.tar.gz, *.zip > 1GB
+#    - Virtual machine images: *.vdi, *.vmdk, *.qcow2
+#    - Database files: *.db, *.sqlite
+
+# For command-line scanning:
+clamscan --exclude="*.mkv" --exclude="*.vdi" /path/to/scan
+```
+
+**Solution 5: Scan in smaller batches**
+
+```bash
+# Instead of scanning entire directory:
+clamui /home/user  # May timeout
+
+# Scan subdirectories separately:
+clamui /home/user/Documents
+clamui /home/user/Downloads
+clamui /home/user/Pictures
+
+# Or use find to scan in batches:
+find /home/user -maxdepth 1 -type d -exec clamscan {} \;
+```
+
+**Solution 6: Adjust system resource limits**
+
+```bash
+# Check current limits
+ulimit -a
+
+# Increase file descriptor limit (if scanning many files)
+ulimit -n 4096
+
+# For systemd services, edit service file
+sudo systemctl edit clamav-daemon
+
+# Add:
+[Service]
+LimitNOFILE=4096
+TimeoutStartSec=300
+
+# Reload systemd and restart
+sudo systemctl daemon-reload
+sudo systemctl restart clamav-daemon
+```
+
+**Solution 7: Check for I/O bottlenecks**
+
+```bash
+# Monitor disk I/O during scan
+sudo iotop -o
+# Look for high disk read rates
+
+# If scanning network drives or slow USB:
+# - Copy files locally first
+# - Use faster storage
+# - Enable disk caching
+
+# For network shares, mount with caching:
+sudo mount -t cifs //server/share /mnt/network \
+  -o cache=strict,username=user
+
+# For USB drives, check connection:
+lsusb -v
+# Ensure USB 3.0 devices use USB 3.0 ports
+```
+
+**Solution 8: Skip archive scanning for speed**
+
+Archives can take significantly longer to scan:
+
+```bash
+# Skip archive scanning (command-line)
+clamscan --scan-archive=no /path/to/scan
+
+# Note: This reduces security but improves speed
+# Use only if archives are from trusted sources
+```
+
+**Workaround: Use scan profiles with conservative settings**
+
+For known slow directories:
+
+```bash
+# Create a "Quick Scan" profile in ClamUI with:
+# - Excluded patterns: *.mkv, *.avi, *.mp4, *.iso
+# - Excluded paths: ~/.cache, ~/.local/share/Trash
+# - Smaller target directories
+
+# Create a separate "Deep Scan" profile for thorough scanning:
+# - Run manually when time permits
+# - Use during off-hours or scheduled overnight
+```
+
+**Verification**:
+
+```bash
+# Test that timeout limits are effective
+time clamdscan /path/to/large/file
+# Should complete within configured timeout
+
+# Monitor daemon logs for timeout messages
+sudo journalctl -u clamav-daemon -f
+# Start a scan and watch for timeout-related entries
+
+# Verify daemon settings
+sudo clamconf | grep -E "ReadTimeout|MaxScanTime"
+
+# Test scan performance improvement
+# Before (clamscan): time clamscan /path/to/scan
+# After (daemon): time clamdscan /path/to/scan
+# Daemon should be significantly faster
+```
+
+**Performance expectations**:
+
+- **Small files** (< 1MB): Instant to 1 second
+- **Medium files** (1-100MB): 1-10 seconds
+- **Large files** (100MB-1GB): 10-60 seconds
+- **Very large files** (> 1GB): 1-10 minutes
+- **Large archives**: Can take 10x longer than uncompressed
+
+**When to expect timeouts** (these are normal):
+- Files > 500MB without daemon mode
+- Highly compressed archives with many nested files
+- Encrypted or password-protected archives
+- Scanning over slow network connections
+- Virtual machine disk images (multi-GB)
 
 ---
 

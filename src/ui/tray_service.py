@@ -24,13 +24,12 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
 
 # Configure logging to stderr (stdout is used for IPC)
 logging.basicConfig(
     level=logging.DEBUG if os.environ.get("CLAMUI_DEBUG") else logging.INFO,
     format="[TrayService] %(levelname)s: %(message)s",
-    stream=sys.stderr
+    stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
 
@@ -41,20 +40,23 @@ AppIndicator = None
 
 try:
     import gi
+
     gi.require_version("Gtk", "3.0")
-    from gi.repository import Gtk as Gtk3
     from gi.repository import GLib
+    from gi.repository import Gtk as Gtk3
 
     # Try AyatanaAppIndicator3 first (newer), then AppIndicator3 (legacy)
     try:
         gi.require_version("AyatanaAppIndicator3", "0.1")
         from gi.repository import AyatanaAppIndicator3 as AppIndicator
+
         APPINDICATOR_AVAILABLE = True
         logger.info("AyatanaAppIndicator3 loaded successfully")
     except (ValueError, ImportError):
         try:
             gi.require_version("AppIndicator3", "0.1")
             from gi.repository import AppIndicator3 as AppIndicator
+
             APPINDICATOR_AVAILABLE = True
             logger.info("AppIndicator3 (legacy) loaded successfully")
         except (ValueError, ImportError) as e:
@@ -64,7 +66,9 @@ except (ValueError, ImportError) as e:
     logger.error(f"Failed to load GTK3: {e}")
 
 if not APPINDICATOR_AVAILABLE:
-    print(json.dumps({"event": "error", "message": "No AppIndicator library available"}), flush=True)
+    print(
+        json.dumps({"event": "error", "message": "No AppIndicator library available"}), flush=True
+    )
     sys.exit(1)
 
 # Import tray icon generator (after GTK3 loads successfully)
@@ -83,12 +87,15 @@ try:
             TrayIconGenerator,
             find_clamui_base_icon,
             get_tray_icon_cache_dir,
+        )
+        from .tray_icons import (
             is_available as icons_available,
         )
     except ImportError:
         # Running as standalone script - import tray_icons directly from same directory
         # to avoid triggering src/ui/__init__.py which imports GTK4 views
         import importlib.util
+
         tray_icons_path = Path(__file__).parent / "tray_icons.py"
         spec = importlib.util.spec_from_file_location("tray_icons", tray_icons_path)
         tray_icons_module = importlib.util.module_from_spec(spec)
@@ -156,23 +163,23 @@ class TrayService:
 
     def __init__(self):
         """Initialize the tray service."""
-        self._indicator: Optional[AppIndicator.Indicator] = None
-        self._menu: Optional[Gtk3.Menu] = None
+        self._indicator: AppIndicator.Indicator | None = None
+        self._menu: Gtk3.Menu | None = None
         self._current_status = "protected"
-        self._icon_theme: Optional[Gtk3.IconTheme] = None
+        self._icon_theme: Gtk3.IconTheme | None = None
         self._window_visible = True
-        self._show_window_item: Optional[Gtk3.MenuItem] = None
+        self._show_window_item: Gtk3.MenuItem | None = None
         self._running = True
 
         # Profile menu state
-        self._profiles: List[Dict] = []
-        self._profiles_menu: Optional[Gtk3.Menu] = None
-        self._profiles_menu_item: Optional[Gtk3.MenuItem] = None
-        self._current_profile_id: Optional[str] = None
+        self._profiles: list[dict] = []
+        self._profiles_menu: Gtk3.Menu | None = None
+        self._profiles_menu_item: Gtk3.MenuItem | None = None
+        self._current_profile_id: str | None = None
 
         # Custom icon generator
-        self._icon_generator: Optional[TrayIconGenerator] = None
-        self._icon_cache_dir: Optional[str] = None
+        self._icon_generator: TrayIconGenerator | None = None
+        self._icon_cache_dir: str | None = None
         self._using_custom_icons = False
 
         # Set up custom icons if available
@@ -200,7 +207,7 @@ class TrayService:
             self._icon_generator.pregenerate_all()
 
             self._using_custom_icons = True
-            logger.info(f"Custom tray icons enabled")
+            logger.info("Custom tray icons enabled")
             logger.info(f"  Icon dir: {self._icon_cache_dir}")
         except Exception as e:
             logger.warning(f"Failed to set up custom icons: {e}, using theme icons")
@@ -342,10 +349,7 @@ class TrayService:
 
                 item = Gtk3.MenuItem(label=label)
                 # Use a closure to capture profile_id properly
-                item.connect(
-                    "activate",
-                    lambda w, pid=profile_id: self._on_profile_selected(pid)
-                )
+                item.connect("activate", lambda w, pid=profile_id: self._on_profile_selected(pid))
                 menu.append(item)
 
         menu.show_all()
@@ -354,11 +358,7 @@ class TrayService:
     def _on_profile_selected(self, profile_id: str) -> None:
         """Handle profile selection from menu."""
         self._current_profile_id = profile_id
-        message = {
-            "event": "menu_action",
-            "action": "select_profile",
-            "profile_id": profile_id
-        }
+        message = {"event": "menu_action", "action": "select_profile", "profile_id": profile_id}
         self._send_message(message)
         # Rebuild menu to update checkmark
         self._rebuild_profiles_menu()
@@ -373,7 +373,7 @@ class TrayService:
         self._profiles_menu = new_menu
         self._profiles_menu_item.set_submenu(new_menu)
 
-    def update_profiles(self, profiles: List[Dict], current_profile_id: Optional[str] = None) -> None:
+    def update_profiles(self, profiles: list[dict], current_profile_id: str | None = None) -> None:
         """Update the profiles list in the tray menu."""
         self._profiles = profiles
         if current_profile_id is not None:

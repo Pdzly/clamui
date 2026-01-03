@@ -139,10 +139,8 @@ class TestNotificationManagerNotifyScanComplete:
 
     def test_notify_scan_complete_clean_returns_true(self, notification_manager):
         """Test notify_scan_complete returns True when notification sent."""
-        with mock.patch("src.core.notification_manager.Gio") as mock_gio:
-            result = notification_manager.notify_scan_complete(
-                is_clean=True, scanned_count=100
-            )
+        with mock.patch("src.core.notification_manager.Gio"):
+            result = notification_manager.notify_scan_complete(is_clean=True, scanned_count=100)
             assert result is True
 
     def test_notify_scan_complete_clean_creates_notification(self, notification_manager):
@@ -151,9 +149,7 @@ class TestNotificationManagerNotifyScanComplete:
             mock_notification = mock.Mock()
             mock_gio.Notification.new.return_value = mock_notification
 
-            notification_manager.notify_scan_complete(
-                is_clean=True, scanned_count=100
-            )
+            notification_manager.notify_scan_complete(is_clean=True, scanned_count=100)
 
             mock_gio.Notification.new.assert_called_once_with("Scan Complete")
             mock_notification.set_body.assert_called_once()
@@ -171,17 +167,13 @@ class TestNotificationManagerNotifyScanComplete:
 
             mock_notification.set_body.assert_called_once_with("No threats found")
 
-    def test_notify_scan_complete_infected_creates_urgent_notification(
-        self, notification_manager
-    ):
+    def test_notify_scan_complete_infected_creates_urgent_notification(self, notification_manager):
         """Test notify_scan_complete creates urgent notification for threats."""
         with mock.patch("src.core.notification_manager.Gio") as mock_gio:
             mock_notification = mock.Mock()
             mock_gio.Notification.new.return_value = mock_notification
 
-            notification_manager.notify_scan_complete(
-                is_clean=False, infected_count=3
-            )
+            notification_manager.notify_scan_complete(is_clean=False, infected_count=3)
 
             mock_gio.Notification.new.assert_called_once_with("Threats Detected!")
             mock_notification.set_body.assert_called_once()
@@ -270,23 +262,17 @@ class TestNotificationManagerNotifyUpdateComplete:
 
     def test_notify_update_complete_success_returns_true(self, notification_manager):
         """Test notify_update_complete returns True when notification sent."""
-        with mock.patch("src.core.notification_manager.Gio") as mock_gio:
-            result = notification_manager.notify_update_complete(
-                success=True, databases_updated=3
-            )
+        with mock.patch("src.core.notification_manager.Gio"):
+            result = notification_manager.notify_update_complete(success=True, databases_updated=3)
             assert result is True
 
-    def test_notify_update_complete_success_creates_notification(
-        self, notification_manager
-    ):
+    def test_notify_update_complete_success_creates_notification(self, notification_manager):
         """Test notify_update_complete creates notification for successful update."""
         with mock.patch("src.core.notification_manager.Gio") as mock_gio:
             mock_notification = mock.Mock()
             mock_gio.Notification.new.return_value = mock_notification
 
-            notification_manager.notify_update_complete(
-                success=True, databases_updated=3
-            )
+            notification_manager.notify_update_complete(success=True, databases_updated=3)
 
             mock_gio.Notification.new.assert_called_once_with("Database Updated")
             mock_notification.set_body.assert_called_once()
@@ -302,13 +288,9 @@ class TestNotificationManagerNotifyUpdateComplete:
 
             notification_manager.notify_update_complete(success=True)
 
-            mock_notification.set_body.assert_called_once_with(
-                "Virus definitions are up to date"
-            )
+            mock_notification.set_body.assert_called_once_with("Virus definitions are up to date")
 
-    def test_notify_update_complete_failure_creates_notification(
-        self, notification_manager
-    ):
+    def test_notify_update_complete_failure_creates_notification(self, notification_manager):
         """Test notify_update_complete creates notification for failed update."""
         with mock.patch("src.core.notification_manager.Gio") as mock_gio:
             mock_notification = mock.Mock()
@@ -341,9 +323,7 @@ class TestNotificationManagerNotifyUpdateComplete:
 
             notification_manager.notify_update_complete(success=True)
 
-            mock_notification.set_default_action.assert_called_once_with(
-                "app.show-update"
-            )
+            mock_notification.set_default_action.assert_called_once_with("app.show-update")
 
     def test_notify_update_complete_sends_via_app(self, notification_manager):
         """Test update notification is sent via the application."""
@@ -480,9 +460,7 @@ class TestNotificationManagerErrorHandling:
         with mock.patch("src.core.notification_manager.Gio") as mock_gio:
             mock_notification = mock.Mock()
             mock_gio.Notification.new.return_value = mock_notification
-            notification_manager._app.send_notification.side_effect = Exception(
-                "Send failed"
-            )
+            notification_manager._app.send_notification.side_effect = Exception("Send failed")
 
             result = notification_manager.notify_scan_complete(is_clean=True)
 

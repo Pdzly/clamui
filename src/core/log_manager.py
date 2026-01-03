@@ -4,6 +4,9 @@ Log manager module for ClamUI providing log persistence and retrieval.
 Stores scan/update operation logs and provides daemon log access.
 """
 
+import contextlib
+import csv
+import io
 import json
 import os
 import random
@@ -11,11 +14,11 @@ import subprocess
 import tempfile
 import threading
 import uuid
-from dataclasses import asdict, dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from gi.repository import GLib
 
@@ -24,12 +27,14 @@ from .utils import is_flatpak, which_host_command, wrap_host_command
 
 class LogType(Enum):
     """Type of log entry."""
+
     SCAN = "scan"
     UPDATE = "update"
 
 
 class DaemonStatus(Enum):
     """Status of the clamd daemon."""
+
     RUNNING = "running"
     STOPPED = "stopped"
     NOT_INSTALLED = "not_installed"
@@ -39,13 +44,14 @@ class DaemonStatus(Enum):
 @dataclass
 class LogEntry:
     """A single log entry for a scan or update operation."""
+
     id: str
     timestamp: str  # ISO format string for JSON serialization
     type: str  # "scan" or "update"
     status: str  # e.g., "clean", "infected", "success", "error"
     summary: str
     details: str
-    path: Optional[str] = None  # Scanned path (for scans)
+    path: str | None = None  # Scanned path (for scans)
     duration: float = 0.0  # Operation duration in seconds
     scheduled: bool = False  # Whether this was a scheduled automatic scan
 
@@ -56,9 +62,9 @@ class LogEntry:
         status: str,
         summary: str,
         details: str,
-        path: Optional[str] = None,
+        path: str | None = None,
         duration: float = 0.0,
-        scheduled: bool = False
+        scheduled: bool = False,
     ) -> "LogEntry":
         """
         Create a new LogEntry with auto-generated id and timestamp.
@@ -84,7 +90,7 @@ class LogEntry:
             details=details,
             path=path,
             duration=duration,
-            scheduled=scheduled
+            scheduled=scheduled,
         )
 
     def to_dict(self) -> dict:
@@ -103,7 +109,7 @@ class LogEntry:
             details=data.get("details", ""),
             path=data.get("path"),
             duration=data.get("duration", 0.0),
-            scheduled=data.get("scheduled", False)
+            scheduled=data.get("scheduled", False),
         )
 
     @classmethod
@@ -115,11 +121,11 @@ class LogEntry:
         scanned_files: int = 0,
         scanned_dirs: int = 0,
         infected_count: int = 0,
-        threat_details: Optional[list] = None,
-        error_message: Optional[str] = None,
+        threat_details: list | None = None,
+        error_message: str | None = None,
         stdout: str = "",
         suffix: str = "",
-        scheduled: bool = False
+        scheduled: bool = False,
     ) -> "LogEntry":
         """
         Create a LogEntry from scan result data.
@@ -181,7 +187,7 @@ class LogEntry:
             details=details,
             path=path,
             duration=duration,
-            scheduled=scheduled
+            scheduled=scheduled,
         )
 
 
@@ -213,7 +219,7 @@ class LogManager:
         }
     """
 
-    def __init__(self, log_dir: Optional[str] = None):
+    def __init__(self, log_dir: str | None = None):
         """
         Initialize the LogManager.
 
@@ -265,7 +271,7 @@ class LogManager:
         """
         try:
             if self._index_path.exists():
-                with open(self._index_path, "r", encoding="utf-8") as f:
+                with open(self._index_path, encoding="utf-8") as f:
                     data = json.load(f)
                     # Validate structure has required keys
                     if isinstance(data, dict) and "version" in data and "entries" in data:
@@ -309,10 +315,8 @@ class LogManager:
                 return True
             except Exception:
                 # Clean up temp file on failure
-                try:
+                with contextlib.suppress(OSError):
                     Path(temp_path).unlink(missing_ok=True)
-                except OSError:
-                    pass
                 raise
 
         except Exception:
@@ -339,10 +343,7 @@ class LogManager:
                 return len(index_data.get("entries", [])) == 0
 
             # Get actual log file count (excluding index file)
-            actual_log_files = [
-                f for f in self._log_dir.glob("*.json")
-                if f.name != INDEX_FILENAME
-            ]
+            actual_log_files = [f for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME]
             actual_count = len(actual_log_files)
 
             # Get index entry count
@@ -408,7 +409,7 @@ class LogManager:
                         continue
 
                     try:
-                        with open(log_file, "r", encoding="utf-8") as f:
+                        with open(log_file, encoding="utf-8") as f:
                             data = json.load(f)
 
                             # Extract only the required fields
@@ -418,20 +419,15 @@ class LogManager:
 
                             # Only add if all required fields are present
                             if log_id and timestamp and log_type:
-                                entries.append({
-                                    "id": log_id,
-                                    "timestamp": timestamp,
-                                    "type": log_type
-                                })
+                                entries.append(
+                                    {"id": log_id, "timestamp": timestamp, "type": log_type}
+                                )
                     except (OSError, json.JSONDecodeError):
                         # Skip corrupted or unreadable files
                         continue
 
                 # Build index structure and save
-                index_data = {
-                    "version": 1,
-                    "entries": entries
-                }
+                index_data = {"version": 1, "entries": entries}
 
                 return self._save_index(index_data)
 
@@ -459,11 +455,9 @@ class LogManager:
                 # Update index with new entry metadata (best-effort)
                 try:
                     index_data = self._load_index()
-                    index_data["entries"].append({
-                        "id": entry.id,
-                        "timestamp": entry.timestamp,
-                        "type": entry.type
-                    })
+                    index_data["entries"].append(
+                        {"id": entry.id, "timestamp": entry.timestamp, "type": entry.type}
+                    )
                     self._save_index(index_data)
                 except Exception:
                     # Index update failed, but log file was saved successfully
@@ -474,7 +468,7 @@ class LogManager:
             except (OSError, PermissionError, json.JSONDecodeError):
                 return False
 
-    def get_logs(self, limit: int = 100, log_type: Optional[str] = None) -> list[LogEntry]:
+    def get_logs(self, limit: int = 100, log_type: str | None = None) -> list[LogEntry]:
         """
         Retrieve stored log entries, sorted by timestamp (newest first).
 
@@ -503,8 +497,7 @@ class LogManager:
                     try:
                         if self._log_dir.exists():
                             log_files = [
-                                f for f in self._log_dir.glob("*.json")
-                                if f.name != INDEX_FILENAME
+                                f for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME
                             ]
                             # If logs exist but no index, rebuild it
                             if log_files:
@@ -512,17 +505,19 @@ class LogManager:
                                 entries_list = []
                                 for log_file in log_files:
                                     try:
-                                        with open(log_file, "r", encoding="utf-8") as f:
+                                        with open(log_file, encoding="utf-8") as f:
                                             data = json.load(f)
                                             log_id = data.get("id")
                                             timestamp = data.get("timestamp")
                                             log_type_val = data.get("type")
                                             if log_id and timestamp and log_type_val:
-                                                entries_list.append({
-                                                    "id": log_id,
-                                                    "timestamp": timestamp,
-                                                    "type": log_type_val
-                                                })
+                                                entries_list.append(
+                                                    {
+                                                        "id": log_id,
+                                                        "timestamp": timestamp,
+                                                        "type": log_type_val,
+                                                    }
+                                                )
                                     except (OSError, json.JSONDecodeError):
                                         # Skip corrupted files
                                         continue
@@ -533,22 +528,12 @@ class LogManager:
                         pass
 
             # Try optimized index-based approach first
-            try:
-                index_data = self._load_index()
-            except Exception:
-                # Index loading failed - treat as if index doesn't exist
-                index_data = {"version": 1, "entries": []}
+            index_data = self._load_index()
 
             # Check if index has entries (not empty/corrupted)
             if index_data.get("entries"):
                 # Validate index before using it
-                try:
-                    valid = self._validate_index(index_data)
-                except Exception:
-                    # Validation failed with exception - treat as invalid
-                    valid = False
-
-                if not valid:
+                if not self._validate_index(index_data):
                     # Index is stale/invalid - trigger automatic rebuild
                     # Note: rebuild_index() already holds the lock, but we're already inside _lock
                     # so we need to release and reacquire, or call the underlying logic
@@ -567,17 +552,19 @@ class LogManager:
                                 if log_file.name == INDEX_FILENAME:
                                     continue
                                 try:
-                                    with open(log_file, "r", encoding="utf-8") as f:
+                                    with open(log_file, encoding="utf-8") as f:
                                         data = json.load(f)
                                         log_id = data.get("id")
                                         timestamp = data.get("timestamp")
                                         log_type_val = data.get("type")
                                         if log_id and timestamp and log_type_val:
-                                            entries_list.append({
-                                                "id": log_id,
-                                                "timestamp": timestamp,
-                                                "type": log_type_val
-                                            })
+                                            entries_list.append(
+                                                {
+                                                    "id": log_id,
+                                                    "timestamp": timestamp,
+                                                    "type": log_type_val,
+                                                }
+                                            )
                                 except (OSError, json.JSONDecodeError):
                                     continue
                             index_data = {"version": 1, "entries": entries_list}
@@ -596,8 +583,7 @@ class LogManager:
                         # Filter by type if specified
                         if log_type is not None:
                             filtered_entries = [
-                                entry for entry in filtered_entries
-                                if entry.get("type") == log_type
+                                entry for entry in filtered_entries if entry.get("type") == log_type
                             ]
 
                         # Sort by timestamp descending (newest first)
@@ -614,7 +600,7 @@ class LogManager:
                                 try:
                                     log_file = self._log_dir / f"{log_id}.json"
                                     if log_file.exists():
-                                        with open(log_file, "r", encoding="utf-8") as f:
+                                        with open(log_file, encoding="utf-8") as f:
                                             data = json.load(f)
                                             entries.append(LogEntry.from_dict(data))
                                 except (OSError, json.JSONDecodeError):
@@ -639,7 +625,7 @@ class LogManager:
                         continue
 
                     try:
-                        with open(log_file, "r", encoding="utf-8") as f:
+                        with open(log_file, encoding="utf-8") as f:
                             data = json.load(f)
                             entry = LogEntry.from_dict(data)
 
@@ -661,7 +647,7 @@ class LogManager:
         self,
         callback: Callable[[list["LogEntry"]], None],
         limit: int = 100,
-        log_type: Optional[str] = None
+        log_type: str | None = None,
     ) -> None:
         """
         Retrieve stored log entries asynchronously.
@@ -674,6 +660,7 @@ class LogManager:
             limit: Maximum number of entries to return
             log_type: Optional filter by type ("scan" or "update")
         """
+
         def _load_logs_thread():
             try:
                 entries = self.get_logs(limit=limit, log_type=log_type)
@@ -688,7 +675,7 @@ class LogManager:
         thread.daemon = True
         thread.start()
 
-    def get_log_by_id(self, log_id: str) -> Optional[LogEntry]:
+    def get_log_by_id(self, log_id: str) -> LogEntry | None:
         """
         Retrieve a specific log entry by ID.
 
@@ -702,7 +689,7 @@ class LogManager:
             try:
                 log_file = self._log_dir / f"{log_id}.json"
                 if log_file.exists():
-                    with open(log_file, "r", encoding="utf-8") as f:
+                    with open(log_file, encoding="utf-8") as f:
                         data = json.load(f)
                         return LogEntry.from_dict(data)
             except (OSError, json.JSONDecodeError):
@@ -729,8 +716,7 @@ class LogManager:
                     try:
                         index_data = self._load_index()
                         index_data["entries"] = [
-                            entry for entry in index_data["entries"]
-                            if entry.get("id") != log_id
+                            entry for entry in index_data["entries"] if entry.get("id") != log_id
                         ]
                         self._save_index(index_data)
                     except Exception:
@@ -757,10 +743,8 @@ class LogManager:
                         # Skip the index file - we'll reset it separately
                         if log_file.name == INDEX_FILENAME:
                             continue
-                        try:
+                        with contextlib.suppress(OSError):
                             log_file.unlink()
-                        except OSError:
-                            pass
 
                 # Reset index to empty state (best-effort)
                 try:
@@ -797,15 +781,206 @@ class LogManager:
                         return len(index_data["entries"])
 
                 # Fallback: count log files directly (excluding index file)
-                log_files = [
-                    f for f in self._log_dir.glob("*.json")
-                    if f.name != INDEX_FILENAME
-                ]
+                log_files = [f for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME]
                 return len(log_files)
             except OSError:
                 return 0
 
-    def get_daemon_status(self) -> tuple[DaemonStatus, Optional[str]]:
+    def export_logs_to_csv(self, entries: list[LogEntry] | None = None) -> str:
+        """
+        Export log entries to CSV format.
+
+        Creates a CSV formatted string with the following columns:
+        - id: The unique identifier for the log entry
+        - timestamp: The ISO timestamp when the operation occurred
+        - type: The type of operation (scan or update)
+        - status: The status of the operation (clean, infected, success, error, etc.)
+        - path: The path that was scanned (empty for updates)
+        - summary: Brief description of the operation
+        - duration: Operation duration in seconds
+        - scheduled: Whether this was a scheduled automatic scan
+
+        Uses Python's csv module for proper escaping of special characters
+        (commas, quotes, newlines) in paths and summaries.
+
+        Args:
+            entries: Optional list of LogEntry objects to export.
+                    If None, exports all logs (up to 1000 entries).
+
+        Returns:
+            CSV formatted string suitable for export to .csv file
+
+        Example output:
+            id,timestamp,type,status,path,summary,duration,scheduled
+            uuid-1,2024-01-15T10:30:00,scan,clean,/home/user,Clean scan,45.5,false
+            uuid-2,2024-01-15T11:00:00,update,success,,Database updated,30.0,false
+        """
+        # If no entries provided, get all logs (up to 1000)
+        if entries is None:
+            entries = self.get_logs(limit=1000)
+
+        # Use StringIO to write CSV to a string
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+        # Write header row
+        writer.writerow(
+            ["id", "timestamp", "type", "status", "path", "summary", "duration", "scheduled"]
+        )
+
+        # Write data rows
+        for entry in entries:
+            writer.writerow(
+                [
+                    entry.id,
+                    entry.timestamp,
+                    entry.type,
+                    entry.status,
+                    entry.path or "",  # Handle None path gracefully
+                    entry.summary,
+                    f"{entry.duration:.2f}" if entry.duration > 0 else "0",
+                    "true" if entry.scheduled else "false",
+                ]
+            )
+
+        return output.getvalue()
+
+    def export_logs_to_json(self, entries: list[LogEntry] | None = None) -> str:
+        """
+        Export log entries to JSON format with metadata wrapper.
+
+        Creates a JSON formatted string with the following structure:
+        {
+            "export_timestamp": "2024-01-15T12:00:00Z",
+            "count": 2,
+            "entries": [
+                {
+                    "id": "uuid-1",
+                    "timestamp": "2024-01-15T10:30:00",
+                    "type": "scan",
+                    "status": "clean",
+                    "summary": "Clean scan",
+                    "details": "...",
+                    "path": "/home/user",
+                    "duration": 45.5,
+                    "scheduled": false
+                }
+            ]
+        }
+
+        Uses LogEntry.to_dict() for serialization, ensuring all fields
+        (including optional ones) are properly included.
+
+        Args:
+            entries: Optional list of LogEntry objects to export.
+                    If None, exports all logs (up to 1000 entries).
+
+        Returns:
+            JSON formatted string suitable for export to .json file
+
+        Example usage:
+            json_output = log_manager.export_logs_to_json()
+            with open('logs.json', 'w') as f:
+                f.write(json_output)
+        """
+        # If no entries provided, get all logs (up to 1000)
+        if entries is None:
+            entries = self.get_logs(limit=1000)
+
+        # Build the JSON structure with metadata
+        export_data = {
+            "export_timestamp": datetime.now().isoformat(),
+            "count": len(entries),
+            "entries": [entry.to_dict() for entry in entries],
+        }
+
+        # Serialize to JSON with indentation for readability
+        return json.dumps(export_data, indent=2)
+
+    def export_logs_to_file(
+        self, file_path: str, format: str, entries: list[LogEntry] | None = None
+    ) -> tuple[bool, str | None]:
+        """
+        Export log entries to a file in the specified format.
+
+        This method provides a unified interface for exporting logs to both CSV and JSON
+        formats. Uses atomic write pattern (temp file + rename) for crash safety.
+
+        Supported formats:
+        - "csv": Exports logs to CSV format with header row
+        - "json": Exports logs to JSON format with metadata wrapper
+
+        The write operation is atomic, meaning the file will either be written completely
+        or not at all - partial writes won't occur even if the process crashes.
+
+        Args:
+            file_path: The destination file path for the export
+            format: The export format ("csv" or "json")
+            entries: Optional list of LogEntry objects to export.
+                    If None, exports all logs (up to 1000 entries).
+
+        Returns:
+            Tuple of (success, error_message) where:
+            - success is True if the export succeeded, False otherwise
+            - error_message is None on success, or an error description on failure
+
+        Example usage:
+            success, error = log_manager.export_logs_to_file("/tmp/logs.csv", "csv")
+            if not success:
+                print(f"Export failed: {error}")
+
+            # Export specific entries
+            recent_logs = log_manager.get_logs(limit=10)
+            success, error = log_manager.export_logs_to_file("/tmp/recent.json", "json", recent_logs)
+        """
+        # Validate format parameter
+        if format not in ("csv", "json"):
+            return (False, f"Invalid format '{format}'. Must be 'csv' or 'json'.")
+
+        try:
+            # Generate the export content based on format
+            if format == "csv":
+                content = self.export_logs_to_csv(entries)
+            else:  # format == "json"
+                content = self.export_logs_to_json(entries)
+
+            # Ensure parent directory exists
+            file_path_obj = Path(file_path)
+            parent_dir = file_path_obj.parent
+            if parent_dir:
+                parent_dir.mkdir(parents=True, exist_ok=True)
+
+            # Atomic write using temp file + rename pattern
+            # Create temp file in same directory as target to ensure same filesystem
+            fd, temp_path = tempfile.mkstemp(
+                suffix=f".{format}",
+                prefix="clamui_export_",
+                dir=parent_dir,
+            )
+            try:
+                # Write content to temp file
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(content)
+
+                # Atomic rename (replace target file if it exists)
+                temp_path_obj = Path(temp_path)
+                temp_path_obj.replace(file_path_obj)
+                return (True, None)
+
+            except Exception as e:
+                # Clean up temp file on failure
+                with contextlib.suppress(OSError):
+                    Path(temp_path).unlink(missing_ok=True)
+                raise e
+
+        except PermissionError as e:
+            return (False, f"Permission denied: {e}")
+        except OSError as e:
+            return (False, f"File operation error: {e}")
+        except Exception as e:
+            return (False, f"Unexpected error: {e}")
+
+    def get_daemon_status(self) -> tuple[DaemonStatus, str | None]:
         """
         Check the status of the clamd daemon.
 
@@ -823,7 +998,7 @@ class LogManager:
                 wrap_host_command(["pgrep", "-x", "clamd"]),
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             if result.returncode == 0:
                 return (DaemonStatus.RUNNING, "clamd daemon is running")
@@ -845,16 +1020,14 @@ class LogManager:
         if is_flatpak():
             try:
                 result = subprocess.run(
-                    ["flatpak-spawn", "--host", "test", "-f", path],
-                    capture_output=True,
-                    timeout=5
+                    ["flatpak-spawn", "--host", "test", "-f", path], capture_output=True, timeout=5
                 )
                 return result.returncode == 0
             except Exception:
                 return False
         return Path(path).exists()
 
-    def get_daemon_log_path(self) -> Optional[str]:
+    def get_daemon_log_path(self) -> str | None:
         """
         Find the clamd log file path.
 
@@ -883,13 +1056,13 @@ class LogManager:
                             ["flatpak-spawn", "--host", "cat", conf_path],
                             capture_output=True,
                             text=True,
-                            timeout=5
+                            timeout=5,
                         )
                         if result.returncode != 0:
                             continue
                         config_content = result.stdout
                     else:
-                        with open(conf_path, "r", encoding="utf-8") as f:
+                        with open(conf_path, encoding="utf-8") as f:
                             config_content = f.read()
 
                     for line in config_content.splitlines():
@@ -929,15 +1102,8 @@ class LogManager:
         if log_path is not None:
             try:
                 # Use tail command - wrapped for Flatpak host access
-                tail_cmd = wrap_host_command(
-                    ["tail", "-n", str(num_lines), log_path]
-                )
-                result = subprocess.run(
-                    tail_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
+                tail_cmd = wrap_host_command(["tail", "-n", str(num_lines), log_path])
+                result = subprocess.run(tail_cmd, capture_output=True, text=True, timeout=10)
 
                 if result.returncode == 0:
                     content = result.stdout
@@ -968,7 +1134,7 @@ class LogManager:
                 "  • Add your user to the 'adm' or 'clamav' group:\n"
                 "    sudo usermod -aG adm $USER\n"
                 "  • Or check if clamd logs to systemd journal:\n"
-                "    journalctl -u clamav-daemon"
+                "    journalctl -u clamav-daemon",
             )
 
         return (
@@ -977,12 +1143,10 @@ class LogManager:
             "ClamAV daemon (clamd) may not be installed or configured.\n"
             "Common log locations checked:\n"
             "  • /var/log/clamav/clamd.log\n"
-            "  • /var/log/clamd.log"
+            "  • /var/log/clamd.log",
         )
 
-    def _read_daemon_logs_journalctl(
-        self, num_lines: int
-    ) -> tuple[bool, str]:
+    def _read_daemon_logs_journalctl(self, num_lines: int) -> tuple[bool, str]:
         """
         Read daemon logs from systemd journal.
 
@@ -1004,19 +1168,18 @@ class LogManager:
 
         for unit in unit_names:
             try:
-                cmd = wrap_host_command([
-                    "journalctl",
-                    "-u", unit,
-                    "-n", str(num_lines),
-                    "--no-pager",
-                    "-q"  # Quiet - suppress info messages
-                ])
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=10
+                cmd = wrap_host_command(
+                    [
+                        "journalctl",
+                        "-u",
+                        unit,
+                        "-n",
+                        str(num_lines),
+                        "--no-pager",
+                        "-q",  # Quiet - suppress info messages
+                    ]
                 )
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
                 if result.returncode == 0 and result.stdout.strip():
                     return (True, result.stdout)
@@ -1038,7 +1201,7 @@ class LogManager:
             Tuple of (success, content_or_error)
         """
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, encoding="utf-8", errors="replace") as f:
                 # For small files, read all and return last N lines
                 lines = f.readlines()
                 tail_lines = lines[-num_lines:] if len(lines) > num_lines else lines

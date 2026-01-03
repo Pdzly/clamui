@@ -4,11 +4,12 @@ Dialog components for creating and editing scan profiles.
 """
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
 
-from typing import TYPE_CHECKING, Optional
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from typing import TYPE_CHECKING
+
+from gi.repository import Adw, GLib, Gtk
 
 from .utils import add_row_icon
 
@@ -40,10 +41,7 @@ class ProfileDialog(Adw.Dialog):
     MAX_NAME_LENGTH = 50
 
     def __init__(
-        self,
-        profile_manager: "ProfileManager" = None,
-        profile: "ScanProfile" = None,
-        **kwargs
+        self, profile_manager: "ProfileManager" = None, profile: "ScanProfile" = None, **kwargs
     ):
         """
         Initialize the profile dialog.
@@ -199,7 +197,9 @@ class ProfileDialog(Adw.Dialog):
         # Placeholder for empty list
         self._targets_placeholder = Adw.ActionRow()
         self._targets_placeholder.set_title("No targets added")
-        self._targets_placeholder.set_subtitle("Click the folder or file button to add scan targets")
+        self._targets_placeholder.set_subtitle(
+            "Click the folder or file button to add scan targets"
+        )
         add_row_icon(self._targets_placeholder, "folder-symbolic")
         self._targets_placeholder.add_css_class("dim-label")
         self._targets_listbox.append(self._targets_placeholder)
@@ -344,7 +344,7 @@ class ProfileDialog(Adw.Dialog):
     def _on_target_selected(self, dialog, result):
         """Handle target selection result."""
         try:
-            if hasattr(dialog, 'select_folder_finish'):
+            if hasattr(dialog, "select_folder_finish"):
                 try:
                     folder = dialog.select_folder_finish(result)
                     if folder:
@@ -384,9 +384,7 @@ class ProfileDialog(Adw.Dialog):
 
         # Create target row
         row = self._create_path_row(
-            path=path,
-            icon_name="folder-symbolic",
-            on_remove=lambda: self._remove_target(path)
+            path=path, icon_name="folder-symbolic", on_remove=lambda: self._remove_target(path)
         )
         self._targets_listbox.append(row)
 
@@ -403,7 +401,7 @@ class ProfileDialog(Adw.Dialog):
             path=path,
             icon_name="folder-symbolic",
             on_remove=lambda: self._remove_exclusion_path(path),
-            subtitle="Path"
+            subtitle="Path",
         )
         self._exclusions_listbox.append(row)
 
@@ -420,16 +418,12 @@ class ProfileDialog(Adw.Dialog):
             path=pattern,
             icon_name="edit-symbolic",
             on_remove=lambda: self._remove_exclusion_pattern(pattern),
-            subtitle="Pattern"
+            subtitle="Pattern",
         )
         self._exclusions_listbox.append(row)
 
     def _create_path_row(
-        self,
-        path: str,
-        icon_name: str,
-        on_remove,
-        subtitle: str = None
+        self, path: str, icon_name: str, on_remove, subtitle: str = None
     ) -> Adw.ActionRow:
         """
         Create a row for displaying a path with remove button.
@@ -533,7 +527,7 @@ class ProfileDialog(Adw.Dialog):
                         name=name,
                         description=description,
                         targets=self._targets.copy(),
-                        exclusions=exclusions
+                        exclusions=exclusions,
                     )
                     saved_profile = self._profile_manager.get_profile(self._profile.id)
                 else:
@@ -542,7 +536,7 @@ class ProfileDialog(Adw.Dialog):
                         name=name,
                         targets=self._targets.copy(),
                         exclusions=exclusions,
-                        description=description
+                        description=description,
                     )
 
                 # Notify callback
@@ -720,11 +714,7 @@ class ProfileListDialog(Adw.Dialog):
         dialog.present(parent_window)
     """
 
-    def __init__(
-        self,
-        profile_manager: "ProfileManager" = None,
-        **kwargs
-    ):
+    def __init__(self, profile_manager: "ProfileManager" = None, **kwargs):
         """
         Initialize the profile list dialog.
 
@@ -996,7 +986,7 @@ class ProfileListDialog(Adw.Dialog):
         dialog.set_title("Export Profile")
 
         # Generate default filename from profile name
-        safe_name = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in profile.name)
+        safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in profile.name)
         dialog.set_initial_name(f"{safe_name}.json")
 
         # Set up file filter for JSON files
@@ -1006,6 +996,7 @@ class ProfileListDialog(Adw.Dialog):
         json_filter.add_pattern("*.json")
 
         from gi.repository import Gio
+
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(json_filter)
         dialog.set_filters(filters)
@@ -1038,15 +1029,13 @@ class ProfileListDialog(Adw.Dialog):
                 return
 
             # Ensure .json extension
-            if not file_path.endswith('.json'):
-                file_path += '.json'
+            if not file_path.endswith(".json"):
+                file_path += ".json"
 
             # Export the profile
             from pathlib import Path
-            self._profile_manager.export_profile(
-                self._exporting_profile_id,
-                Path(file_path)
-            )
+
+            self._profile_manager.export_profile(self._exporting_profile_id, Path(file_path))
 
         except GLib.Error:
             # User cancelled the dialog
@@ -1089,6 +1078,7 @@ class ProfileListDialog(Adw.Dialog):
         json_filter.add_pattern("*.json")
 
         from gi.repository import Gio
+
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(json_filter)
         dialog.set_filters(filters)
@@ -1119,6 +1109,7 @@ class ProfileListDialog(Adw.Dialog):
 
             # Import the profile
             from pathlib import Path
+
             self._profile_manager.import_profile(Path(file_path))
             self._refresh_profile_list()
 

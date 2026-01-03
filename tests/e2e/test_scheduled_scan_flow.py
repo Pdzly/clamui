@@ -8,13 +8,9 @@ notifications, and logging.
 """
 
 import json
-import os
-import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
-from typing import Optional
 from unittest import mock
 
 import pytest
@@ -31,10 +27,9 @@ from src.core.battery_manager import BatteryManager, BatteryStatus
 from src.core.log_manager import LogEntry, LogManager
 from src.core.quarantine.manager import (
     QuarantineManager,
-    QuarantineResult,
     QuarantineStatus,
 )
-from src.core.scheduler import Scheduler, SchedulerBackend, ScheduleFrequency
+from src.core.scheduler import ScheduleFrequency, Scheduler, SchedulerBackend
 from src.core.settings_manager import SettingsManager
 
 # Restore original gi modules after imports are done
@@ -77,7 +72,7 @@ class TestE2EScheduleConfiguration:
                 "log_dir": log_dir,
                 "data_dir": data_dir,
                 "scan_dir": scan_dir,
-                "quarantine_dir": quarantine_dir
+                "quarantine_dir": quarantine_dir,
             }
 
     def test_e2e_configure_weekly_schedule(self, full_test_env):
@@ -106,7 +101,7 @@ class TestE2EScheduleConfiguration:
         settings_file = config_dir / "settings.json"
         assert settings_file.exists()
 
-        with open(settings_file, "r") as f:
+        with open(settings_file) as f:
             saved = json.load(f)
 
         assert saved["scheduled_scans_enabled"] is True
@@ -134,9 +129,9 @@ class TestE2EScheduleConfiguration:
             pytest.skip("No scheduler backend available on this system")
 
         # Mock the CLI path to avoid needing the actual executable
-        with mock.patch.object(scheduler, "_get_cli_command_path",
-                               return_value="/usr/bin/clamui-scheduled-scan"):
-
+        with mock.patch.object(
+            scheduler, "_get_cli_command_path", return_value="/usr/bin/clamui-scheduled-scan"
+        ):
             if scheduler.backend == SchedulerBackend.SYSTEMD:
                 # Test systemd timer creation
                 with mock.patch("subprocess.run") as mock_run:
@@ -148,7 +143,7 @@ class TestE2EScheduleConfiguration:
                         targets=[str(scan_dir)],
                         day_of_week=0,
                         skip_on_battery=True,
-                        auto_quarantine=False
+                        auto_quarantine=False,
                     )
 
                     if success:
@@ -197,7 +192,7 @@ class TestE2EScheduledScanExecution:
                 "config_dir": config_dir,
                 "log_dir": log_dir,
                 "scan_dir": scan_dir,
-                "quarantine_dir": quarantine_dir
+                "quarantine_dir": quarantine_dir,
             }
 
     def test_e2e_cli_wrapper_dry_run(self, scan_test_env):
@@ -219,7 +214,7 @@ class TestE2EScheduledScanExecution:
             skip_on_battery=False,
             auto_quarantine=False,
             dry_run=True,
-            verbose=True
+            verbose=True,
         )
 
         # Should complete successfully
@@ -247,7 +242,7 @@ class TestE2EScheduledScanExecution:
             details="Scan Duration: 3.2 seconds\nFiles Scanned: 5\nThreats Found: 0",
             path=str(scan_dir),
             duration=3.2,
-            scheduled=True
+            scheduled=True,
         )
         log_manager.save_log(entry)
 
@@ -275,11 +270,11 @@ class TestE2EBatterySkip:
         """
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=False,
-            percent=45.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=False, percent=45.0),
+        ):
             assert manager.should_skip_scan(skip_on_battery=True) is True
 
     def test_e2e_battery_skip_when_plugged(self):
@@ -292,11 +287,11 @@ class TestE2EBatterySkip:
         """
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=100.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=100.0),
+        ):
             assert manager.should_skip_scan(skip_on_battery=True) is False
 
     def test_e2e_battery_skip_desktop(self):
@@ -309,10 +304,9 @@ class TestE2EBatterySkip:
         """
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=False,
-            is_plugged=True
-        )):
+        with mock.patch.object(
+            manager, "get_status", return_value=BatteryStatus(has_battery=False, is_plugged=True)
+        ):
             assert manager.should_skip_scan(skip_on_battery=True) is False
 
     def test_e2e_battery_skip_disabled(self):
@@ -325,11 +319,11 @@ class TestE2EBatterySkip:
         """
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=False,
-            percent=20.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=False, percent=20.0),
+        ):
             # Even on battery, should not skip if option disabled
             assert manager.should_skip_scan(skip_on_battery=False) is False
 
@@ -360,7 +354,7 @@ class TestE2EQuarantine:
                 "scan_dir": scan_dir,
                 "quarantine_dir": quarantine_dir,
                 "db_path": db_path,
-                "infected_files": infected_files
+                "infected_files": infected_files,
             }
 
     @pytest.fixture
@@ -523,7 +517,7 @@ class TestE2EFullWorkflow:
                 "log_dir": log_dir,
                 "scan_dir": scan_dir,
                 "quarantine_dir": quarantine_dir,
-                "db_path": db_path
+                "db_path": db_path,
             }
 
     def test_e2e_complete_workflow(self, complete_env):
@@ -558,11 +552,11 @@ class TestE2EFullWorkflow:
 
         # Step 3: Check battery status (simulated)
         battery = BatteryManager()
-        with mock.patch.object(battery, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=100.0
-        )):
+        with mock.patch.object(
+            battery,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=100.0),
+        ):
             should_skip = battery.should_skip_scan(
                 skip_on_battery=settings2.get("schedule_skip_on_battery")
             )
@@ -584,7 +578,7 @@ class TestE2EFullWorkflow:
             ),
             path=str(scan_dir),
             duration=5.3,
-            scheduled=True
+            scheduled=True,
         )
         log_manager.save_log(entry)
 
@@ -653,7 +647,7 @@ class TestE2EFullWorkflow:
             ),
             path=str(scan_dir),
             duration=8.1,
-            scheduled=True
+            scheduled=True,
         )
         log_manager.save_log(entry)
 

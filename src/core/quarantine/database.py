@@ -19,11 +19,11 @@ Security Considerations:
 import os
 import sqlite3
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Generator, Optional
 
 from .connection_pool import ConnectionPool
 
@@ -82,7 +82,7 @@ class QuarantineDatabase:
     # - SHA-256 hashes (could be used to identify/recover malware samples)
     DB_FILE_PERMISSIONS = 0o600
 
-    def __init__(self, db_path: Optional[str] = None, pool_size: int = 3):
+    def __init__(self, db_path: str | None = None, pool_size: int = 3):
         """
         Initialize the QuarantineDatabase.
 
@@ -102,7 +102,7 @@ class QuarantineDatabase:
 
         # Initialize connection pool if enabled
         if pool_size > 0:
-            self._pool: Optional[ConnectionPool] = ConnectionPool(
+            self._pool: ConnectionPool | None = ConnectionPool(
                 str(self._db_path), pool_size=pool_size
             )
         else:
@@ -247,7 +247,7 @@ class QuarantineDatabase:
         threat_name: str,
         file_size: int,
         file_hash: str,
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Add a new quarantine entry to the database.
 
@@ -284,7 +284,7 @@ class QuarantineDatabase:
             except sqlite3.Error:
                 return None
 
-    def get_entry(self, entry_id: int) -> Optional[QuarantineEntry]:
+    def get_entry(self, entry_id: int) -> QuarantineEntry | None:
         """
         Retrieve a specific quarantine entry by ID.
 
@@ -312,7 +312,7 @@ class QuarantineDatabase:
                 pass
         return None
 
-    def get_entry_by_original_path(self, original_path: str) -> Optional[QuarantineEntry]:
+    def get_entry_by_original_path(self, original_path: str) -> QuarantineEntry | None:
         """
         Retrieve a quarantine entry by original file path.
 
@@ -397,9 +397,7 @@ class QuarantineDatabase:
         with self._lock:
             try:
                 with self._get_connection() as conn:
-                    cursor = conn.execute(
-                        "SELECT COALESCE(SUM(file_size), 0) FROM quarantine"
-                    )
+                    cursor = conn.execute("SELECT COALESCE(SUM(file_size), 0) FROM quarantine")
                     row = cursor.fetchone()
                     if row:
                         return row[0]
@@ -509,14 +507,7 @@ class QuarantineDatabase:
         """
         Close database connections and cleanup.
 
-        When connection pooling is enabled, this closes all connections in the pool
-        and prevents new connections from being created. Safe to call multiple times.
-
-        When pooling is disabled, this is a no-op (connections are created and
-        closed per-operation).
+        When connection pooling is enabled, this closes all connections in the pool.
         """
-        with self._lock:
-            # Close connection pool if it exists
-            if self._pool is not None:
-                self._pool.close_all()
-                self._pool = None
+        if self._pool is not None:
+            self._pool.close()

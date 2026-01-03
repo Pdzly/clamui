@@ -8,64 +8,64 @@ used by both the Scanner and DaemonScanner classes.
 """
 
 from enum import Enum
-from typing import List, Tuple
 
 
 class ThreatSeverity(Enum):
     """Severity level of a detected threat."""
+
     CRITICAL = "critical"  # Ransomware, Rootkit, Bootkit
-    HIGH = "high"          # Trojan, Worm, Backdoor, Exploit
-    MEDIUM = "medium"      # Adware, PUA, Spyware, Unknown
-    LOW = "low"            # Test signatures (EICAR), Generic detections
+    HIGH = "high"  # Trojan, Worm, Backdoor, Exploit
+    MEDIUM = "medium"  # Adware, PUA, Spyware, Unknown
+    LOW = "low"  # Test signatures (EICAR), Generic detections
 
 
 # Pattern definitions for threat classification
 # Each tuple is (pattern_to_match, result_value)
 
-CRITICAL_PATTERNS: List[str] = [
-    'ransom', 'rootkit', 'bootkit', 'cryptolocker', 'wannacry'
+CRITICAL_PATTERNS: list[str] = ["ransom", "rootkit", "bootkit", "cryptolocker", "wannacry"]
+
+HIGH_PATTERNS: list[str] = [
+    "trojan",
+    "worm",
+    "backdoor",
+    "exploit",
+    "downloader",
+    "dropper",
+    "keylogger",
 ]
 
-HIGH_PATTERNS: List[str] = [
-    'trojan', 'worm', 'backdoor', 'exploit', 'downloader', 'dropper', 'keylogger'
-]
+MEDIUM_PATTERNS: list[str] = ["adware", "pua", "pup", "spyware", "miner", "coinminer"]
 
-MEDIUM_PATTERNS: List[str] = [
-    'adware', 'pua', 'pup', 'spyware', 'miner', 'coinminer'
-]
-
-LOW_PATTERNS: List[str] = [
-    'eicar', 'test-signature', 'test.file', 'heuristic', 'generic'
-]
+LOW_PATTERNS: list[str] = ["eicar", "test-signature", "test.file", "heuristic", "generic"]
 
 # High-priority category patterns (specific threat types)
 # These take precedence over low-priority patterns
-HIGH_PRIORITY_CATEGORY_PATTERNS: List[Tuple[str, str]] = [
-    ('ransomware', 'Ransomware'),
-    ('ransom', 'Ransomware'),
-    ('rootkit', 'Rootkit'),
-    ('bootkit', 'Rootkit'),
-    ('trojan', 'Trojan'),
-    ('worm', 'Worm'),
-    ('backdoor', 'Backdoor'),
-    ('exploit', 'Exploit'),
-    ('adware', 'Adware'),
-    ('spyware', 'Spyware'),
-    ('keylogger', 'Spyware'),
-    ('eicar', 'Test'),
-    ('test-signature', 'Test'),
-    ('test.file', 'Test'),
-    ('macro', 'Macro'),
-    ('phish', 'Phishing'),
-    ('heuristic', 'Heuristic'),
+HIGH_PRIORITY_CATEGORY_PATTERNS: list[tuple[str, str]] = [
+    ("ransomware", "Ransomware"),
+    ("ransom", "Ransomware"),
+    ("rootkit", "Rootkit"),
+    ("bootkit", "Rootkit"),
+    ("trojan", "Trojan"),
+    ("worm", "Worm"),
+    ("backdoor", "Backdoor"),
+    ("exploit", "Exploit"),
+    ("adware", "Adware"),
+    ("spyware", "Spyware"),
+    ("keylogger", "Spyware"),
+    ("eicar", "Test"),
+    ("test-signature", "Test"),
+    ("test.file", "Test"),
+    ("macro", "Macro"),
+    ("phish", "Phishing"),
+    ("heuristic", "Heuristic"),
 ]
 
 # Low-priority category patterns (generic categories)
 # Only used if no high-priority pattern matches
-LOW_PRIORITY_CATEGORY_PATTERNS: List[Tuple[str, str]] = [
-    ('pua', 'PUA'),
-    ('pup', 'PUA'),
-    ('virus', 'Virus'),
+LOW_PRIORITY_CATEGORY_PATTERNS: list[tuple[str, str]] = [
+    ("pua", "PUA"),
+    ("pup", "PUA"),
+    ("virus", "Virus"),
 ]
 
 

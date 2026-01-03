@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # GTK Mock Base Classes
 # =============================================================================
@@ -59,26 +58,31 @@ class MockGtkBox(MockGtkWidget):
 
 class MockAdwPreferencesWindow(MockGtkWidget):
     """Mock for Adw.PreferencesWindow."""
+
     pass
 
 
 class MockAdwDialog(MockGtkWidget):
     """Mock for Adw.Dialog."""
+
     pass
 
 
 class MockAdwApplicationWindow(MockGtkWidget):
     """Mock for Adw.ApplicationWindow."""
+
     pass
 
 
 class MockGtkListBox(MockGtkWidget):
     """Mock for Gtk.ListBox."""
+
     pass
 
 
 class MockGtkListBoxRow(MockGtkWidget):
     """Mock for Gtk.ListBoxRow."""
+
     pass
 
 
@@ -94,7 +98,7 @@ def _clear_src_modules():
     This ensures each test starts with a fresh import of source modules,
     preventing stale mock references from affecting subsequent tests.
     """
-    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.")]
     for mod in modules_to_remove:
         del sys.modules[mod]
 
@@ -160,21 +164,24 @@ def mock_gi_modules():
     mock_repository.GLib = mock_glib
 
     # Patch sys.modules
-    with patch.dict(sys.modules, {
-        'gi': mock_gi_module,
-        'gi.repository': mock_repository,
-        'gi.repository.Gtk': mock_gtk,
-        'gi.repository.Adw': mock_adw,
-        'gi.repository.Gio': mock_gio,
-        'gi.repository.GLib': mock_glib,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "gi": mock_gi_module,
+            "gi.repository": mock_repository,
+            "gi.repository.Gtk": mock_gtk,
+            "gi.repository.Adw": mock_adw,
+            "gi.repository.Gio": mock_gio,
+            "gi.repository.GLib": mock_glib,
+        },
+    ):
         yield {
-            'gtk': mock_gtk,
-            'adw': mock_adw,
-            'gio': mock_gio,
-            'glib': mock_glib,
-            'gi': mock_gi_module,
-            'repository': mock_repository,
+            "gtk": mock_gtk,
+            "adw": mock_adw,
+            "gio": mock_gio,
+            "glib": mock_glib,
+            "gi": mock_gi_module,
+            "repository": mock_repository,
         }
 
     # Cleanup after test

@@ -6,11 +6,12 @@ Logs interface component for ClamUI with historical logs list and daemon logs se
 import os
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gio, GLib
 
-from ..core.log_manager import LogManager, LogEntry, DaemonStatus
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk
+
+from ..core.log_manager import DaemonStatus, LogEntry, LogManager
 from ..core.utils import copy_to_clipboard
 from .fullscreen_dialog import FullscreenLogDialog
 from .utils import add_row_icon
@@ -118,10 +119,7 @@ class LogsView(Gtk.Box):
 
         # Add to view stack
         self._view_stack.add_titled_with_icon(
-            scrolled_container,
-            "historical",
-            "Historical Logs",
-            "document-open-recent-symbolic"
+            scrolled_container, "historical", "Historical Logs", "document-open-recent-symbolic"
         )
 
     def _create_daemon_logs_tab(self):
@@ -140,10 +138,7 @@ class LogsView(Gtk.Box):
 
         # Add to view stack
         self._view_stack.add_titled_with_icon(
-            tab_content,
-            "daemon",
-            "ClamAV Daemon",
-            "utilities-terminal-symbolic"
+            tab_content, "daemon", "ClamAV Daemon", "utilities-terminal-symbolic"
         )
 
     def _create_historical_logs_section(self, parent: Gtk.Box):
@@ -169,6 +164,24 @@ class LogsView(Gtk.Box):
         clear_button.connect("clicked", self._on_clear_logs_clicked)
         self._clear_button = clear_button
 
+        # Export to JSON button
+        export_json_button = Gtk.Button()
+        export_json_button.set_icon_name("document-save-symbolic")
+        export_json_button.set_tooltip_text("Export all logs to JSON")
+        export_json_button.add_css_class("flat")
+        export_json_button.set_sensitive(False)  # Disabled until logs are loaded
+        export_json_button.connect("clicked", self._on_export_all_json_clicked)
+        self._export_all_json_button = export_json_button
+
+        # Export to CSV button
+        export_csv_button = Gtk.Button()
+        export_csv_button.set_icon_name("x-office-spreadsheet-symbolic")
+        export_csv_button.set_tooltip_text("Export all logs to CSV")
+        export_csv_button.add_css_class("flat")
+        export_csv_button.set_sensitive(False)  # Disabled until logs are loaded
+        export_csv_button.connect("clicked", self._on_export_all_csv_clicked)
+        self._export_all_csv_button = export_csv_button
+
         # Refresh button
         refresh_button = Gtk.Button()
         refresh_button.set_icon_name("view-refresh-symbolic")
@@ -183,6 +196,8 @@ class LogsView(Gtk.Box):
 
         header_box.append(self._logs_spinner)
         header_box.append(refresh_button)
+        header_box.append(export_csv_button)
+        header_box.append(export_json_button)
         header_box.append(clear_button)
         logs_group.set_header_suffix(header_box)
 
@@ -312,6 +327,15 @@ class LogsView(Gtk.Box):
         export_csv_button.connect("clicked", self._on_export_detail_csv_clicked)
         self._export_detail_csv_button = export_csv_button
 
+        # Export to JSON button
+        export_json_button = Gtk.Button()
+        export_json_button.set_icon_name("document-save-symbolic")
+        export_json_button.set_tooltip_text("Export to JSON file")
+        export_json_button.add_css_class("flat")
+        export_json_button.set_sensitive(False)  # Disabled until log selected
+        export_json_button.connect("clicked", self._on_export_detail_json_clicked)
+        self._export_detail_json_button = export_json_button
+
         # Fullscreen button
         fullscreen_button = Gtk.Button()
         fullscreen_button.set_icon_name("view-fullscreen-symbolic")
@@ -323,6 +347,7 @@ class LogsView(Gtk.Box):
         header_box.append(copy_button)
         header_box.append(export_text_button)
         header_box.append(export_csv_button)
+        header_box.append(export_json_button)
         header_box.append(fullscreen_button)
         detail_group.set_header_suffix(header_box)
 
@@ -419,7 +444,9 @@ class LogsView(Gtk.Box):
 
         # Set placeholder text
         buffer = self._daemon_text.get_buffer()
-        buffer.set_text("Daemon logs will appear here.\n\nClick the play button to start live updates.")
+        buffer.set_text(
+            "Daemon logs will appear here.\n\nClick the play button to start live updates."
+        )
 
         scrolled.set_child(self._daemon_text)
 
@@ -449,10 +476,7 @@ class LogsView(Gtk.Box):
         # Get logs from log manager asynchronously
         # Note: Rows are cleared in the callback, not here, to avoid
         # blocking the main thread with synchronous operations
-        self._log_manager.get_logs_async(
-            callback=self._on_logs_loaded,
-            limit=100
-        )
+        self._log_manager.get_logs_async(callback=self._on_logs_loaded, limit=100)
 
     def _on_logs_loaded(self, logs: list) -> bool:
         """
@@ -485,8 +509,10 @@ class LogsView(Gtk.Box):
             # Handle empty logs - placeholder will be shown automatically
             # by GTK ListBox since we set it with set_placeholder()
             if not logs:
-                # Ensure clear button is disabled for empty state
+                # Ensure clear and export buttons are disabled for empty state
                 self._clear_button.set_sensitive(False)
+                self._export_all_csv_button.set_sensitive(False)
+                self._export_all_json_button.set_sensitive(False)
                 return False
 
             # Display initial batch with pagination
@@ -497,9 +523,11 @@ class LogsView(Gtk.Box):
             if len(logs) > INITIAL_LOG_DISPLAY_LIMIT:
                 self._add_load_more_button()
 
-            # Update clear button sensitivity based on actual rendered rows
+            # Update clear and export button sensitivity based on actual rendered rows
             has_logs = self._logs_listbox.get_row_at_index(0) is not None
             self._clear_button.set_sensitive(has_logs)
+            self._export_all_csv_button.set_sensitive(has_logs)
+            self._export_all_json_button.set_sensitive(has_logs)
         finally:
             # ALWAYS reset loading state to prevent stuck "Loading logs" forever
             self._set_loading_state(False)
@@ -642,6 +670,7 @@ class LogsView(Gtk.Box):
         # Set subtitle with timestamp and status
         try:
             from datetime import datetime
+
             timestamp = datetime.fromisoformat(entry.timestamp)
             time_str = timestamp.strftime("%Y-%m-%d %H:%M")
         except (ValueError, TypeError):
@@ -684,6 +713,7 @@ class LogsView(Gtk.Box):
             self._copy_detail_button.set_sensitive(False)
             self._export_detail_text_button.set_sensitive(False)
             self._export_detail_csv_button.set_sensitive(False)
+            self._export_detail_json_button.set_sensitive(False)
             return
 
         log_id = row.get_name()
@@ -698,6 +728,7 @@ class LogsView(Gtk.Box):
         self._copy_detail_button.set_sensitive(True)
         self._export_detail_text_button.set_sensitive(True)
         self._export_detail_csv_button.set_sensitive(True)
+        self._export_detail_json_button.set_sensitive(True)
 
     def _display_log_details(self, entry: LogEntry):
         """
@@ -756,10 +787,7 @@ class LogsView(Gtk.Box):
         content = buffer.get_text(start, end, False)
 
         # Create and present the fullscreen dialog
-        dialog = FullscreenLogDialog(
-            title="Log Details",
-            content=content
-        )
+        dialog = FullscreenLogDialog(title="Log Details", content=content)
         dialog.present(self.get_root())
 
     def _on_copy_detail_clicked(self, button: Gtk.Button):
@@ -782,7 +810,7 @@ class LogsView(Gtk.Box):
 
         # Show feedback via toast (find the parent window to show toast)
         window = self.get_root()
-        if hasattr(window, 'add_toast'):
+        if hasattr(window, "add_toast"):
             if success:
                 toast = Adw.Toast.new("Log details copied to clipboard")
             else:
@@ -805,6 +833,7 @@ class LogsView(Gtk.Box):
 
         # Generate default filename with timestamp
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dialog.set_initial_name(f"clamui_log_{timestamp}.txt")
 
@@ -846,8 +875,8 @@ class LogsView(Gtk.Box):
                 return
 
             # Ensure .txt extension
-            if not file_path.endswith('.txt'):
-                file_path += '.txt'
+            if not file_path.endswith(".txt"):
+                file_path += ".txt"
 
             # Get current content from detail text view
             buffer = self._detail_text.get_buffer()
@@ -856,7 +885,7 @@ class LogsView(Gtk.Box):
             content = buffer.get_text(start, end, False)
 
             # Write to file
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
             # Show success feedback
@@ -866,7 +895,9 @@ class LogsView(Gtk.Box):
             # User cancelled the dialog
             pass
         except PermissionError:
-            self._show_export_toast("Permission denied - cannot write to selected location", is_error=True)
+            self._show_export_toast(
+                "Permission denied - cannot write to selected location", is_error=True
+            )
         except OSError as e:
             self._show_export_toast(f"Error writing file: {str(e)}", is_error=True)
 
@@ -886,6 +917,7 @@ class LogsView(Gtk.Box):
 
         # Generate default filename with timestamp
         from datetime import datetime
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dialog.set_initial_name(f"clamui_log_{timestamp}.csv")
 
@@ -927,14 +959,14 @@ class LogsView(Gtk.Box):
                 return
 
             # Ensure .csv extension
-            if not file_path.endswith('.csv'):
-                file_path += '.csv'
+            if not file_path.endswith(".csv"):
+                file_path += ".csv"
 
             # Format the log entry as CSV
             csv_content = self._format_log_entry_as_csv(self._selected_log)
 
             # Write to file
-            with open(file_path, 'w', encoding='utf-8', newline='') as f:
+            with open(file_path, "w", encoding="utf-8", newline="") as f:
                 f.write(csv_content)
 
             # Show success feedback
@@ -944,9 +976,90 @@ class LogsView(Gtk.Box):
             # User cancelled the dialog
             pass
         except PermissionError:
-            self._show_export_toast("Permission denied - cannot write to selected location", is_error=True)
+            self._show_export_toast(
+                "Permission denied - cannot write to selected location", is_error=True
+            )
         except OSError as e:
             self._show_export_toast(f"Error writing file: {str(e)}", is_error=True)
+
+    def _on_export_detail_json_clicked(self, button: Gtk.Button):
+        """
+        Handle export to JSON file button click for log details.
+
+        Opens a file save dialog to let the user choose a location,
+        then writes the log entry in JSON format.
+        """
+        if self._selected_log is None:
+            return
+
+        # Create save dialog
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Export Log Details as JSON")
+
+        # Generate default filename with timestamp
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dialog.set_initial_name(f"clamui_log_{timestamp}.json")
+
+        # Set up file filter for JSON files
+        json_filter = Gtk.FileFilter()
+        json_filter.set_name("JSON Files")
+        json_filter.add_mime_type("application/json")
+        json_filter.add_pattern("*.json")
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(json_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(json_filter)
+
+        # Get the parent window
+        window = self.get_root()
+
+        # Open save dialog
+        dialog.save(window, None, self._on_json_export_file_selected)
+
+    def _on_json_export_file_selected(self, dialog, result):
+        """
+        Handle JSON export file selection result.
+
+        Writes the log entry in JSON format to the selected file.
+
+        Args:
+            dialog: The FileDialog that was used
+            result: The async result from the save dialog
+        """
+        try:
+            file = dialog.save_finish(result)
+            if file is None:
+                return  # User cancelled
+
+            file_path = file.get_path()
+            if file_path is None:
+                self._show_export_toast("Invalid file path selected", is_error=True)
+                return
+
+            # Ensure .json extension
+            if not file_path.endswith(".json"):
+                file_path += ".json"
+
+            # Export single log entry using LogManager
+            success, error = self._log_manager.export_logs_to_file(
+                file_path, format="json", entries=[self._selected_log]
+            )
+
+            if success:
+                # Show success feedback
+                self._show_export_toast(f"Log exported to {os.path.basename(file_path)}")
+            else:
+                # Show error feedback
+                self._show_export_toast(f"Export failed: {error}", is_error=True)
+
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
+        except Exception as e:
+            self._show_export_toast(f"Unexpected error: {str(e)}", is_error=True)
 
     def _format_log_entry_as_csv(self, entry: LogEntry) -> str:
         """
@@ -970,14 +1083,16 @@ class LogsView(Gtk.Box):
         writer.writerow(["timestamp", "type", "status", "path", "summary", "duration"])
 
         # Write data row
-        writer.writerow([
-            entry.timestamp,
-            entry.type,
-            entry.status,
-            entry.path or "",
-            entry.summary,
-            f"{entry.duration:.2f}" if entry.duration > 0 else "0"
-        ])
+        writer.writerow(
+            [
+                entry.timestamp,
+                entry.type,
+                entry.status,
+                entry.path or "",
+                entry.summary,
+                f"{entry.duration:.2f}" if entry.duration > 0 else "0",
+            ]
+        )
 
         return output.getvalue()
 
@@ -990,7 +1105,7 @@ class LogsView(Gtk.Box):
             is_error: Whether this is an error message
         """
         window = self.get_root()
-        if hasattr(window, 'add_toast'):
+        if hasattr(window, "add_toast"):
             toast = Adw.Toast.new(message)
             window.add_toast(toast)
 
@@ -1003,18 +1118,179 @@ class LogsView(Gtk.Box):
         content = buffer.get_text(start, end, False)
 
         # Create and present the fullscreen dialog
-        dialog = FullscreenLogDialog(
-            title="Daemon Logs",
-            content=content
-        )
+        dialog = FullscreenLogDialog(title="Daemon Logs", content=content)
         dialog.present(self.get_root())
+
+    def _on_export_all_csv_clicked(self, button: Gtk.Button):
+        """
+        Handle export all logs to CSV button click.
+
+        Opens a file save dialog and exports all loaded logs to CSV format
+        using LogManager.export_logs_to_file().
+        """
+        if not self._all_log_entries:
+            return
+
+        # Create save dialog
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Export All Logs to CSV")
+
+        # Generate default filename with timestamp
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dialog.set_initial_name(f"clamui_logs_{timestamp}.csv")
+
+        # Set up file filter for CSV files
+        csv_filter = Gtk.FileFilter()
+        csv_filter.set_name("CSV Files")
+        csv_filter.add_mime_type("text/csv")
+        csv_filter.add_pattern("*.csv")
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(csv_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(csv_filter)
+
+        # Get the parent window
+        window = self.get_root()
+
+        # Open save dialog
+        dialog.save(window, None, self._on_export_all_csv_file_selected)
+
+    def _on_export_all_csv_file_selected(self, dialog, result):
+        """
+        Handle export all logs to CSV file selection result.
+
+        Writes all loaded logs in CSV format to the selected file.
+
+        Args:
+            dialog: The FileDialog that was used
+            result: The async result from the save dialog
+        """
+        try:
+            file = dialog.save_finish(result)
+            if file is None:
+                return  # User cancelled
+
+            file_path = file.get_path()
+            if file_path is None:
+                self._show_export_toast("Invalid file path selected", is_error=True)
+                return
+
+            # Ensure .csv extension
+            if not file_path.endswith(".csv"):
+                file_path += ".csv"
+
+            # Export all logs using LogManager
+            success, error = self._log_manager.export_logs_to_file(
+                file_path, format="csv", entries=self._all_log_entries
+            )
+
+            if success:
+                # Show success feedback
+                self._show_export_toast(
+                    f"Exported {len(self._all_log_entries)} logs to {os.path.basename(file_path)}"
+                )
+            else:
+                # Show error feedback
+                self._show_export_toast(f"Export failed: {error}", is_error=True)
+
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
+        except Exception as e:
+            self._show_export_toast(f"Unexpected error: {str(e)}", is_error=True)
+
+    def _on_export_all_json_clicked(self, button: Gtk.Button):
+        """
+        Handle export all logs to JSON button click.
+
+        Opens a file save dialog and exports all loaded logs to JSON format
+        using LogManager.export_logs_to_file().
+        """
+        if not self._all_log_entries:
+            return
+
+        # Create save dialog
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Export All Logs to JSON")
+
+        # Generate default filename with timestamp
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dialog.set_initial_name(f"clamui_logs_{timestamp}.json")
+
+        # Set up file filter for JSON files
+        json_filter = Gtk.FileFilter()
+        json_filter.set_name("JSON Files")
+        json_filter.add_mime_type("application/json")
+        json_filter.add_pattern("*.json")
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(json_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(json_filter)
+
+        # Get the parent window
+        window = self.get_root()
+
+        # Open save dialog
+        dialog.save(window, None, self._on_export_all_json_file_selected)
+
+    def _on_export_all_json_file_selected(self, dialog, result):
+        """
+        Handle export all logs to JSON file selection result.
+
+        Writes all loaded logs in JSON format to the selected file.
+
+        Args:
+            dialog: The FileDialog that was used
+            result: The async result from the save dialog
+        """
+        try:
+            file = dialog.save_finish(result)
+            if file is None:
+                return  # User cancelled
+
+            file_path = file.get_path()
+            if file_path is None:
+                self._show_export_toast("Invalid file path selected", is_error=True)
+                return
+
+            # Ensure .json extension
+            if not file_path.endswith(".json"):
+                file_path += ".json"
+
+            # Export all logs using LogManager
+            success, error = self._log_manager.export_logs_to_file(
+                file_path, format="json", entries=self._all_log_entries
+            )
+
+            if success:
+                # Show success feedback
+                self._show_export_toast(
+                    f"Exported {len(self._all_log_entries)} logs to {os.path.basename(file_path)}"
+                )
+            else:
+                # Show error feedback
+                self._show_export_toast(f"Export failed: {error}", is_error=True)
+
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
+        except Exception as e:
+            self._show_export_toast(f"Unexpected error: {str(e)}", is_error=True)
 
     def _on_clear_logs_clicked(self, button: Gtk.Button):
         """Handle clear logs button click."""
         # Show confirmation dialog
         dialog = Adw.MessageDialog()
         dialog.set_heading("Clear All Logs?")
-        dialog.set_body("This will permanently delete all historical logs. This action cannot be undone.")
+        dialog.set_body(
+            "This will permanently delete all historical logs. This action cannot be undone."
+        )
         dialog.set_transient_for(self.get_root())
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("clear", "Clear All")
@@ -1045,6 +1321,7 @@ class LogsView(Gtk.Box):
             self._copy_detail_button.set_sensitive(False)
             self._export_detail_text_button.set_sensitive(False)
             self._export_detail_csv_button.set_sensitive(False)
+            self._export_detail_json_button.set_sensitive(False)
 
     def _on_refresh_clicked(self, button: Gtk.Button):
         """Handle refresh button click."""
@@ -1069,6 +1346,8 @@ class LogsView(Gtk.Box):
                 self._logs_spinner.start()
                 self._refresh_button.set_sensitive(False)
                 self._clear_button.set_sensitive(False)
+                self._export_all_csv_button.set_sensitive(False)
+                self._export_all_json_button.set_sensitive(False)
 
                 # Clear existing rows and show loading placeholder in listbox
                 # This is done synchronously but is fast enough for typical row counts
@@ -1108,9 +1387,11 @@ class LogsView(Gtk.Box):
             self._live_toggle.set_sensitive(False)
             # Update daemon text with helpful message
             buffer = self._daemon_text.get_buffer()
-            buffer.set_text("ClamAV daemon (clamd) is not installed.\n\n"
-                          "The daemon is optional and provides faster scanning.\n"
-                          "You can still use ClamUI for on-demand scanning without it.")
+            buffer.set_text(
+                "ClamAV daemon (clamd) is not installed.\n\n"
+                "The daemon is optional and provides faster scanning.\n"
+                "You can still use ClamUI for on-demand scanning without it."
+            )
         else:  # UNKNOWN
             self._daemon_status_row.set_subtitle(message or "Unknown")
             self._daemon_status_icon.set_from_icon_name("dialog-question-symbolic")

@@ -10,11 +10,11 @@ import pytest
 from src.core.log_manager import LogEntry, LogManager
 from src.core.statistics_calculator import (
     FILES_SCANNED_PATTERNS,
+    THREATS_FOUND_PATTERNS,
     ProtectionLevel,
     ProtectionStatus,
     ScanStatistics,
     StatisticsCalculator,
-    THREATS_FOUND_PATTERNS,
     Timeframe,
 )
 
@@ -207,6 +207,7 @@ class TestPrecompiledPatterns:
     def test_files_scanned_patterns_are_compiled_regex(self):
         """Test FILES_SCANNED_PATTERNS contains compiled regex objects."""
         import re
+
         for pattern in FILES_SCANNED_PATTERNS:
             assert isinstance(pattern, type(re.compile("")))
 
@@ -225,6 +226,7 @@ class TestPrecompiledPatterns:
     def test_threats_found_patterns_are_compiled_regex(self):
         """Test THREATS_FOUND_PATTERNS contains compiled regex objects."""
         import re
+
         for pattern in THREATS_FOUND_PATTERNS:
             assert isinstance(pattern, type(re.compile("")))
 

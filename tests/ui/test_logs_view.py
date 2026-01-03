@@ -11,6 +11,10 @@ Tests cover:
 - Clear logs functionality
 - Copy/export functionality
 - CSV formatting
+- Export button state management
+- Export all to CSV handler
+- Export all to JSON handler
+- Export single log to JSON handler
 """
 
 import sys
@@ -48,7 +52,7 @@ def mock_log_entry():
 
 def _clear_src_modules():
     """Clear all cached src.* modules to prevent test pollution."""
-    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.")]
     for mod in modules_to_remove:
         del sys.modules[mod]
 
@@ -58,15 +62,19 @@ def logs_view_class(mock_gi_modules):
     """Get LogsView class with mocked dependencies."""
     # Add additional mock modules that logs_view.py imports
     # Note: src.core.log_manager is NOT mocked - we need the real DaemonStatus enum
-    with mock.patch.dict(sys.modules, {
-        'src.core.utils': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "src.core.utils": mock.MagicMock(),
+            "src.ui.fullscreen_dialog": mock.MagicMock(),
+        },
+    ):
         # Clear any cached import of logs_view
         if "src.ui.logs_view" in sys.modules:
             del sys.modules["src.ui.logs_view"]
 
         from src.ui.logs_view import LogsView
+
         yield LogsView
 
     # Critical: Clear all src.* modules after test to prevent pollution
@@ -99,6 +107,9 @@ def mock_logs_view(logs_view_class, mock_log_manager):
     view._copy_detail_button = mock.MagicMock()
     view._export_detail_text_button = mock.MagicMock()
     view._export_detail_csv_button = mock.MagicMock()
+    view._export_detail_json_button = mock.MagicMock()
+    view._export_all_csv_button = mock.MagicMock()
+    view._export_all_json_button = mock.MagicMock()
     view._fullscreen_detail_button = mock.MagicMock()
     view._daemon_text = mock.MagicMock()
     view._daemon_group = mock.MagicMock()
@@ -123,36 +134,48 @@ class TestLogsViewImport:
 
     def test_import_logs_view(self, mock_gi_modules):
         """Test that LogsView can be imported."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.log_manager': mock.MagicMock(),
-            'src.core.utils': mock.MagicMock(),
-            'src.ui.fullscreen_dialog': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.log_manager": mock.MagicMock(),
+                "src.core.utils": mock.MagicMock(),
+                "src.ui.fullscreen_dialog": mock.MagicMock(),
+            },
+        ):
             from src.ui.logs_view import LogsView
+
             assert LogsView is not None
 
     def test_import_from_ui_package(self, mock_gi_modules):
         """Test that LogsView is exported from src.ui package."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.log_manager': mock.MagicMock(),
-            'src.core.utils': mock.MagicMock(),
-            'src.ui.fullscreen_dialog': mock.MagicMock(),
-            'src.ui.update_view': mock.MagicMock(),
-            'src.ui.components_view': mock.MagicMock(),
-            'src.ui.preferences_dialog': mock.MagicMock(),
-            'src.ui.quarantine_view': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.log_manager": mock.MagicMock(),
+                "src.core.utils": mock.MagicMock(),
+                "src.ui.fullscreen_dialog": mock.MagicMock(),
+                "src.ui.update_view": mock.MagicMock(),
+                "src.ui.components_view": mock.MagicMock(),
+                "src.ui.preferences_dialog": mock.MagicMock(),
+                "src.ui.quarantine_view": mock.MagicMock(),
+            },
+        ):
             from src.ui import LogsView
+
             assert LogsView is not None
 
     def test_pagination_constants_defined(self, mock_gi_modules):
         """Test that pagination constants are defined."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.log_manager': mock.MagicMock(),
-            'src.core.utils': mock.MagicMock(),
-            'src.ui.fullscreen_dialog': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.log_manager": mock.MagicMock(),
+                "src.core.utils": mock.MagicMock(),
+                "src.ui.fullscreen_dialog": mock.MagicMock(),
+            },
+        ):
             from src.ui.logs_view import INITIAL_LOG_DISPLAY_LIMIT, LOAD_MORE_LOG_BATCH_SIZE
+
             assert INITIAL_LOG_DISPLAY_LIMIT == 25
             assert LOAD_MORE_LOG_BATCH_SIZE == 25
 
@@ -247,6 +270,7 @@ class TestLogsViewLogSelection:
         view._copy_detail_button = mock.MagicMock()
         view._export_detail_text_button = mock.MagicMock()
         view._export_detail_csv_button = mock.MagicMock()
+        view._export_detail_json_button = mock.MagicMock()
 
         view._on_log_selected(mock.MagicMock(), None)
 
@@ -255,8 +279,11 @@ class TestLogsViewLogSelection:
         view._copy_detail_button.set_sensitive.assert_called_with(False)
         view._export_detail_text_button.set_sensitive.assert_called_with(False)
         view._export_detail_csv_button.set_sensitive.assert_called_with(False)
+        view._export_detail_json_button.set_sensitive.assert_called_with(False)
 
-    def test_on_log_selected_enables_buttons(self, logs_view_class, mock_log_entry, mock_log_manager):
+    def test_on_log_selected_enables_buttons(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
         """Test that selecting a log enables copy/export buttons."""
         view = object.__new__(logs_view_class)
         view._selected_log = None
@@ -266,6 +293,7 @@ class TestLogsViewLogSelection:
         view._copy_detail_button = mock.MagicMock()
         view._export_detail_text_button = mock.MagicMock()
         view._export_detail_csv_button = mock.MagicMock()
+        view._export_detail_json_button = mock.MagicMock()
 
         mock_row = mock.MagicMock()
         mock_row.get_name.return_value = "test-log-id-123"
@@ -276,6 +304,7 @@ class TestLogsViewLogSelection:
         view._copy_detail_button.set_sensitive.assert_called_with(True)
         view._export_detail_text_button.set_sensitive.assert_called_with(True)
         view._export_detail_csv_button.set_sensitive.assert_called_with(True)
+        view._export_detail_json_button.set_sensitive.assert_called_with(True)
         view._display_log_details.assert_called_once_with(mock_log_entry)
 
     def test_on_log_selected_returns_when_entry_not_found(self, logs_view_class, mock_log_manager):
@@ -387,22 +416,24 @@ class TestLogsViewLogRowCreation:
 
         # Configure Adw.ActionRow to return our mock_row
         mock_row = mock.MagicMock()
-        mock_gi_modules['adw'].ActionRow.return_value = mock_row
+        mock_gi_modules["adw"].ActionRow.return_value = mock_row
 
-        row = view._create_log_row(mock_log_entry)
+        view._create_log_row(mock_log_entry)
 
         # Icon is added via add_prefix with a Gtk.Image (modern pattern)
         mock_row.add_prefix.assert_called()
 
-    def test_create_log_row_sets_update_icon(self, logs_view_class, mock_log_entry, mock_gi_modules):
+    def test_create_log_row_sets_update_icon(
+        self, logs_view_class, mock_log_entry, mock_gi_modules
+    ):
         """Test that update logs get update icon via add_prefix."""
         view = object.__new__(logs_view_class)
         mock_log_entry.type = "update"
 
         mock_row = mock.MagicMock()
-        mock_gi_modules['adw'].ActionRow.return_value = mock_row
+        mock_gi_modules["adw"].ActionRow.return_value = mock_row
 
-        row = view._create_log_row(mock_log_entry)
+        view._create_log_row(mock_log_entry)
 
         # Icon is added via add_prefix with a Gtk.Image (modern pattern)
         mock_row.add_prefix.assert_called()
@@ -412,9 +443,9 @@ class TestLogsViewLogRowCreation:
         view = object.__new__(logs_view_class)
 
         mock_row = mock.MagicMock()
-        mock_gi_modules['adw'].ActionRow.return_value = mock_row
+        mock_gi_modules["adw"].ActionRow.return_value = mock_row
 
-        row = view._create_log_row(mock_log_entry)
+        view._create_log_row(mock_log_entry)
 
         mock_row.set_name.assert_called_with("test-log-id-123")
 
@@ -455,7 +486,9 @@ class TestLogsViewDaemonStatus:
         view._check_daemon_status()
 
         view._daemon_status_row.set_subtitle.assert_called_with("Stopped")
-        view._daemon_status_icon.set_from_icon_name.assert_called_with("media-playback-stop-symbolic")
+        view._daemon_status_icon.set_from_icon_name.assert_called_with(
+            "media-playback-stop-symbolic"
+        )
         view._live_toggle.set_sensitive.assert_called_with(True)
 
     def test_check_daemon_status_not_installed(self, logs_view_class, mock_log_manager):
@@ -512,7 +545,7 @@ class TestLogsViewLiveToggle:
 
     def test_stop_daemon_log_refresh_removes_timeout(self, logs_view_class):
         """Test that stopping refresh removes the timeout."""
-        with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock.MagicMock()}):
             from gi.repository import GLib
 
             view = object.__new__(logs_view_class)
@@ -525,7 +558,7 @@ class TestLogsViewLiveToggle:
 
     def test_stop_daemon_log_refresh_with_no_id(self, logs_view_class):
         """Test that stopping refresh with no ID does nothing."""
-        with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock.MagicMock()}):
             from gi.repository import GLib
 
             view = object.__new__(logs_view_class)
@@ -589,6 +622,7 @@ class TestLogsViewClearLogs:
         view._copy_detail_button = mock.MagicMock()
         view._export_detail_text_button = mock.MagicMock()
         view._export_detail_csv_button = mock.MagicMock()
+        view._export_detail_json_button = mock.MagicMock()
 
         view._on_clear_dialog_response(mock.MagicMock(), "clear")
 
@@ -627,8 +661,9 @@ class TestLogsViewRefresh:
 
     def test_refresh_logs_public_method(self, logs_view_class):
         """Test that public refresh_logs method works."""
-        with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock.MagicMock()}):
             from gi.repository import GLib
+
             GLib.idle_add = lambda f: f()
 
             view = object.__new__(logs_view_class)
@@ -674,9 +709,12 @@ class TestLogsViewCopyExport:
 
     def test_on_copy_detail_clicked_with_no_selection(self, logs_view_class):
         """Test that copy does nothing when no log selected."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.utils': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.utils": mock.MagicMock(),
+            },
+        ):
             from src.core.utils import copy_to_clipboard
 
             view = object.__new__(logs_view_class)
@@ -699,7 +737,7 @@ class TestLogsViewCopyExport:
         view.get_root = mock.MagicMock(return_value=None)
 
         # Patch copy_to_clipboard on the logs_view module's reference
-        with mock.patch('src.ui.logs_view.copy_to_clipboard') as mock_copy:
+        with mock.patch("src.ui.logs_view.copy_to_clipboard") as mock_copy:
             mock_copy.return_value = True
             view._on_copy_detail_clicked(mock.MagicMock())
             mock_copy.assert_called_once_with("log content")
@@ -783,7 +821,7 @@ class TestLogsViewShowExportToast:
 
     def test_show_export_toast_success(self, logs_view_class):
         """Test showing success toast."""
-        with mock.patch.dict(sys.modules, {'gi.repository.Adw': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.Adw": mock.MagicMock()}):
             from gi.repository import Adw
 
             view = object.__new__(logs_view_class)
@@ -798,12 +836,366 @@ class TestLogsViewShowExportToast:
 
     def test_show_export_toast_no_window(self, logs_view_class):
         """Test showing toast when no window available."""
-        with mock.patch.dict(sys.modules, {'gi.repository.Adw': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.Adw": mock.MagicMock()}):
             view = object.__new__(logs_view_class)
             view.get_root = mock.MagicMock(return_value=None)
 
             # Should not raise an error
             view._show_export_toast("Export successful")
+
+
+class TestLogsViewExportButtonState:
+    """Tests for export button state management."""
+
+    def test_export_buttons_disabled_when_no_logs(self, logs_view_class):
+        """Test that export all buttons are disabled when no logs exist."""
+        view = object.__new__(logs_view_class)
+        view._is_loading = True
+        view._logs_listbox = mock.MagicMock()
+        view._clear_button = mock.MagicMock()
+        view._export_all_csv_button = mock.MagicMock()
+        view._export_all_json_button = mock.MagicMock()
+        view._all_log_entries = []
+        view._displayed_log_count = 0
+        view._load_more_row = None
+        view._set_loading_state = mock.MagicMock()
+
+        view._on_logs_loaded([])
+
+        view._export_all_csv_button.set_sensitive.assert_called_with(False)
+        view._export_all_json_button.set_sensitive.assert_called_with(False)
+
+    def test_export_buttons_enabled_when_logs_loaded(self, logs_view_class, mock_log_entry):
+        """Test that export all buttons are enabled when logs are loaded."""
+        view = object.__new__(logs_view_class)
+        view._is_loading = True
+        view._logs_listbox = mock.MagicMock()
+        view._logs_listbox.get_row_at_index.return_value = mock.MagicMock()
+        view._clear_button = mock.MagicMock()
+        view._export_all_csv_button = mock.MagicMock()
+        view._export_all_json_button = mock.MagicMock()
+        view._all_log_entries = []
+        view._displayed_log_count = 0
+        view._load_more_row = None
+        view._set_loading_state = mock.MagicMock()
+        view._display_log_batch = mock.MagicMock()
+        view._add_load_more_button = mock.MagicMock()
+
+        logs = [mock_log_entry]
+        view._on_logs_loaded(logs)
+
+        view._export_all_csv_button.set_sensitive.assert_called_with(True)
+        view._export_all_json_button.set_sensitive.assert_called_with(True)
+
+    def test_export_buttons_disabled_during_loading(self, logs_view_class):
+        """Test that export all buttons are disabled during loading."""
+        view = object.__new__(logs_view_class)
+        view._is_loading = False
+        view._logs_spinner = mock.MagicMock()
+        view._refresh_button = mock.MagicMock()
+        view._clear_button = mock.MagicMock()
+        view._export_all_csv_button = mock.MagicMock()
+        view._export_all_json_button = mock.MagicMock()
+        view._logs_listbox = mock.MagicMock()
+        view._create_loading_state = mock.MagicMock()
+
+        view._set_loading_state(True)
+
+        view._export_all_csv_button.set_sensitive.assert_called_with(False)
+        view._export_all_json_button.set_sensitive.assert_called_with(False)
+
+
+class TestLogsViewExportAllCSVHandler:
+    """Tests for export all to CSV handler."""
+
+    def test_on_export_all_csv_clicked_returns_when_no_logs(self, logs_view_class, mock_gi_modules):
+        """Test that export all CSV returns early when no logs."""
+        view = object.__new__(logs_view_class)
+        view._all_log_entries = []
+
+        # Should return early without creating dialog
+        view._on_export_all_csv_clicked(mock.MagicMock())
+
+        # Dialog should not be created
+        mock_gi_modules["gtk"].FileDialog.assert_not_called()
+
+    def test_on_export_all_csv_clicked_creates_dialog(
+        self, logs_view_class, mock_log_entry, mock_gi_modules
+    ):
+        """Test that export all CSV creates dialog with correct settings."""
+        view = object.__new__(logs_view_class)
+        view._all_log_entries = [mock_log_entry]
+        view.get_root = mock.MagicMock(return_value=mock.MagicMock())
+
+        mock_dialog = mock.MagicMock()
+        mock_gi_modules["gtk"].FileDialog.return_value = mock_dialog
+
+        view._on_export_all_csv_clicked(mock.MagicMock())
+
+        # Dialog should be created with correct title
+        mock_gi_modules["gtk"].FileDialog.assert_called_once()
+        mock_dialog.set_title.assert_called_with("Export All Logs to CSV")
+        # Initial filename should contain timestamp
+        assert mock_dialog.set_initial_name.called
+        initial_name = mock_dialog.set_initial_name.call_args[0][0]
+        assert initial_name.startswith("clamui_logs_")
+        assert initial_name.endswith(".csv")
+        # Dialog should be shown
+        mock_dialog.save.assert_called_once()
+
+    def test_on_export_all_csv_file_selected_success(
+        self, logs_view_class, mock_log_entry, mock_log_manager, mock_gi_modules
+    ):
+        """Test successful export all CSV file selection."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._all_log_entries = [mock_log_entry, mock_log_entry]
+        view._show_export_toast = mock.MagicMock()
+
+        # Mock file result
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/test.csv"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        # Mock successful export
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_export_all_csv_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should call export with correct parameters
+        view._log_manager.export_logs_to_file.assert_called_once_with(
+            "/tmp/test.csv", format="csv", entries=[mock_log_entry, mock_log_entry]
+        )
+        # Should show success toast
+        view._show_export_toast.assert_called_once()
+        assert "Exported 2 logs" in view._show_export_toast.call_args[0][0]
+
+    def test_on_export_all_csv_file_selected_adds_extension(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test that CSV export adds .csv extension if missing."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._all_log_entries = [mock_log_entry]
+        view._show_export_toast = mock.MagicMock()
+
+        # Mock file result without extension
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/test"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_export_all_csv_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should add .csv extension
+        call_args = view._log_manager.export_logs_to_file.call_args[0]
+        assert call_args[0] == "/tmp/test.csv"
+
+    def test_on_export_all_csv_file_selected_error(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test export all CSV with error from LogManager."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._all_log_entries = [mock_log_entry]
+        view._show_export_toast = mock.MagicMock()
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/test.csv"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        # Mock export failure
+        view._log_manager.export_logs_to_file = mock.MagicMock(
+            return_value=(False, "Permission denied")
+        )
+
+        view._on_export_all_csv_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should show error toast
+        view._show_export_toast.assert_called_once()
+        toast_call = view._show_export_toast.call_args[0][0]
+        assert "Export failed" in toast_call
+        assert "Permission denied" in toast_call
+
+
+class TestLogsViewExportAllJSONHandler:
+    """Tests for export all to JSON handler."""
+
+    def test_on_export_all_json_clicked_returns_when_no_logs(
+        self, logs_view_class, mock_gi_modules
+    ):
+        """Test that export all JSON returns early when no logs."""
+        view = object.__new__(logs_view_class)
+        view._all_log_entries = []
+
+        view._on_export_all_json_clicked(mock.MagicMock())
+
+        # Dialog should not be created
+        mock_gi_modules["gtk"].FileDialog.assert_not_called()
+
+    def test_on_export_all_json_clicked_creates_dialog(
+        self, logs_view_class, mock_log_entry, mock_gi_modules
+    ):
+        """Test that export all JSON creates dialog with correct settings."""
+        view = object.__new__(logs_view_class)
+        view._all_log_entries = [mock_log_entry]
+        view.get_root = mock.MagicMock(return_value=mock.MagicMock())
+
+        mock_dialog = mock.MagicMock()
+        mock_gi_modules["gtk"].FileDialog.return_value = mock_dialog
+
+        view._on_export_all_json_clicked(mock.MagicMock())
+
+        # Dialog should be created with correct title
+        mock_gi_modules["gtk"].FileDialog.assert_called_once()
+        mock_dialog.set_title.assert_called_with("Export All Logs to JSON")
+        # Initial filename should contain timestamp and .json extension
+        assert mock_dialog.set_initial_name.called
+        initial_name = mock_dialog.set_initial_name.call_args[0][0]
+        assert initial_name.startswith("clamui_logs_")
+        assert initial_name.endswith(".json")
+        # Dialog should be shown
+        mock_dialog.save.assert_called_once()
+
+    def test_on_export_all_json_file_selected_success(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test successful export all JSON file selection."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._all_log_entries = [mock_log_entry, mock_log_entry]
+        view._show_export_toast = mock.MagicMock()
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/test.json"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_export_all_json_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should call export with correct parameters
+        view._log_manager.export_logs_to_file.assert_called_once_with(
+            "/tmp/test.json", format="json", entries=[mock_log_entry, mock_log_entry]
+        )
+        # Should show success toast
+        view._show_export_toast.assert_called_once()
+        assert "Exported 2 logs" in view._show_export_toast.call_args[0][0]
+
+    def test_on_export_all_json_file_selected_adds_extension(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test that JSON export adds .json extension if missing."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._all_log_entries = [mock_log_entry]
+        view._show_export_toast = mock.MagicMock()
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/test"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_export_all_json_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should add .json extension
+        call_args = view._log_manager.export_logs_to_file.call_args[0]
+        assert call_args[0] == "/tmp/test.json"
+
+
+class TestLogsViewExportDetailJSONHandler:
+    """Tests for export single log to JSON handler."""
+
+    def test_on_export_detail_json_clicked_returns_when_no_selection(
+        self, logs_view_class, mock_gi_modules
+    ):
+        """Test that export detail JSON returns early when no log selected."""
+        view = object.__new__(logs_view_class)
+        view._selected_log = None
+
+        view._on_export_detail_json_clicked(mock.MagicMock())
+
+        # Dialog should not be created
+        mock_gi_modules["gtk"].FileDialog.assert_not_called()
+
+    def test_on_export_detail_json_clicked_creates_dialog(
+        self, logs_view_class, mock_log_entry, mock_gi_modules
+    ):
+        """Test that export detail JSON creates dialog with correct settings."""
+        view = object.__new__(logs_view_class)
+        view._selected_log = mock_log_entry
+        view.get_root = mock.MagicMock(return_value=mock.MagicMock())
+
+        mock_dialog = mock.MagicMock()
+        mock_gi_modules["gtk"].FileDialog.return_value = mock_dialog
+
+        view._on_export_detail_json_clicked(mock.MagicMock())
+
+        # Dialog should be created with correct title
+        mock_gi_modules["gtk"].FileDialog.assert_called_once()
+        mock_dialog.set_title.assert_called_with("Export Log Details as JSON")
+        # Initial filename should contain timestamp
+        assert mock_dialog.set_initial_name.called
+        initial_name = mock_dialog.set_initial_name.call_args[0][0]
+        assert initial_name.startswith("clamui_log_")
+        assert initial_name.endswith(".json")
+        # Dialog should be shown
+        mock_dialog.save.assert_called_once()
+
+    def test_on_json_export_file_selected_success(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test successful export detail JSON file selection."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._selected_log = mock_log_entry
+        view._show_export_toast = mock.MagicMock()
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/log.json"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_json_export_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should call export with single log entry
+        view._log_manager.export_logs_to_file.assert_called_once_with(
+            "/tmp/log.json", format="json", entries=[mock_log_entry]
+        )
+        # Should show success toast
+        view._show_export_toast.assert_called_once()
+        assert "Log exported" in view._show_export_toast.call_args[0][0]
+
+    def test_on_json_export_file_selected_adds_extension(
+        self, logs_view_class, mock_log_entry, mock_log_manager
+    ):
+        """Test that detail JSON export adds .json extension if missing."""
+        view = object.__new__(logs_view_class)
+        view._log_manager = mock_log_manager
+        view._selected_log = mock_log_entry
+        view._show_export_toast = mock.MagicMock()
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/tmp/log"
+        mock_dialog = mock.MagicMock()
+        mock_dialog.save_finish.return_value = mock_file
+
+        view._log_manager.export_logs_to_file = mock.MagicMock(return_value=(True, None))
+
+        view._on_json_export_file_selected(mock_dialog, mock.MagicMock())
+
+        # Should add .json extension
+        call_args = view._log_manager.export_logs_to_file.call_args[0]
+        assert call_args[0] == "/tmp/log.json"
 
 
 class TestLogsViewUnmapMap:
@@ -831,7 +1223,7 @@ def test_logs_view_basic(mock_gi_modules):
     This test verifies the core LogsView functionality
     using the centralized mock setup.
     """
-    from src.ui.logs_view import LogsView, INITIAL_LOG_DISPLAY_LIMIT, LOAD_MORE_LOG_BATCH_SIZE
+    from src.ui.logs_view import INITIAL_LOG_DISPLAY_LIMIT, LOAD_MORE_LOG_BATCH_SIZE, LogsView
 
     # Test 1: Class can be imported
     assert LogsView is not None

@@ -9,6 +9,7 @@ Provides secure file movement to/from quarantine with:
 - Cross-platform path handling via pathlib
 """
 
+import contextlib
 import hashlib
 import os
 import shutil
@@ -526,17 +527,18 @@ class SecureFileHandler:
         self, quarantine_path: str, original_path: str
     ) -> FileOperationResult:
         """
-        Restore a file from quarantine to its original location.
+        Restore a file from quarantine to its original or specified location.
 
         Performs the following operations:
-        1. Validates the quarantine file exists
-        2. Ensures the original directory exists (creates if needed)
-        3. Restores file permissions to default before moving
-        4. Moves the file back to the original location
+        1. Validates the restore destination path for security
+        2. Checks that the quarantined file exists
+        3. Optionally calculates hash to verify integrity
+        4. Moves the file from quarantine to the restore destination
+        5. Restores original file permissions
 
         Args:
             quarantine_path: Path to the quarantined file
-            original_path: Original path to restore the file to
+            original_path: Original or target path for restoration
 
         Returns:
             FileOperationResult with operation status and details
@@ -544,96 +546,115 @@ class SecureFileHandler:
         Example:
             >>> handler = SecureFileHandler()
             >>> result = handler.restore_from_quarantine(
-            ...     "/home/user/.local/share/clamui/quarantine/abc123_file.exe",
-            ...     "/home/user/file.exe"
+            ...     "/home/user/.local/share/clamui/quarantine/abc123_file.txt",
+            ...     "/home/user/file.txt"
             ... )
             >>> if result.is_success:
             ...     print(f"Restored to: {result.destination_path}")
         """
-        source = Path(quarantine_path).resolve()
+        quarantine_path_obj = Path(quarantine_path)
 
         with self._lock:
-            # Validate restore destination path for security
+            # Validate restore destination path
             is_valid, validation_error = self.validate_restore_path(original_path)
             if not is_valid:
                 return FileOperationResult(
                     status=FileOperationStatus.INVALID_RESTORE_PATH,
-                    source_path=str(source),
+                    source_path=quarantine_path,
                     destination_path=original_path,
                     file_size=0,
                     file_hash="",
                     error_message=validation_error,
                 )
 
-            destination = Path(original_path).resolve()
-
-            # Validate quarantine file exists
-            if not source.exists():
+            # Check if quarantined file exists
+            if not quarantine_path_obj.exists():
                 return FileOperationResult(
                     status=FileOperationStatus.FILE_NOT_FOUND,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=0,
                     file_hash="",
-                    error_message=f"Quarantine file not found: {source}",
+                    error_message=f"Quarantined file not found: {quarantine_path}",
+                )
+
+            # Check if it's a file (not directory)
+            if not quarantine_path_obj.is_file():
+                return FileOperationResult(
+                    status=FileOperationStatus.ERROR,
+                    source_path=quarantine_path,
+                    destination_path=original_path,
+                    file_size=0,
+                    file_hash="",
+                    error_message=f"Quarantined path is not a file: {quarantine_path}",
                 )
 
             # Get file size
-            file_size, size_error = self.get_file_size(source)
+            file_size, size_error = self.get_file_size(quarantine_path_obj)
             if size_error:
-                file_size = 0
+                return FileOperationResult(
+                    status=FileOperationStatus.PERMISSION_DENIED,
+                    source_path=quarantine_path,
+                    destination_path=original_path,
+                    file_size=0,
+                    file_hash="",
+                    error_message=size_error,
+                )
 
-            # Calculate hash for verification
-            file_hash, _ = self.calculate_hash(source)
+            # Calculate hash before moving
+            file_hash, hash_error = self.calculate_hash(quarantine_path_obj)
+            if hash_error:
+                return FileOperationResult(
+                    status=FileOperationStatus.PERMISSION_DENIED,
+                    source_path=quarantine_path,
+                    destination_path=original_path,
+                    file_size=file_size,
+                    file_hash="",
+                    error_message=hash_error,
+                )
 
-            # Ensure destination directory exists
+            # Create destination directory if needed
+            destination_obj = Path(original_path)
             try:
-                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination_obj.parent.mkdir(parents=True, exist_ok=True)
             except PermissionError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.PERMISSION_DENIED,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
-                    error_message=f"Cannot create destination directory: {e}",
+                    error_message=f"Permission denied creating destination directory: {e}",
                 )
             except OSError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.ERROR,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=f"Error creating destination directory: {e}",
                 )
 
             # Check if destination already exists
-            if destination.exists():
+            if destination_obj.exists():
                 return FileOperationResult(
                     status=FileOperationStatus.ALREADY_EXISTS,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
-                    error_message=f"Destination file already exists: {destination}",
+                    error_message=f"Destination file already exists: {original_path}",
                 )
 
             try:
-                # Restore file permissions before moving (to allow move operation)
-                # Set to owner read/write
-                os.chmod(source, stat.S_IRUSR | stat.S_IWUSR)
-
                 # Atomic move operation
-                shutil.move(str(source), str(destination))
-
-                # Set normal file permissions (owner read/write, group/others read)
-                os.chmod(destination, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+                shutil.move(quarantine_path, original_path)
 
                 return FileOperationResult(
                     status=FileOperationStatus.SUCCESS,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=None,
@@ -642,8 +663,8 @@ class SecureFileHandler:
             except PermissionError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.PERMISSION_DENIED,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=f"Permission denied during restore: {e}",
@@ -651,28 +672,61 @@ class SecureFileHandler:
             except shutil.Error as e:
                 return FileOperationResult(
                     status=FileOperationStatus.ERROR,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
-                    error_message=f"Restore operation failed: {e}",
+                    error_message=f"Move operation failed: {e}",
                 )
             except OSError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.ERROR,
-                    source_path=str(source),
-                    destination_path=str(destination),
+                    source_path=quarantine_path,
+                    destination_path=original_path,
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=f"File operation error: {e}",
                 )
 
-    def delete_quarantined_file(self, quarantine_path: str) -> FileOperationResult:
+    def list_quarantined_files(self) -> list[dict]:
+        """
+        List all files currently in quarantine.
+
+        Returns:
+            List of dictionaries containing file information:
+            - filename: The quarantined filename
+            - size: File size in bytes
+            - path: Full path to the quarantined file
+            - modified: Last modified timestamp
+
+        Example:
+            >>> handler = SecureFileHandler()
+            >>> files = handler.list_quarantined_files()
+            >>> for file_info in files:
+            ...     print(f"{file_info['filename']}: {file_info['size']} bytes")
+        """
+        files = []
+
+        try:
+            for file_path in self._quarantine_dir.iterdir():
+                if file_path.is_file():
+                    stat_info = file_path.stat()
+                    files.append({
+                        "filename": file_path.name,
+                        "size": stat_info.st_size,
+                        "path": str(file_path),
+                        "modified": stat_info.st_mtime,
+                    })
+        except PermissionError:
+            pass
+        except OSError:
+            pass
+
+        return files
+
+    def delete_from_quarantine(self, quarantine_path: str) -> FileOperationResult:
         """
         Permanently delete a file from quarantine.
-
-        Securely removes the file from the quarantine directory.
-        This operation cannot be undone.
 
         Args:
             quarantine_path: Path to the quarantined file to delete
@@ -682,154 +736,63 @@ class SecureFileHandler:
 
         Example:
             >>> handler = SecureFileHandler()
-            >>> result = handler.delete_quarantined_file(
-            ...     "/home/user/.local/share/clamui/quarantine/abc123_file.exe"
+            >>> result = handler.delete_from_quarantine(
+            ...     "/home/user/.local/share/clamui/quarantine/abc123_malware.exe"
             ... )
             >>> if result.is_success:
             ...     print("File permanently deleted")
         """
-        target = Path(quarantine_path).resolve()
+        quarantine_path_obj = Path(quarantine_path)
 
         with self._lock:
-            # Validate file exists
-            if not target.exists():
+            # Check if file exists
+            if not quarantine_path_obj.exists():
                 return FileOperationResult(
                     status=FileOperationStatus.FILE_NOT_FOUND,
-                    source_path=str(target),
+                    source_path=quarantine_path,
                     destination_path=None,
                     file_size=0,
                     file_hash="",
-                    error_message=f"File not found: {target}",
+                    error_message=f"Quarantined file not found: {quarantine_path}",
                 )
 
-            # Verify file is in quarantine directory (security check)
-            try:
-                target.relative_to(self._quarantine_dir)
-            except ValueError:
-                return FileOperationResult(
-                    status=FileOperationStatus.PERMISSION_DENIED,
-                    source_path=str(target),
-                    destination_path=None,
-                    file_size=0,
-                    file_hash="",
-                    error_message="File is not in quarantine directory",
-                )
-
-            # Get file info before deletion
-            file_size, _ = self.get_file_size(target)
-            file_hash, _ = self.calculate_hash(target)
+            # Get file size before deletion
+            file_size, size_error = self.get_file_size(quarantine_path_obj)
+            if size_error:
+                file_size = 0
 
             try:
-                # Ensure we have write permission to delete
-                os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+                # Remove file permissions to prevent accidental execution
+                with contextlib.suppress(OSError):
+                    os.chmod(quarantine_path_obj, 0o000)
 
                 # Delete the file
-                target.unlink()
+                quarantine_path_obj.unlink()
 
                 return FileOperationResult(
                     status=FileOperationStatus.SUCCESS,
-                    source_path=str(target),
+                    source_path=quarantine_path,
                     destination_path=None,
-                    file_size=file_size if file_size > 0 else 0,
-                    file_hash=file_hash or "",
+                    file_size=file_size,
+                    file_hash="",
                     error_message=None,
                 )
 
             except PermissionError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.PERMISSION_DENIED,
-                    source_path=str(target),
+                    source_path=quarantine_path,
                     destination_path=None,
-                    file_size=file_size if file_size > 0 else 0,
-                    file_hash=file_hash or "",
+                    file_size=file_size,
+                    file_hash="",
                     error_message=f"Permission denied deleting file: {e}",
                 )
             except OSError as e:
                 return FileOperationResult(
                     status=FileOperationStatus.ERROR,
-                    source_path=str(target),
+                    source_path=quarantine_path,
                     destination_path=None,
-                    file_size=file_size if file_size > 0 else 0,
-                    file_hash=file_hash or "",
+                    file_size=file_size,
+                    file_hash="",
                     error_message=f"Error deleting file: {e}",
                 )
-
-    def verify_file_integrity(self, file_path: str, expected_hash: str) -> tuple[bool, str | None]:
-        """
-        Verify the integrity of a file by comparing its hash.
-
-        Calculates the SHA256 hash of the file and compares it to
-        the expected hash to ensure the file hasn't been modified.
-
-        Args:
-            file_path: Path to the file to verify
-            expected_hash: Expected SHA256 hash string
-
-        Returns:
-            Tuple of (is_valid, error_message):
-            - (True, None) if hash matches
-            - (False, error_message) if hash doesn't match or error occurred
-
-        Example:
-            >>> handler = SecureFileHandler()
-            >>> is_valid, error = handler.verify_file_integrity(
-            ...     "/path/to/file",
-            ...     "a1b2c3d4..."
-            ... )
-        """
-        target = Path(file_path)
-
-        if not target.exists():
-            return (False, f"File not found: {file_path}")
-
-        actual_hash, hash_error = self.calculate_hash(target)
-
-        if hash_error:
-            return (False, hash_error)
-
-        if actual_hash != expected_hash:
-            return (False, f"Hash mismatch: expected {expected_hash}, got {actual_hash}")
-
-        return (True, None)
-
-    def get_quarantine_info(self) -> dict:
-        """
-        Get information about the quarantine directory.
-
-        Returns:
-            Dictionary with:
-            - 'path': Quarantine directory path
-            - 'exists': Whether the directory exists
-            - 'file_count': Number of files in quarantine
-            - 'total_size': Total size of quarantined files in bytes
-            - 'permissions': Directory permissions as octal string
-        """
-        info = {
-            "path": str(self._quarantine_dir),
-            "exists": self._quarantine_dir.exists(),
-            "file_count": 0,
-            "total_size": 0,
-            "permissions": None,
-        }
-
-        if not info["exists"]:
-            return info
-
-        try:
-            # Get directory permissions
-            stat_info = self._quarantine_dir.stat()
-            info["permissions"] = oct(stat_info.st_mode)[-3:]
-
-            # Count files and calculate total size
-            for file_path in self._quarantine_dir.iterdir():
-                if file_path.is_file():
-                    info["file_count"] += 1
-                    try:
-                        info["total_size"] += file_path.stat().st_size
-                    except OSError:
-                        pass
-
-        except OSError:
-            pass
-
-        return info

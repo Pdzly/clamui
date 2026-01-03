@@ -10,10 +10,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional
 
 from .log_manager import LogEntry, LogManager
-
 
 # Pre-compiled regex patterns for extracting file counts
 # These patterns are used to parse scan log entries for file count information
@@ -35,6 +33,7 @@ THREATS_FOUND_PATTERNS = [
 
 class Timeframe(Enum):
     """Timeframe options for statistics aggregation."""
+
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
@@ -43,6 +42,7 @@ class Timeframe(Enum):
 
 class ProtectionLevel(Enum):
     """Protection status levels based on scan recency and definition freshness."""
+
     PROTECTED = "protected"
     AT_RISK = "at_risk"
     UNPROTECTED = "unprotected"
@@ -52,6 +52,7 @@ class ProtectionLevel(Enum):
 @dataclass
 class ScanStatistics:
     """Aggregated scan statistics for a given timeframe."""
+
     timeframe: str
     total_scans: int
     files_scanned: int
@@ -63,8 +64,8 @@ class ScanStatistics:
     total_duration: float  # in seconds
     scheduled_scans: int
     manual_scans: int
-    start_date: Optional[str] = None  # ISO format
-    end_date: Optional[str] = None  # ISO format
+    start_date: str | None = None  # ISO format
+    end_date: str | None = None  # ISO format
 
     def to_dict(self) -> dict:
         """Convert ScanStatistics to dictionary."""
@@ -88,11 +89,12 @@ class ScanStatistics:
 @dataclass
 class ProtectionStatus:
     """Protection status indicating system security posture."""
+
     level: str  # ProtectionLevel value
-    last_scan_timestamp: Optional[str]  # ISO format
-    last_scan_age_hours: Optional[float]
-    last_definition_update: Optional[str]  # ISO format
-    definition_age_hours: Optional[float]
+    last_scan_timestamp: str | None  # ISO format
+    last_scan_age_hours: float | None
+    last_definition_update: str | None  # ISO format
+    definition_age_hours: float | None
     message: str
     is_protected: bool
 
@@ -126,7 +128,7 @@ class StatisticsCalculator:
     # Cache TTL in seconds
     CACHE_TTL_SECONDS = 30
 
-    def __init__(self, log_manager: Optional[LogManager] = None):
+    def __init__(self, log_manager: LogManager | None = None):
         """
         Initialize the StatisticsCalculator.
 
@@ -137,7 +139,7 @@ class StatisticsCalculator:
 
         # Cache for log data to prevent redundant disk I/O
         self._cache: dict = {}
-        self._cache_timestamp: Optional[float] = None
+        self._cache_timestamp: float | None = None
 
         # Thread lock for safe concurrent access
         self._lock = threading.Lock()
@@ -218,7 +220,7 @@ class StatisticsCalculator:
 
         return (start, now)
 
-    def _parse_timestamp(self, timestamp: Optional[str]) -> Optional[datetime]:
+    def _parse_timestamp(self, timestamp: str | None) -> datetime | None:
         """
         Parse an ISO format timestamp string to datetime.
 
@@ -239,9 +241,7 @@ class StatisticsCalculator:
             return None
 
     def _filter_entries_by_timeframe(
-        self,
-        entries: list[LogEntry],
-        timeframe: str
+        self, entries: list[LogEntry], timeframe: str
     ) -> list[LogEntry]:
         """
         Filter log entries to those within the specified timeframe.
@@ -400,10 +400,7 @@ class StatisticsCalculator:
         stats = self.get_statistics(timeframe)
         return stats.average_duration
 
-    def get_protection_status(
-        self,
-        last_definition_update: Optional[str] = None
-    ) -> ProtectionStatus:
+    def get_protection_status(self, last_definition_update: str | None = None) -> ProtectionStatus:
         """
         Determine the current protection status of the system.
 
@@ -422,8 +419,8 @@ class StatisticsCalculator:
         # Get the most recent scan
         recent_logs = self._log_manager.get_logs(limit=1, log_type="scan")
 
-        last_scan_timestamp: Optional[str] = None
-        last_scan_age_hours: Optional[float] = None
+        last_scan_timestamp: str | None = None
+        last_scan_age_hours: float | None = None
 
         if recent_logs:
             last_scan_timestamp = recent_logs[0].timestamp
@@ -433,7 +430,7 @@ class StatisticsCalculator:
                 last_scan_age_hours = delta.total_seconds() / 3600
 
         # Parse definition update time
-        definition_age_hours: Optional[float] = None
+        definition_age_hours: float | None = None
         if last_definition_update:
             def_time = self._parse_timestamp(last_definition_update)
             if def_time:
@@ -486,22 +483,7 @@ class StatisticsCalculator:
             is_protected=is_protected,
         )
 
-    def has_scan_history(self) -> bool:
-        """
-        Check if there is any scan history available.
-
-        Returns:
-            True if there are scan logs, False otherwise
-        """
-        # Check if any scan logs exist
-        logs = self._get_cached_logs(limit=1, log_type="scan")
-        return len(logs) > 0
-
-    def get_scan_trend_data(
-        self,
-        timeframe: str = "weekly",
-        data_points: int = 7
-    ) -> list[dict]:
+    def get_scan_trend_data(self, timeframe: str = "weekly", data_points: int = 7) -> list[dict]:
         """
         Get scan activity trend data for charting.
 
@@ -517,33 +499,12 @@ class StatisticsCalculator:
         all_entries = self._get_cached_logs(limit=10000, log_type="scan")
         entries = self._filter_entries_by_timeframe(all_entries, timeframe)
 
-        # Group by time intervals
-        now = datetime.now()
-        trend_data: dict[str, dict] = {}
-
-        # If no entries, return empty data points with zeros
         if not entries:
-            result = []
-            for i in range(data_points):
-                if timeframe == Timeframe.DAILY.value:
-                    point_date = now - timedelta(hours=i)
-                    date_str = point_date.strftime("%Y-%m-%d")
-                elif timeframe == Timeframe.WEEKLY.value:
-                    point_date = now - timedelta(weeks=i)
-                    date_str = point_date.strftime("%Y-W%U")
-                elif timeframe == Timeframe.MONTHLY.value:
-                    point_date = now - timedelta(days=30 * i)
-                    date_str = point_date.strftime("%Y-%m")
-                else:
-                    point_date = now - timedelta(days=i)
-                    date_str = point_date.strftime("%Y-%m-%d")
+            return []
 
-                result.append({
-                    "date": date_str,
-                    "scans": 0,
-                    "threats": 0,
-                })
-            return list(reversed(result))
+        # Group by time intervals
+        datetime.now()
+        trend_data: dict[str, dict] = {}
 
         for entry in entries:
             entry_time = self._parse_timestamp(entry.timestamp)

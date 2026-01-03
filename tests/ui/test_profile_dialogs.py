@@ -2,6 +2,7 @@
 """Unit tests for the profile dialogs UI components."""
 
 import os
+
 import pytest
 
 # Check if we can use GTK (requires display)
@@ -15,9 +16,9 @@ try:
         os.environ.setdefault("GDK_BACKEND", "broadway")
 
     import gi
-    gi.require_version('Gtk', '4.0')
-    gi.require_version('Adw', '1')
-    from gi.repository import Gtk, Adw
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
 
     # Try to initialize Adw to check if display is available
     # Note: In headless CI, this may fail
@@ -28,8 +29,7 @@ except Exception as e:
 
 # Skip all tests in this module if GTK is not available
 pytestmark = pytest.mark.skipif(
-    not _gtk_available,
-    reason=f"GTK4/Adwaita not available: {_gtk_init_error}"
+    not _gtk_available, reason=f"GTK4/Adwaita not available: {_gtk_init_error}"
 )
 
 
@@ -39,27 +39,32 @@ class TestProfileDialogImport:
     def test_import_profile_dialog(self):
         """Test that ProfileDialog can be imported."""
         from src.ui.profile_dialogs import ProfileDialog
+
         assert ProfileDialog is not None
 
     def test_import_pattern_entry_dialog(self):
         """Test that PatternEntryDialog can be imported."""
         from src.ui.profile_dialogs import PatternEntryDialog
+
         assert PatternEntryDialog is not None
 
     def test_import_delete_profile_dialog(self):
         """Test that DeleteProfileDialog can be imported."""
         from src.ui.profile_dialogs import DeleteProfileDialog
+
         assert DeleteProfileDialog is not None
 
     def test_import_profile_list_dialog(self):
         """Test that ProfileListDialog can be imported."""
         from src.ui.profile_dialogs import ProfileListDialog
+
         assert ProfileListDialog is not None
 
     def test_profile_dialog_has_max_name_length(self):
         """Test that ProfileDialog defines MAX_NAME_LENGTH constant."""
         from src.ui.profile_dialogs import ProfileDialog
-        assert hasattr(ProfileDialog, 'MAX_NAME_LENGTH')
+
+        assert hasattr(ProfileDialog, "MAX_NAME_LENGTH")
         assert isinstance(ProfileDialog.MAX_NAME_LENGTH, int)
         assert ProfileDialog.MAX_NAME_LENGTH > 0
 
@@ -71,6 +76,7 @@ class TestProfileDialogCreation:
     def dialog_class(self):
         """Import and return the ProfileDialog class."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog
 
     def test_create_dialog_without_profile(self, dialog_class):
@@ -113,6 +119,7 @@ class TestProfileDialogEditMode:
     @pytest.fixture
     def mock_profile(self):
         """Create a mock profile object for testing."""
+
         class MockProfile:
             def __init__(self):
                 self.id = "test-profile-123"
@@ -121,15 +128,17 @@ class TestProfileDialogEditMode:
                 self.targets = ["/home/user/documents", "/home/user/downloads"]
                 self.exclusions = {
                     "paths": ["/home/user/documents/cache"],
-                    "patterns": ["*.tmp", "*.log"]
+                    "patterns": ["*.tmp", "*.log"],
                 }
                 self.is_default = False
+
         return MockProfile()
 
     @pytest.fixture
     def dialog_class(self):
         """Import and return the ProfileDialog class."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog
 
     def test_create_dialog_in_edit_mode(self, dialog_class, mock_profile):
@@ -187,6 +196,7 @@ class TestProfileDialogGetProfileData:
     def dialog(self):
         """Create a ProfileDialog instance for testing."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog()
 
     def test_get_profile_data_returns_dict(self, dialog):
@@ -245,6 +255,7 @@ class TestProfileDialogCallback:
     def dialog(self):
         """Create a ProfileDialog instance for testing."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog()
 
     def test_set_on_profile_saved(self, dialog):
@@ -271,6 +282,7 @@ class TestPatternEntryDialogCreation:
     def dialog_class(self):
         """Import and return the PatternEntryDialog class."""
         from src.ui.profile_dialogs import PatternEntryDialog
+
         return PatternEntryDialog
 
     def test_create_dialog(self, dialog_class):
@@ -306,6 +318,7 @@ class TestPatternEntryDialogGetPattern:
     def dialog(self):
         """Create a PatternEntryDialog instance for testing."""
         from src.ui.profile_dialogs import PatternEntryDialog
+
         return PatternEntryDialog()
 
     def test_get_pattern_returns_string(self, dialog):
@@ -326,6 +339,7 @@ class TestDeleteProfileDialogCreation:
     def dialog_class(self):
         """Import and return the DeleteProfileDialog class."""
         from src.ui.profile_dialogs import DeleteProfileDialog
+
         return DeleteProfileDialog
 
     def test_create_dialog_with_profile_name(self, dialog_class):
@@ -369,12 +383,13 @@ class TestDeleteProfileDialogWithSpecialNames:
     def dialog_class(self):
         """Import and return the DeleteProfileDialog class."""
         from src.ui.profile_dialogs import DeleteProfileDialog
+
         return DeleteProfileDialog
 
     def test_dialog_with_empty_name(self, dialog_class):
         """Test dialog with empty profile name."""
         dialog = dialog_class(profile_name="")
-        body = dialog.get_body()
+        dialog.get_body()
         # Should still create dialog, even with empty name
         assert dialog is not None
 
@@ -405,6 +420,7 @@ class TestProfileListDialogCreation:
     def dialog_class(self):
         """Import and return the ProfileListDialog class."""
         from src.ui.profile_dialogs import ProfileListDialog
+
         return ProfileListDialog
 
     def test_create_dialog(self, dialog_class):
@@ -445,6 +461,7 @@ class TestProfileListDialogCallback:
     def dialog(self):
         """Create a ProfileListDialog instance for testing."""
         from src.ui.profile_dialogs import ProfileListDialog
+
         return ProfileListDialog()
 
     def test_set_on_profile_selected(self, dialog):
@@ -469,6 +486,7 @@ class TestProfileListDialogWithMockManager:
     @pytest.fixture
     def mock_profile_manager(self):
         """Create a mock profile manager for testing."""
+
         class MockProfile:
             def __init__(self, id, name, description="", targets=None, is_default=False):
                 self.id = id
@@ -510,6 +528,7 @@ class TestProfileListDialogWithMockManager:
     def dialog_class(self):
         """Import and return the ProfileListDialog class."""
         from src.ui.profile_dialogs import ProfileListDialog
+
         return ProfileListDialog
 
     def test_dialog_with_profile_manager(self, dialog_class, mock_profile_manager):
@@ -525,6 +544,7 @@ class TestProfileDialogMaxNameLength:
     def dialog_class(self):
         """Import and return the ProfileDialog class."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog
 
     def test_max_name_length_is_50(self, dialog_class):
@@ -543,11 +563,13 @@ class TestProfileDialogWithEmptyProfile:
     def dialog_class(self):
         """Import and return the ProfileDialog class."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog
 
     @pytest.fixture
     def empty_profile(self):
         """Create a profile with minimal/empty values."""
+
         class EmptyProfile:
             def __init__(self):
                 self.id = "empty-profile"
@@ -556,6 +578,7 @@ class TestProfileDialogWithEmptyProfile:
                 self.targets = []
                 self.exclusions = None
                 self.is_default = False
+
         return EmptyProfile()
 
     def test_edit_mode_handles_none_description(self, dialog_class, empty_profile):
@@ -584,11 +607,13 @@ class TestProfileDialogWithPartialExclusions:
     def dialog_class(self):
         """Import and return the ProfileDialog class."""
         from src.ui.profile_dialogs import ProfileDialog
+
         return ProfileDialog
 
     @pytest.fixture
     def profile_with_paths_only(self):
         """Create a profile with only exclusion paths (no patterns)."""
+
         class Profile:
             def __init__(self):
                 self.id = "paths-only"
@@ -597,11 +622,13 @@ class TestProfileDialogWithPartialExclusions:
                 self.targets = ["/home"]
                 self.exclusions = {"paths": ["/home/cache"]}
                 self.is_default = False
+
         return Profile()
 
     @pytest.fixture
     def profile_with_patterns_only(self):
         """Create a profile with only exclusion patterns (no paths)."""
+
         class Profile:
             def __init__(self):
                 self.id = "patterns-only"
@@ -610,6 +637,7 @@ class TestProfileDialogWithPartialExclusions:
                 self.targets = ["/home"]
                 self.exclusions = {"patterns": ["*.tmp"]}
                 self.is_default = False
+
         return Profile()
 
     def test_loads_exclusion_paths_only(self, dialog_class, profile_with_paths_only):

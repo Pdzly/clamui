@@ -3,7 +3,6 @@
 
 import sys
 from unittest import mock
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -31,16 +30,29 @@ def ensure_fresh_scanner_import():
     # Import fresh
     from src.core.scanner import (
         Scanner as _Scanner,
+    )
+    from src.core.scanner import (
         ScanResult as _ScanResult,
+    )
+    from src.core.scanner import (
         ScanStatus as _ScanStatus,
+    )
+    from src.core.scanner import (
         ThreatDetail as _ThreatDetail,
+    )
+    from src.core.scanner import (
         glob_to_regex as _glob_to_regex,
+    )
+    from src.core.scanner import (
         validate_pattern as _validate_pattern,
     )
     from src.core.threat_classifier import (
-        classify_threat_severity_str as _classify_threat_severity_str,
         categorize_threat as _categorize_threat,
     )
+    from src.core.threat_classifier import (
+        classify_threat_severity_str as _classify_threat_severity_str,
+    )
+
     Scanner = _Scanner
     ScanResult = _ScanResult
     ScanStatus = _ScanStatus
@@ -313,7 +325,9 @@ class TestScannerBuildCommand:
         # Double-check none of the disabled patterns appear as exclusion args
         # We need to exclude the path argument itself (which may contain /tmp/)
         # Get only the exclusion-related args by filtering out the scan path and base command
-        exclusion_args = [arg for arg in cmd if arg not in ["/usr/bin/clamscan", "-r", "-i", str(test_dir)]]
+        exclusion_args = [
+            arg for arg in cmd if arg not in ["/usr/bin/clamscan", "-r", "-i", str(test_dir)]
+        ]
         all_exclusion_args = " ".join(exclusion_args)
         assert "log" not in all_exclusion_args.lower()
         assert "node_modules" not in all_exclusion_args
@@ -647,7 +661,9 @@ Infected files: 1
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.return_value = (mock_stdout, "")
@@ -686,7 +702,9 @@ Infected files: 4
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.return_value = (mock_stdout, "")
@@ -732,7 +750,9 @@ Infected files: 0
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.return_value = (mock_stdout, "")
@@ -766,7 +786,9 @@ Infected files: 1
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.return_value = (mock_stdout, "")
@@ -777,7 +799,9 @@ Infected files: 1
 
         # Verify file path is preserved including spaces and special characters
         assert len(result.threat_details) == 1
-        assert result.threat_details[0].file_path == "/home/user/Documents/My Files/virus (copy).exe"
+        assert (
+            result.threat_details[0].file_path == "/home/user/Documents/My Files/virus (copy).exe"
+        )
 
     def test_threat_details_with_cancelled_scan(self, tmp_path):
         """Integration test: cancelled scan produces empty threat_details."""
@@ -793,7 +817,9 @@ Infected files: 1
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.side_effect = simulate_cancel
@@ -811,9 +837,13 @@ Infected files: 1
         scanner = Scanner()
 
         # Mock ClamAV not installed
-        with mock.patch("src.core.scanner.check_clamav_installed", return_value=(False, "ClamAV not found")):
-            with mock.patch("src.core.scanner.validate_path", return_value=(True, None)):
-                result = scanner.scan_sync("/nonexistent/path")
+        with (
+            mock.patch(
+                "src.core.scanner.check_clamav_installed", return_value=(False, "ClamAV not found")
+            ),
+            mock.patch("src.core.scanner.validate_path", return_value=(True, None)),
+        ):
+            result = scanner.scan_sync("/nonexistent/path")
 
         # Verify error result has empty threat_details
         assert result.status == ScanStatus.ERROR
@@ -825,7 +855,7 @@ Infected files: 1
             file_path="/test/virus.exe",
             threat_name="Win.Trojan.Agent",
             category="Trojan",
-            severity="high"
+            severity="high",
         )
 
         assert threat.file_path == "/test/virus.exe"
@@ -894,7 +924,9 @@ Infected files: 1
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
                         mock_process.communicate.return_value = (mock_stdout, "")
@@ -926,6 +958,7 @@ class TestPatternUtilities:
         assert regex  # Not empty
         # Verify it's a valid regex by compiling
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("test.log")
         assert compiled.match("error.log")
@@ -935,6 +968,7 @@ class TestPatternUtilities:
         """Test glob_to_regex converts directory name patterns."""
         regex = glob_to_regex("node_modules")
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("node_modules")
         assert not compiled.match("node_modules_backup")
@@ -943,6 +977,7 @@ class TestPatternUtilities:
         """Test glob_to_regex converts path wildcard patterns."""
         regex = glob_to_regex("/tmp/*")
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("/tmp/file.txt")
         assert compiled.match("/tmp/subdir")
@@ -952,6 +987,7 @@ class TestPatternUtilities:
         """Test glob_to_regex handles multiple wildcards."""
         regex = glob_to_regex("*.test.*")
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("file.test.js")
         assert compiled.match("module.test.py")
@@ -961,6 +997,7 @@ class TestPatternUtilities:
         """Test glob_to_regex converts ? wildcard (single character)."""
         regex = glob_to_regex("file?.txt")
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("file1.txt")
         assert compiled.match("fileA.txt")
@@ -971,6 +1008,7 @@ class TestPatternUtilities:
         """Test glob_to_regex converts character class patterns."""
         regex = glob_to_regex("file[0-9].txt")
         import re
+
         compiled = re.compile(regex)
         assert compiled.match("file0.txt")
         assert compiled.match("file9.txt")
@@ -1116,8 +1154,12 @@ class TestScannerErrorHandling:
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
-                    with mock.patch("subprocess.Popen", side_effect=FileNotFoundError("clamscan not found")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
+                    with mock.patch(
+                        "subprocess.Popen", side_effect=FileNotFoundError("clamscan not found")
+                    ):
                         result = scanner.scan_sync(str(test_file))
 
         assert result.status == ScanStatus.ERROR
@@ -1133,8 +1175,12 @@ class TestScannerErrorHandling:
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
-                    with mock.patch("subprocess.Popen", side_effect=PermissionError("Permission denied")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
+                    with mock.patch(
+                        "subprocess.Popen", side_effect=PermissionError("Permission denied")
+                    ):
                         result = scanner.scan_sync(str(test_file))
 
         assert result.status == ScanStatus.ERROR
@@ -1150,8 +1196,12 @@ class TestScannerErrorHandling:
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
-                    with mock.patch("subprocess.Popen", side_effect=RuntimeError("Unexpected error")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
+                    with mock.patch(
+                        "subprocess.Popen", side_effect=RuntimeError("Unexpected error")
+                    ):
                         result = scanner.scan_sync(str(test_file))
 
         assert result.status == ScanStatus.ERROR
@@ -1162,7 +1212,9 @@ class TestScannerErrorHandling:
         """Test scan_sync handles invalid/nonexistent path."""
         scanner = Scanner()
 
-        with mock.patch("src.core.scanner.validate_path", return_value=(False, "Path does not exist")):
+        with mock.patch(
+            "src.core.scanner.validate_path", return_value=(False, "Path does not exist")
+        ):
             result = scanner.scan_sync("/nonexistent/path/to/scan")
 
         assert result.status == ScanStatus.ERROR
@@ -1180,12 +1232,19 @@ class TestScannerErrorHandling:
         with mock.patch("src.core.scanner.validate_path", return_value=(True, None)):
             # Also mock check_clamd_connection so it falls through to clamscan path
             # (in "auto" mode, daemon is tried first if available)
-            with mock.patch("src.core.scanner.check_clamd_connection", return_value=(False, "not running")):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(False, "ClamAV not found")):
+            with mock.patch(
+                "src.core.scanner.check_clamd_connection", return_value=(False, "not running")
+            ):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed",
+                    return_value=(False, "ClamAV not found"),
+                ):
                     result = scanner.scan_sync(str(test_file))
 
         assert result.status == ScanStatus.ERROR
-        assert "not found" in result.error_message.lower() or "not installed" in result.stderr.lower()
+        assert (
+            "not found" in result.error_message.lower() or "not installed" in result.stderr.lower()
+        )
         assert len(result.threat_details) == 0
 
     def test_scan_sync_communicate_raises_exception(self, tmp_path):
@@ -1197,10 +1256,14 @@ class TestScannerErrorHandling:
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                with mock.patch("src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")):
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.0.0")
+                ):
                     with mock.patch("subprocess.Popen") as mock_popen:
                         mock_process = mock.MagicMock()
-                        mock_process.communicate.side_effect = OSError("Process communication failed")
+                        mock_process.communicate.side_effect = OSError(
+                            "Process communication failed"
+                        )
                         mock_popen.return_value = mock_process
 
                         result = scanner.scan_sync(str(test_file))
@@ -1303,7 +1366,7 @@ class TestParseResultsEdgeCases:
         scanner = Scanner()
 
         # File path with unicode and special characters
-        stdout = '/home/user/test file (copy).txt: Eicar-Test-Signature FOUND\n'
+        stdout = "/home/user/test file (copy).txt: Eicar-Test-Signature FOUND\n"
         result = scanner._parse_results("/home/user", stdout, "", 1)
 
         assert result.status == ScanStatus.INFECTED
@@ -1320,7 +1383,7 @@ class TestParseResultsEdgeCases:
         scanner = Scanner()
 
         # Threat name contains colon (edge case)
-        stdout = '/home/user/file.exe: Win.Trojan.Generic:Variant FOUND\n'
+        stdout = "/home/user/file.exe: Win.Trojan.Generic:Variant FOUND\n"
         result = scanner._parse_results("/home/user", stdout, "", 1)
 
         assert result.status == ScanStatus.INFECTED
@@ -1338,7 +1401,6 @@ class TestPatternValidationEdgeCases:
         # Most glob patterns will be valid, but we test edge cases
         # An unclosed bracket should fail
         # Note: fnmatch.translate may handle this, so we test compilation
-        import re
 
         # Test that validate_pattern returns True for valid patterns
         assert validate_pattern("*.log") is True
@@ -1390,7 +1452,7 @@ class TestScannerProfileExclusionsEdgeCases:
 
         profile_exclusions = {
             "paths": ["", None, "/valid/path"],  # Empty and None values
-            "patterns": ["", "*.log", None]  # Empty and None values
+            "patterns": ["", "*.log", None],  # Empty and None values
         }
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
@@ -1398,9 +1460,11 @@ class TestScannerProfileExclusionsEdgeCases:
                 # Filter out None values before passing to function
                 clean_exclusions = {
                     "paths": [p for p in profile_exclusions["paths"] if p],
-                    "patterns": [p for p in profile_exclusions["patterns"] if p]
+                    "patterns": [p for p in profile_exclusions["patterns"] if p],
                 }
-                cmd = scanner._build_command(str(test_dir), recursive=True, profile_exclusions=clean_exclusions)
+                cmd = scanner._build_command(
+                    str(test_dir), recursive=True, profile_exclusions=clean_exclusions
+                )
 
         # Should not crash and should include valid exclusions
         assert "--exclude-dir" in cmd
@@ -1413,14 +1477,13 @@ class TestScannerProfileExclusionsEdgeCases:
 
         scanner = Scanner()
 
-        profile_exclusions = {
-            "paths": ["~/Downloads"],
-            "patterns": []
-        }
+        profile_exclusions = {"paths": ["~/Downloads"], "patterns": []}
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                cmd = scanner._build_command(str(test_dir), recursive=True, profile_exclusions=profile_exclusions)
+                cmd = scanner._build_command(
+                    str(test_dir), recursive=True, profile_exclusions=profile_exclusions
+                )
 
         # The ~ should be expanded
         cmd_str = " ".join(cmd)
@@ -1532,7 +1595,10 @@ class TestScannerWithMalformedExclusions:
 
         mock_settings = mock.MagicMock()
         mock_settings.get.return_value = [
-            {"pattern": "*.log", "enabled": True},  # Missing 'type' key - should default to 'pattern'
+            {
+                "pattern": "*.log",
+                "enabled": True,
+            },  # Missing 'type' key - should default to 'pattern'
         ]
 
         scanner = Scanner(settings_manager=mock_settings)

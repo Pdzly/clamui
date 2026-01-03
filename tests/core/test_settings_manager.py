@@ -2,7 +2,6 @@
 """Unit tests for the SettingsManager class."""
 
 import json
-import os
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -95,7 +94,7 @@ class TestSettingsManagerSaveLoad:
         settings_manager.set("notifications_enabled", False)
         settings_file = Path(temp_config_dir) / "settings.json"
 
-        with open(settings_file, "r", encoding="utf-8") as f:
+        with open(settings_file, encoding="utf-8") as f:
             data = json.load(f)
 
         assert data["notifications_enabled"] is False
@@ -226,7 +225,7 @@ class TestSettingsManagerGetSet:
 
         # Read directly from file
         settings_file = Path(temp_config_dir) / "settings.json"
-        with open(settings_file, "r", encoding="utf-8") as f:
+        with open(settings_file, encoding="utf-8") as f:
             data = json.load(f)
 
         assert data["test_key"] == "test_value"
@@ -472,7 +471,7 @@ class TestSettingsManagerDefaults:
             manager.set("new_key", "new_value")
 
             # DEFAULT_SETTINGS should be unchanged
-            assert SettingsManager.DEFAULT_SETTINGS == original_defaults
+            assert original_defaults == SettingsManager.DEFAULT_SETTINGS
 
 
 class TestSettingsExclusions:
@@ -502,11 +501,7 @@ class TestSettingsExclusions:
 
     def test_set_exclusion_patterns_single_pattern(self, settings_manager):
         """Test setting a single exclusion pattern."""
-        pattern = {
-            "pattern": "*.log",
-            "type": "pattern",
-            "enabled": True
-        }
+        pattern = {"pattern": "*.log", "type": "pattern", "enabled": True}
         settings_manager.set("exclusion_patterns", [pattern])
 
         patterns = settings_manager.get("exclusion_patterns")
@@ -541,7 +536,7 @@ class TestSettingsExclusions:
 
         # Read directly from file
         settings_file = Path(temp_config_dir) / "settings.json"
-        with open(settings_file, "r", encoding="utf-8") as f:
+        with open(settings_file, encoding="utf-8") as f:
             data = json.load(f)
 
         assert "exclusion_patterns" in data
@@ -576,9 +571,7 @@ class TestSettingsExclusions:
 
         existing_data = {
             "notifications_enabled": True,
-            "exclusion_patterns": [
-                {"pattern": "dist", "type": "directory", "enabled": True}
-            ]
+            "exclusion_patterns": [{"pattern": "dist", "type": "directory", "enabled": True}],
         }
         settings_file.write_text(json.dumps(existing_data))
 
@@ -749,10 +742,9 @@ class TestSettingsManagerLoadEdgeCases:
         config_dir = Path(temp_config_dir)
         config_dir.mkdir(parents=True, exist_ok=True)
         settings_file = config_dir / "settings.json"
-        settings_file.write_text(json.dumps({
-            "notifications_enabled": True,
-            "unicode_setting": "文字テスト 🎉"
-        }))
+        settings_file.write_text(
+            json.dumps({"notifications_enabled": True, "unicode_setting": "文字テスト 🎉"})
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         assert manager.get("unicode_setting") == "文字テスト 🎉"
@@ -786,10 +778,9 @@ class TestSettingsManagerLoadEdgeCases:
             current["nested"] = {"level": i}
             current = current["nested"]
 
-        settings_file.write_text(json.dumps({
-            "notifications_enabled": True,
-            "deeply_nested": nested_value
-        }))
+        settings_file.write_text(
+            json.dumps({"notifications_enabled": True, "deeply_nested": nested_value})
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         assert manager.get("deeply_nested") is not None
@@ -809,7 +800,9 @@ class TestSettingsManagerSaveEdgeCases:
         """Test that save handles permission error when creating directory."""
         manager = SettingsManager(config_dir=temp_config_dir)
 
-        with mock.patch.object(Path, "mkdir", side_effect=PermissionError("Cannot create directory")):
+        with mock.patch.object(
+            Path, "mkdir", side_effect=PermissionError("Cannot create directory")
+        ):
             result = manager.save()
             assert result is False
 
@@ -971,13 +964,17 @@ class TestSettingsManagerMalformedExclusionEdgeCases:
         settings_file = config_dir / "settings.json"
 
         # Write exclusions with various missing keys
-        settings_file.write_text(json.dumps({
-            "exclusion_patterns": [
-                {"pattern": "*.log"},  # Missing type and enabled
-                {"type": "file", "enabled": True},  # Missing pattern
-                {"pattern": "", "type": "file", "enabled": True},  # Empty pattern
-            ]
-        }))
+        settings_file.write_text(
+            json.dumps(
+                {
+                    "exclusion_patterns": [
+                        {"pattern": "*.log"},  # Missing type and enabled
+                        {"type": "file", "enabled": True},  # Missing pattern
+                        {"pattern": "", "type": "file", "enabled": True},  # Empty pattern
+                    ]
+                }
+            )
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         patterns = manager.get("exclusion_patterns")
@@ -992,13 +989,25 @@ class TestSettingsManagerMalformedExclusionEdgeCases:
         settings_file = config_dir / "settings.json"
 
         # Write exclusions with wrong types
-        settings_file.write_text(json.dumps({
-            "exclusion_patterns": [
-                {"pattern": 123, "type": "file", "enabled": True},  # pattern should be string
-                {"pattern": "*.log", "type": 456, "enabled": True},  # type should be string
-                {"pattern": "*.tmp", "type": "file", "enabled": "yes"},  # enabled should be bool
-            ]
-        }))
+        settings_file.write_text(
+            json.dumps(
+                {
+                    "exclusion_patterns": [
+                        {
+                            "pattern": 123,
+                            "type": "file",
+                            "enabled": True,
+                        },  # pattern should be string
+                        {"pattern": "*.log", "type": 456, "enabled": True},  # type should be string
+                        {
+                            "pattern": "*.tmp",
+                            "type": "file",
+                            "enabled": "yes",
+                        },  # enabled should be bool
+                    ]
+                }
+            )
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         patterns = manager.get("exclusion_patterns")
@@ -1013,9 +1022,9 @@ class TestSettingsManagerMalformedExclusionEdgeCases:
         settings_file = config_dir / "settings.json"
 
         # Write exclusion_patterns as a dict instead of list
-        settings_file.write_text(json.dumps({
-            "exclusion_patterns": {"pattern": "*.log", "enabled": True}
-        }))
+        settings_file.write_text(
+            json.dumps({"exclusion_patterns": {"pattern": "*.log", "enabled": True}})
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         patterns = manager.get("exclusion_patterns")
@@ -1029,10 +1038,9 @@ class TestSettingsManagerMalformedExclusionEdgeCases:
         config_dir.mkdir(parents=True, exist_ok=True)
         settings_file = config_dir / "settings.json"
 
-        settings_file.write_text(json.dumps({
-            "notifications_enabled": True,
-            "exclusion_patterns": None
-        }))
+        settings_file.write_text(
+            json.dumps({"notifications_enabled": True, "exclusion_patterns": None})
+        )
 
         manager = SettingsManager(config_dir=config_dir)
         patterns = manager.get("exclusion_patterns")

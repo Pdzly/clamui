@@ -8,14 +8,13 @@ while the main application uses GTK4. GTK3 code is isolated to this module.
 """
 
 import logging
-import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def _find_clamui_icon() -> Optional[str]:
+def _find_clamui_icon() -> str | None:
     """
     Find the ClamUI application icon.
 
@@ -48,11 +47,11 @@ def _find_clamui_icon() -> Optional[str]:
 
 
 # Cache the icon path
-_CLAMUI_ICON_PATH: Optional[str] = None
+_CLAMUI_ICON_PATH: str | None = None
 
 # Track availability of AppIndicator library
 _APPINDICATOR_AVAILABLE = False
-_APPINDICATOR_ERROR: Optional[str] = None
+_APPINDICATOR_ERROR: str | None = None
 
 # GTK3 imports for AppIndicator (isolated from GTK4 main app)
 # These imports are wrapped in try/except to handle missing library gracefully
@@ -71,8 +70,7 @@ except ValueError as e:
     # (e.g., GTK4 already loaded, or AyatanaAppIndicator3 not installed)
     _APPINDICATOR_ERROR = f"GTK version conflict: {e}"
     logger.warning(
-        f"System tray indicator unavailable: {_APPINDICATOR_ERROR}. "
-        "Tray features will be disabled."
+        f"System tray indicator unavailable: {_APPINDICATOR_ERROR}. Tray features will be disabled."
     )
 except ImportError as e:
     # ImportError when gi or required modules are not installed
@@ -93,7 +91,7 @@ def is_available() -> bool:
     return _APPINDICATOR_AVAILABLE
 
 
-def get_unavailable_reason() -> Optional[str]:
+def get_unavailable_reason() -> str | None:
     """
     Get the reason why AppIndicator is unavailable.
 
@@ -177,23 +175,21 @@ class TrayIndicator:
         self._available: bool = _APPINDICATOR_AVAILABLE
 
         # Action callbacks (set via set_action_callbacks)
-        self._on_quick_scan: Optional[Callable[[], None]] = None
-        self._on_full_scan: Optional[Callable[[], None]] = None
-        self._on_update: Optional[Callable[[], None]] = None
-        self._on_quit: Optional[Callable[[], None]] = None
+        self._on_quick_scan: Callable[[], None] | None = None
+        self._on_full_scan: Callable[[], None] | None = None
+        self._on_update: Callable[[], None] | None = None
+        self._on_quit: Callable[[], None] | None = None
 
         # Window toggle callback (set via set_window_toggle_callback)
-        self._on_window_toggle: Optional[Callable[[], None]] = None
-        self._get_window_visible: Optional[Callable[[], bool]] = None
+        self._on_window_toggle: Callable[[], None] | None = None
+        self._get_window_visible: Callable[[], bool] | None = None
         self._show_window_item = None
 
         # Create the indicator only if library is available
         if self._available:
             self._create_indicator()
         else:
-            logger.info(
-                "TrayIndicator created in stub mode (AppIndicator unavailable)"
-            )
+            logger.info("TrayIndicator created in stub mode (AppIndicator unavailable)")
 
     def _get_icon_theme(self):
         """
@@ -246,9 +242,7 @@ class TrayIndicator:
         for icon_name in fallback_chain:
             if self._icon_exists(icon_name):
                 if icon_name != fallback_chain[0]:
-                    logger.debug(
-                        f"Using fallback icon '{icon_name}' for status '{status}'"
-                    )
+                    logger.debug(f"Using fallback icon '{icon_name}' for status '{status}'")
                 return icon_name
 
         # If no icons in chain found, use the direct ICON_MAP value
@@ -270,7 +264,7 @@ class TrayIndicator:
         )
         return self.DEFAULT_ICON
 
-    def _get_clamui_icon(self) -> Optional[str]:
+    def _get_clamui_icon(self) -> str | None:
         """
         Get the ClamUI application icon path.
 
@@ -409,10 +403,10 @@ class TrayIndicator:
 
     def set_action_callbacks(
         self,
-        on_quick_scan: Optional[Callable[[], None]] = None,
-        on_full_scan: Optional[Callable[[], None]] = None,
-        on_update: Optional[Callable[[], None]] = None,
-        on_quit: Optional[Callable[[], None]] = None
+        on_quick_scan: Callable[[], None] | None = None,
+        on_full_scan: Callable[[], None] | None = None,
+        on_update: Callable[[], None] | None = None,
+        on_quit: Callable[[], None] | None = None,
     ) -> None:
         """
         Set callbacks for menu actions.
@@ -430,9 +424,7 @@ class TrayIndicator:
         logger.debug("Tray action callbacks configured")
 
     def set_window_toggle_callback(
-        self,
-        on_toggle: Callable[[], None],
-        get_visible: Callable[[], bool]
+        self, on_toggle: Callable[[], None], get_visible: Callable[[], bool]
     ) -> None:
         """
         Set the callback for window show/hide toggle.
@@ -569,9 +561,7 @@ class TrayIndicator:
         """
         if not self._available or self._indicator is None:
             return False
-        return (
-            self._indicator.get_status() == AppIndicator.IndicatorStatus.ACTIVE
-        )
+        return self._indicator.get_status() == AppIndicator.IndicatorStatus.ACTIVE
 
     @property
     def is_library_available(self) -> bool:

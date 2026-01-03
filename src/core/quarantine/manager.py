@@ -453,131 +453,20 @@ class QuarantineManager:
         Get entries older than the specified number of days.
 
         Args:
-            days: Number of days threshold (default 30)
+            days: Number of days to look back (default: 30)
 
         Returns:
-            List of QuarantineEntry objects older than the threshold
+            List of QuarantineEntry objects older than the specified days
         """
         return self._database.get_old_entries(days)
 
-    def cleanup_old_entries(self, days: int = 30) -> int:
-        """
-        Remove quarantined files and entries older than the specified days.
-
-        Performs the following operations:
-        1. Gets all old entries
-        2. Deletes each file from quarantine
-        3. Removes database entries
-
-        Args:
-            days: Number of days threshold (default 30)
-
-        Returns:
-            Number of entries removed
-        """
-        old_entries = self._database.get_old_entries(days)
-        removed_count = 0
-
-        for entry in old_entries:
-            # Delete the file
-            file_result = self._file_handler.delete_quarantined_file(entry.quarantine_path)
-
-            # Remove from database regardless of file deletion result
-            # (file may already be deleted)
-            if self._database.remove_entry(entry.id):
-                removed_count += 1
-
-        return removed_count
-
-    def cleanup_old_entries_async(
-        self,
-        days: int,
-        callback: Callable[[int], None],
-    ) -> None:
-        """
-        Remove old quarantine entries asynchronously.
-
-        The operation runs in a background thread and the callback is invoked
-        on the main GTK thread via GLib.idle_add when complete.
-
-        Args:
-            days: Number of days threshold
-            callback: Function to call with count of removed entries when complete
-        """
-
-        def _cleanup_thread():
-            try:
-                count = self.cleanup_old_entries(days)
-            except Exception:
-                count = 0
-            GLib.idle_add(callback, count)
-
-        thread = threading.Thread(target=_cleanup_thread)
-        thread.daemon = True
-        thread.start()
-
-    def verify_entry_integrity(self, entry_id: int) -> tuple[bool, str | None]:
-        """
-        Verify the integrity of a quarantined file.
-
-        Compares the current file hash with the stored hash to detect
-        any modifications to the quarantined file.
-
-        Args:
-            entry_id: The ID of the quarantine entry to verify
-
-        Returns:
-            Tuple of (is_valid, error_message):
-            - (True, None) if file is intact
-            - (False, error_message) if verification failed
-        """
-        entry = self._database.get_entry(entry_id)
-        if entry is None:
-            return (False, f"Quarantine entry not found: {entry_id}")
-
-        return self._file_handler.verify_file_integrity(entry.quarantine_path, entry.file_hash)
-
-    def get_quarantine_info(self) -> dict:
-        """
-        Get comprehensive information about the quarantine system.
-
-        Returns:
-            Dictionary with:
-            - 'directory_path': Quarantine directory path
-            - 'directory_exists': Whether the directory exists
-            - 'entry_count': Number of quarantine entries
-            - 'total_size': Total size of quarantined files in bytes
-            - 'file_count': Number of files in quarantine directory
-            - 'permissions': Directory permissions as octal string
-        """
-        file_info = self._file_handler.get_quarantine_info()
-
-        return {
-            "directory_path": file_info["path"],
-            "directory_exists": file_info["exists"],
-            "entry_count": self._database.get_entry_count(),
-            "total_size": self._database.get_total_size(),
-            "file_count": file_info["file_count"],
-            "permissions": file_info["permissions"],
-        }
-
     def _map_file_status(self, file_status: FileOperationStatus) -> QuarantineStatus:
-        """
-        Map a FileOperationStatus to a QuarantineStatus.
-
-        Args:
-            file_status: The file operation status
-
-        Returns:
-            Corresponding QuarantineStatus
-        """
+        """Map FileOperationStatus to QuarantineStatus."""
         status_map = {
             FileOperationStatus.SUCCESS: QuarantineStatus.SUCCESS,
             FileOperationStatus.FILE_NOT_FOUND: QuarantineStatus.FILE_NOT_FOUND,
             FileOperationStatus.PERMISSION_DENIED: QuarantineStatus.PERMISSION_DENIED,
             FileOperationStatus.DISK_FULL: QuarantineStatus.DISK_FULL,
-            FileOperationStatus.ALREADY_EXISTS: QuarantineStatus.ALREADY_QUARANTINED,
-            FileOperationStatus.INVALID_RESTORE_PATH: QuarantineStatus.INVALID_RESTORE_PATH,
             FileOperationStatus.ERROR: QuarantineStatus.ERROR,
         }
         return status_map.get(file_status, QuarantineStatus.ERROR)

@@ -27,7 +27,10 @@ def ensure_fresh_updater_import():
     _clear_src_modules()
 
     # Import fresh
-    from src.core.updater import FreshclamUpdater as _FU, UpdateResult as _UR, UpdateStatus as _US
+    from src.core.updater import FreshclamUpdater as _FU
+    from src.core.updater import UpdateResult as _UR
+    from src.core.updater import UpdateStatus as _US
+
     FreshclamUpdater = _FU
     UpdateResult = _UR
     UpdateStatus = _US
@@ -331,7 +334,9 @@ class TestUpdaterErrorExtraction:
         """Test error extraction for database locked error."""
         updater = FreshclamUpdater()
 
-        error_msg = updater._extract_error_message("Database is locked by another process", "", exit_code=1)
+        error_msg = updater._extract_error_message(
+            "Database is locked by another process", "", exit_code=1
+        )
 
         assert "locked" in error_msg.lower()
 

@@ -14,9 +14,8 @@ Usage:
     python src/main.py file1.txt folder1 ...    # Scan multiple items
 """
 
-import sys
 import os
-from typing import List
+import sys
 
 
 def _setup_path():
@@ -45,7 +44,7 @@ _setup_path()
 from src.app import ClamUIApp
 
 
-def parse_file_arguments(argv: List[str]) -> List[str]:
+def parse_file_arguments(argv: list[str]) -> list[str]:
     """
     Parse file/folder paths from command line arguments.
 
@@ -94,7 +93,7 @@ def main():
     if file_paths:
         # Pass file paths to the app if the method is available
         # (method is added in subtask-2-2)
-        if hasattr(app, 'set_initial_scan_paths'):
+        if hasattr(app, "set_initial_scan_paths"):
             app.set_initial_scan_paths(file_paths)
 
     return app.run(sys.argv)

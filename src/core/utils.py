@@ -3,6 +3,7 @@
 Utility functions for ClamUI including ClamAV detection and path validation.
 """
 
+import contextlib
 import csv
 import io
 import os
@@ -11,22 +12,16 @@ import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple, Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .scanner import ScanResult
 
 # Re-export threat classification utilities for backwards compatibility
-from .threat_classifier import (
-    ThreatSeverity,
-    categorize_threat,
-    classify_threat_severity,
-    classify_threat_severity_str,
-)
 
 
 # Flatpak detection cache (None = not checked, True/False = result)
-_flatpak_detected: Optional[bool] = None
+_flatpak_detected: bool | None = None
 _flatpak_lock = threading.Lock()
 
 
@@ -47,11 +42,11 @@ def is_flatpak() -> bool:
 
     with _flatpak_lock:
         if _flatpak_detected is None:
-            _flatpak_detected = os.path.exists('/.flatpak-info')
+            _flatpak_detected = os.path.exists("/.flatpak-info")
         return _flatpak_detected
 
 
-def wrap_host_command(command: List[str]) -> List[str]:
+def wrap_host_command(command: list[str]) -> list[str]:
     """
     Wrap a command with flatpak-spawn --host if running inside Flatpak.
 
@@ -78,12 +73,12 @@ def wrap_host_command(command: List[str]) -> List[str]:
         return command
 
     if is_flatpak():
-        return ['flatpak-spawn', '--host'] + list(command)
+        return ["flatpak-spawn", "--host"] + list(command)
 
     return list(command)
 
 
-def which_host_command(binary: str) -> Optional[str]:
+def which_host_command(binary: str) -> str | None:
     """
     Find binary path, checking host system if running in Flatpak.
 
@@ -100,10 +95,10 @@ def which_host_command(binary: str) -> Optional[str]:
     if is_flatpak():
         try:
             result = subprocess.run(
-                ['flatpak-spawn', '--host', 'which', binary],
+                ["flatpak-spawn", "--host", "which", binary],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             if result.returncode == 0:
                 return result.stdout.strip()
@@ -113,7 +108,7 @@ def which_host_command(binary: str) -> Optional[str]:
     return shutil.which(binary)
 
 
-def check_clamav_installed() -> Tuple[bool, Optional[str]]:
+def check_clamav_installed() -> tuple[bool, str | None]:
     """
     Check if ClamAV (clamscan) is installed and accessible.
 
@@ -131,10 +126,7 @@ def check_clamav_installed() -> Tuple[bool, Optional[str]]:
     # Try to get version to verify it's working
     try:
         result = subprocess.run(
-            wrap_host_command(["clamscan", "--version"]),
-            capture_output=True,
-            text=True,
-            timeout=10
+            wrap_host_command(["clamscan", "--version"]), capture_output=True, text=True, timeout=10
         )
 
         if result.returncode == 0:
@@ -153,7 +145,7 @@ def check_clamav_installed() -> Tuple[bool, Optional[str]]:
         return (False, f"Error checking ClamAV: {str(e)}")
 
 
-def check_freshclam_installed() -> Tuple[bool, Optional[str]]:
+def check_freshclam_installed() -> tuple[bool, str | None]:
     """
     Check if freshclam (ClamAV database updater) is installed and accessible.
 
@@ -166,7 +158,10 @@ def check_freshclam_installed() -> Tuple[bool, Optional[str]]:
     freshclam_path = which_host_command("freshclam")
 
     if freshclam_path is None:
-        return (False, "freshclam is not installed. Please install it with: sudo apt install clamav-freshclam")
+        return (
+            False,
+            "freshclam is not installed. Please install it with: sudo apt install clamav-freshclam",
+        )
 
     # Try to get version to verify it's working
     try:
@@ -174,7 +169,7 @@ def check_freshclam_installed() -> Tuple[bool, Optional[str]]:
             wrap_host_command(["freshclam", "--version"]),
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode == 0:
@@ -193,7 +188,7 @@ def check_freshclam_installed() -> Tuple[bool, Optional[str]]:
         return (False, f"Error checking freshclam: {str(e)}")
 
 
-def check_clamdscan_installed() -> Tuple[bool, Optional[str]]:
+def check_clamdscan_installed() -> tuple[bool, str | None]:
     """
     Check if clamdscan (ClamAV daemon scanner) is installed and accessible.
 
@@ -206,7 +201,10 @@ def check_clamdscan_installed() -> Tuple[bool, Optional[str]]:
     clamdscan_path = which_host_command("clamdscan")
 
     if clamdscan_path is None:
-        return (False, "clamdscan is not installed. Please install it with: sudo apt install clamav-daemon")
+        return (
+            False,
+            "clamdscan is not installed. Please install it with: sudo apt install clamav-daemon",
+        )
 
     # Try to get version to verify it's working
     try:
@@ -214,7 +212,7 @@ def check_clamdscan_installed() -> Tuple[bool, Optional[str]]:
             wrap_host_command(["clamdscan", "--version"]),
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode == 0:
@@ -233,7 +231,7 @@ def check_clamdscan_installed() -> Tuple[bool, Optional[str]]:
         return (False, f"Error checking clamdscan: {str(e)}")
 
 
-def get_clamd_socket_path() -> Optional[str]:
+def get_clamd_socket_path() -> str | None:
     """
     Get the clamd socket path by checking common locations.
 
@@ -258,7 +256,7 @@ def get_clamd_socket_path() -> Optional[str]:
     return None
 
 
-def check_clamd_connection(socket_path: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | None]:
     """
     Check if clamd is accessible and responding.
 
@@ -286,12 +284,7 @@ def check_clamd_connection(socket_path: Optional[str] = None) -> Tuple[bool, Opt
     # Try to ping the daemon (--ping requires a timeout argument in seconds)
     try:
         cmd = wrap_host_command(["clamdscan", "--ping", "3"])
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
         if result.returncode == 0 and "PONG" in result.stdout:
             return (True, "PONG")
@@ -308,7 +301,7 @@ def check_clamd_connection(socket_path: Optional[str] = None) -> Tuple[bool, Opt
         return (False, f"Error connecting to clamd: {str(e)}")
 
 
-def check_symlink_safety(path: Path) -> Tuple[bool, Optional[str]]:
+def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
     """
     Check if a path involves symlinks and if they are safe.
 
@@ -357,17 +350,13 @@ def check_symlink_safety(path: Path) -> Tuple[bool, Optional[str]]:
         # check if the symlink escapes to a protected system directory
         user_dirs = [Path("/home"), Path("/tmp"), Path("/var/tmp")]
         is_in_user_dir = any(
-            str(original_parent).startswith(str(user_dir))
-            for user_dir in user_dirs
+            str(original_parent).startswith(str(user_dir)) for user_dir in user_dirs
         )
 
         if is_in_user_dir:
             for protected in protected_dirs:
                 if str(resolved).startswith(str(protected)):
-                    return (
-                        False,
-                        f"Symlink escapes to protected directory: {path} -> {resolved}"
-                    )
+                    return (False, f"Symlink escapes to protected directory: {path} -> {resolved}")
 
         # Symlink is present but appears safe
         return (True, f"Path is a symlink: {path} -> {resolved}")
@@ -376,7 +365,7 @@ def check_symlink_safety(path: Path) -> Tuple[bool, Optional[str]]:
         return (False, f"Error checking symlink: {str(e)}")
 
 
-def validate_path(path: str) -> Tuple[bool, Optional[str]]:
+def validate_path(path: str) -> tuple[bool, str | None]:
     """
     Validate a path for scanning.
 
@@ -433,7 +422,7 @@ def validate_path(path: str) -> Tuple[bool, Optional[str]]:
     return (True, None)
 
 
-def validate_dropped_files(paths: List[Optional[str]]) -> Tuple[List[str], List[str]]:
+def validate_dropped_files(paths: list[str | None]) -> tuple[list[str], list[str]]:
     """
     Validate a batch of paths from dropped files (typically from Gio.File.get_path()).
 
@@ -452,8 +441,8 @@ def validate_dropped_files(paths: List[Optional[str]]) -> Tuple[List[str], List[
         - valid_paths: List of validated, resolved path strings ready for scanning
         - errors: List of error messages for invalid paths
     """
-    valid_paths: List[str] = []
-    errors: List[str] = []
+    valid_paths: list[str] = []
+    errors: list[str] = []
 
     if not paths:
         errors.append("No files were dropped")
@@ -482,7 +471,7 @@ def validate_dropped_files(paths: List[Optional[str]]) -> Tuple[List[str], List[
     return (valid_paths, errors)
 
 
-def get_clamav_path() -> Optional[str]:
+def get_clamav_path() -> str | None:
     """
     Get the full path to the clamscan executable.
 
@@ -492,7 +481,7 @@ def get_clamav_path() -> Optional[str]:
     return which_host_command("clamscan")
 
 
-def get_freshclam_path() -> Optional[str]:
+def get_freshclam_path() -> str | None:
     """
     Get the full path to the freshclam executable.
 
@@ -549,11 +538,11 @@ def get_path_info(path: str) -> dict:
         - 'display_path': formatted path for display
     """
     info = {
-        'type': 'unknown',
-        'exists': False,
-        'readable': False,
-        'size': None,
-        'display_path': format_scan_path(path)
+        "type": "unknown",
+        "exists": False,
+        "readable": False,
+        "size": None,
+        "display_path": format_scan_path(path),
     }
 
     if not path:
@@ -561,21 +550,19 @@ def get_path_info(path: str) -> dict:
 
     try:
         resolved = Path(path).resolve()
-        info['exists'] = resolved.exists()
+        info["exists"] = resolved.exists()
 
-        if not info['exists']:
+        if not info["exists"]:
             return info
 
         if resolved.is_file():
-            info['type'] = 'file'
-            try:
-                info['size'] = resolved.stat().st_size
-            except OSError:
-                pass
+            info["type"] = "file"
+            with contextlib.suppress(OSError):
+                info["size"] = resolved.stat().st_size
         elif resolved.is_dir():
-            info['type'] = 'directory'
+            info["type"] = "directory"
 
-        info['readable'] = os.access(resolved, os.R_OK)
+        info["readable"] = os.access(resolved, os.R_OK)
 
     except (OSError, RuntimeError):
         pass
@@ -583,7 +570,7 @@ def get_path_info(path: str) -> dict:
     return info
 
 
-def format_results_as_text(result: 'ScanResult', timestamp: Optional[str] = None) -> str:
+def format_results_as_text(result: "ScanResult", timestamp: str | None = None) -> str:
     """
     Format scan results as human-readable text for export or clipboard.
 
@@ -723,8 +710,9 @@ def copy_to_clipboard(text: str) -> bool:
     try:
         # Import GTK/GDK for clipboard access
         import gi
-        gi.require_version('Gdk', '4.0')
-        from gi.repository import Gdk, GLib
+
+        gi.require_version("Gdk", "4.0")
+        from gi.repository import Gdk
 
         # Get the default display
         display = Gdk.Display.get_default()
@@ -745,7 +733,7 @@ def copy_to_clipboard(text: str) -> bool:
         return False
 
 
-def format_results_as_csv(result: 'ScanResult', timestamp: Optional[str] = None) -> str:
+def format_results_as_csv(result: "ScanResult", timestamp: str | None = None) -> str:
     """
     Format scan results as CSV for export to spreadsheet applications.
 
@@ -784,12 +772,8 @@ def format_results_as_csv(result: 'ScanResult', timestamp: Optional[str] = None)
     # Write threat details
     if result.threat_details:
         for threat in result.threat_details:
-            writer.writerow([
-                threat.file_path,
-                threat.threat_name,
-                threat.category,
-                threat.severity,
-                timestamp
-            ])
+            writer.writerow(
+                [threat.file_path, threat.threat_name, threat.category, threat.severity, timestamp]
+            )
 
     return output.getvalue()

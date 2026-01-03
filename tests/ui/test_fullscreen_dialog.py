@@ -2,6 +2,7 @@
 """Unit tests for the FullscreenLogDialog component."""
 
 import os
+
 import pytest
 
 # Check if we can use GTK (requires display)
@@ -15,9 +16,9 @@ try:
         os.environ.setdefault("GDK_BACKEND", "broadway")
 
     import gi
-    gi.require_version('Gtk', '4.0')
-    gi.require_version('Adw', '1')
-    from gi.repository import Gtk, Adw
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
 
     # Try to initialize Adw to check if display is available
     # Note: In headless CI, this may fail
@@ -28,8 +29,7 @@ except Exception as e:
 
 # Skip all tests in this module if GTK is not available
 pytestmark = pytest.mark.skipif(
-    not _gtk_available,
-    reason=f"GTK4/Adwaita not available: {_gtk_init_error}"
+    not _gtk_available, reason=f"GTK4/Adwaita not available: {_gtk_init_error}"
 )
 
 
@@ -39,17 +39,20 @@ class TestFullscreenLogDialogImport:
     def test_import_fullscreen_log_dialog(self):
         """Test that FullscreenLogDialog can be imported."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         assert FullscreenLogDialog is not None
 
     def test_import_from_ui_package(self):
         """Test that FullscreenLogDialog is exported from src.ui package."""
         from src.ui import FullscreenLogDialog
+
         assert FullscreenLogDialog is not None
 
     def test_class_has_empty_placeholder(self):
         """Test that FullscreenLogDialog defines EMPTY_PLACEHOLDER constant."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
-        assert hasattr(FullscreenLogDialog, 'EMPTY_PLACEHOLDER')
+
+        assert hasattr(FullscreenLogDialog, "EMPTY_PLACEHOLDER")
         assert isinstance(FullscreenLogDialog.EMPTY_PLACEHOLDER, str)
         assert len(FullscreenLogDialog.EMPTY_PLACEHOLDER) > 0
 
@@ -61,14 +64,12 @@ class TestFullscreenLogDialogCreation:
     def dialog_class(self):
         """Import and return the FullscreenLogDialog class."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         return FullscreenLogDialog
 
     def test_create_with_title_and_content(self, dialog_class):
         """Test creating dialog with title and content."""
-        dialog = dialog_class(
-            title="Test Title",
-            content="Test content here"
-        )
+        dialog = dialog_class(title="Test Title", content="Test content here")
         assert dialog is not None
         assert dialog.get_title() == "Test Title"
 
@@ -105,12 +106,14 @@ class TestFullscreenLogDialogContent:
     def dialog(self):
         """Create a FullscreenLogDialog instance for testing."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         return FullscreenLogDialog(title="Test Dialog", content="Initial content")
 
     @pytest.fixture
     def empty_dialog(self):
         """Create a FullscreenLogDialog instance with empty content."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         return FullscreenLogDialog(title="Empty Dialog", content="")
 
     def test_get_content_returns_initial(self, dialog):
@@ -163,11 +166,13 @@ class TestFullscreenLogDialogBuffer:
     def dialog(self):
         """Create a FullscreenLogDialog instance for testing."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         return FullscreenLogDialog(title="Buffer Test", content="Buffer content")
 
     def test_get_text_buffer_returns_buffer(self, dialog):
         """Test that get_text_buffer returns a Gtk.TextBuffer."""
         from gi.repository import Gtk
+
         buffer = dialog.get_text_buffer()
         assert buffer is not None
         assert isinstance(buffer, Gtk.TextBuffer)
@@ -203,6 +208,7 @@ class TestFullscreenLogDialogPlaceholder:
     def dialog_class(self):
         """Import and return the FullscreenLogDialog class."""
         from src.ui.fullscreen_dialog import FullscreenLogDialog
+
         return FullscreenLogDialog
 
     def test_empty_content_shows_placeholder_in_buffer(self, dialog_class):

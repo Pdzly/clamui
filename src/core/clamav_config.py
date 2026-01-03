@@ -11,7 +11,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 
 @dataclass
@@ -28,8 +28,9 @@ class ClamAVConfigValue:
         comment: Optional inline comment associated with this value
         line_number: The line number where this value appears (1-indexed)
     """
+
     value: str
-    comment: Optional[str] = None
+    comment: str | None = None
     line_number: int = 0
 
 
@@ -55,11 +56,12 @@ class ClamAVConfig:
                 can have multiple values.
         raw_lines: Original lines from the file for accurate reconstruction
     """
-    file_path: Path
-    values: Dict[str, List[ClamAVConfigValue]] = field(default_factory=dict)
-    raw_lines: List[str] = field(default_factory=list)
 
-    def get_value(self, key: str) -> Optional[str]:
+    file_path: Path
+    values: dict[str, list[ClamAVConfigValue]] = field(default_factory=dict)
+    raw_lines: list[str] = field(default_factory=list)
+
+    def get_value(self, key: str) -> str | None:
         """
         Get the first value for a configuration key.
 
@@ -73,7 +75,7 @@ class ClamAVConfig:
             return self.values[key][0].value
         return None
 
-    def get_values(self, key: str) -> List[str]:
+    def get_values(self, key: str) -> list[str]:
         """
         Get all values for a configuration key.
 
@@ -127,7 +129,7 @@ class ClamAVConfig:
         """
         return key in self.values and len(self.values[key]) > 0
 
-    def get_bool(self, key: str) -> Optional[bool]:
+    def get_bool(self, key: str) -> bool | None:
         """
         Get a boolean configuration value.
 
@@ -143,13 +145,13 @@ class ClamAVConfig:
         if value is None:
             return None
         value_lower = value.lower()
-        if value_lower in ('yes', 'true', '1'):
+        if value_lower in ("yes", "true", "1"):
             return True
-        if value_lower in ('no', 'false', '0'):
+        if value_lower in ("no", "false", "0"):
             return False
         return None
 
-    def get_int(self, key: str) -> Optional[int]:
+    def get_int(self, key: str) -> int | None:
         """
         Get an integer configuration value.
 
@@ -188,19 +190,19 @@ class ClamAVConfig:
                     else:
                         # Boolean-style option with no value
                         lines.append(key)
-            return '\n'.join(lines) + '\n' if lines else ''
+            return "\n".join(lines) + "\n" if lines else ""
 
         # Build a map of line numbers to new values
         # Track which values have been written by (key, value_index)
-        line_updates: Dict[int, str] = {}
-        value_indices: Dict[str, int] = {}
+        line_updates: dict[int, str] = {}
+        value_indices: dict[str, int] = {}
 
-        for key, value_list in self.values.items():
+        for key, _value_list in self.values.items():
             value_indices[key] = 0
 
         # First pass: identify which lines need updating based on parsed values
         for key, value_list in self.values.items():
-            for idx, config_value in enumerate(value_list):
+            for _idx, config_value in enumerate(value_list):
                 if config_value.line_number > 0:
                     # This value has a known line number - update that line
                     if config_value.value:
@@ -220,7 +222,7 @@ class ClamAVConfig:
                 output_lines.append(line_updates[line_number])
             else:
                 # Keep original line (strip trailing newline for consistency)
-                output_lines.append(line.rstrip('\n\r'))
+                output_lines.append(line.rstrip("\n\r"))
 
         # Add any new values that don't have line numbers
         new_values = []
@@ -236,17 +238,17 @@ class ClamAVConfig:
         if new_values:
             # Add blank line separator if content exists
             if output_lines and output_lines[-1].strip():
-                output_lines.append('')
+                output_lines.append("")
             output_lines.extend(new_values)
 
         # Join with newlines and ensure trailing newline
-        result = '\n'.join(output_lines)
-        if result and not result.endswith('\n'):
-            result += '\n'
+        result = "\n".join(output_lines)
+        if result and not result.endswith("\n"):
+            result += "\n"
         return result
 
 
-def parse_config(file_path: str) -> Tuple[Optional[ClamAVConfig], Optional[str]]:
+def parse_config(file_path: str) -> tuple[ClamAVConfig | None, str | None]:
     """
     Parse a ClamAV configuration file.
 
@@ -290,18 +292,18 @@ def parse_config(file_path: str) -> Tuple[Optional[ClamAVConfig], Optional[str]]
 
     # Read and parse the file
     try:
-        with open(resolved_path, 'r', encoding='utf-8') as f:
+        with open(resolved_path, encoding="utf-8") as f:
             raw_lines = f.readlines()
     except UnicodeDecodeError:
         # Try with latin-1 encoding as fallback
         try:
-            with open(resolved_path, 'r', encoding='latin-1') as f:
+            with open(resolved_path, encoding="latin-1") as f:
                 raw_lines = f.readlines()
         except Exception as e:
             return (None, f"Error reading configuration file: {str(e)}")
     except PermissionError:
         return (None, f"Permission denied: Cannot read {file_path}")
-    except IOError as e:
+    except OSError as e:
         return (None, f"Error reading configuration file: {str(e)}")
 
     # Create config object
@@ -317,20 +319,20 @@ def parse_config(file_path: str) -> Tuple[Optional[ClamAVConfig], Optional[str]]
             continue
 
         # Skip comment lines
-        if stripped.startswith('#'):
+        if stripped.startswith("#"):
             continue
 
         # Handle inline comments
         comment = None
         content = stripped
-        comment_pos = stripped.find('#')
+        comment_pos = stripped.find("#")
         if comment_pos > 0:
             # Check if # is not inside a quoted string (basic check)
             before_hash = stripped[:comment_pos]
             # Simple heuristic: if quotes are balanced before #, it's a comment
             if before_hash.count('"') % 2 == 0 and before_hash.count("'") % 2 == 0:
                 content = stripped[:comment_pos].strip()
-                comment = stripped[comment_pos + 1:].strip()
+                comment = stripped[comment_pos + 1 :].strip()
 
         # Parse key-value pair
         # ClamAV format: Key Value (separated by first space)
@@ -346,11 +348,7 @@ def parse_config(file_path: str) -> Tuple[Optional[ClamAVConfig], Optional[str]]
         value = parts[1] if len(parts) > 1 else ""
 
         # Add value to config (supports multi-value options)
-        config_value = ClamAVConfigValue(
-            value=value,
-            comment=comment,
-            line_number=line_number
-        )
+        config_value = ClamAVConfigValue(value=value, comment=comment, line_number=line_number)
 
         if key not in config.values:
             config.values[key] = []
@@ -363,257 +361,71 @@ def parse_config(file_path: str) -> Tuple[Optional[ClamAVConfig], Optional[str]]
 # Maps option names to their expected types and validation constraints
 CONFIG_OPTION_TYPES = {
     # Path options (directory or file paths)
-    'DatabaseDirectory': {'type': 'path', 'must_exist': False},
-    'UpdateLogFile': {'type': 'path', 'must_exist': False},
-    'LogFile': {'type': 'path', 'must_exist': False},
-    'NotifyClamd': {'type': 'path', 'must_exist': False},
-    'PidFile': {'type': 'path', 'must_exist': False},
-    'LocalSocket': {'type': 'path', 'must_exist': False},
-    'TemporaryDirectory': {'type': 'path', 'must_exist': False},
-
+    "DatabaseDirectory": {"type": "path", "must_exist": False},
+    "UpdateLogFile": {"type": "path", "must_exist": False},
+    "LogFile": {"type": "path", "must_exist": False},
+    "NotifyClamd": {"type": "path", "must_exist": False},
+    "PidFile": {"type": "path", "must_exist": False},
+    "LocalSocket": {"type": "path", "must_exist": False},
+    "TemporaryDirectory": {"type": "path", "must_exist": False},
     # Boolean options
-    'LogVerbose': {'type': 'boolean'},
-    'LogSyslog': {'type': 'boolean'},
-    'LogTime': {'type': 'boolean'},
-    'LogRotate': {'type': 'boolean'},
-    'Foreground': {'type': 'boolean'},
-    'ScanArchive': {'type': 'boolean'},
-    'ScanPDF': {'type': 'boolean'},
-    'ScanHTML': {'type': 'boolean'},
-    'ScanMail': {'type': 'boolean'},
-    'ScanOLE2': {'type': 'boolean'},
-    'ScanPE': {'type': 'boolean'},
-    'ScanELF': {'type': 'boolean'},
-    'ScanSWF': {'type': 'boolean'},
-    'DetectPUA': {'type': 'boolean'},
-    'AlertBrokenExecutables': {'type': 'boolean'},
-    'FollowDirectorySymlinks': {'type': 'boolean'},
-    'FollowFileSymlinks': {'type': 'boolean'},
-    'CrossFilesystems': {'type': 'boolean'},
-
+    "LogVerbose": {"type": "boolean"},
+    "LogSyslog": {"type": "boolean"},
+    "LogTime": {"type": "boolean"},
+    "LogRotate": {"type": "boolean"},
+    "Foreground": {"type": "boolean"},
+    "ScanArchive": {"type": "boolean"},
+    "ScanPDF": {"type": "boolean"},
+    "ScanHTML": {"type": "boolean"},
+    "ScanMail": {"type": "boolean"},
+    "ScanOLE2": {"type": "boolean"},
+    "ScanPE": {"type": "boolean"},
+    "ScanELF": {"type": "boolean"},
+    "ScanSWF": {"type": "boolean"},
+    "DetectPUA": {"type": "boolean"},
+    "AlertBrokenExecutables": {"type": "boolean"},
+    "FollowDirectorySymlinks": {"type": "boolean"},
+    "FollowFileSymlinks": {"type": "boolean"},
+    "CrossFilesystems": {"type": "boolean"},
     # Integer options with ranges
-    'Checks': {'type': 'integer', 'min': 0, 'max': 50},
-    'HTTPProxyPort': {'type': 'integer', 'min': 1, 'max': 65535},
-    'MaxRecursion': {'type': 'integer', 'min': 0, 'max': 100},
-    'MaxFiles': {'type': 'integer', 'min': 0, 'max': 100000},
-    'MaxThreads': {'type': 'integer', 'min': 1, 'max': 256},
-    'MaxDirectoryRecursion': {'type': 'integer', 'min': 0, 'max': 100},
+    "Checks": {"type": "integer", "min": 0, "max": 50},
+    "HTTPProxyPort": {"type": "integer", "min": 1, "max": 65535},
+    "MaxRecursion": {"type": "integer", "min": 0, "max": 100},
+    "MaxFiles": {"type": "integer", "min": 0, "max": 100000},
+    "MaxThreads": {"type": "integer", "min": 1, "max": 256},
+    "MaxDirectoryRecursion": {"type": "integer", "min": 0, "max": 100},
     # Size options that accept integer or size suffix like M, K
-    'MaxEmbeddedPE': {'type': 'size'},
-    'MaxHTMLNormalize': {'type': 'size'},
-    'MaxHTMLNoTags': {'type': 'size'},
-    'MaxScriptNormalize': {'type': 'size'},
-    'MaxZipTypeRcg': {'type': 'size'},
+    "MaxEmbeddedPE": {"type": "size"},
+    "MaxHTMLNormalize": {"type": "size"},
+    "MaxHTMLNoTags": {"type": "size"},
+    "MaxScriptNormalize": {"type": "size"},
+    "MaxZipTypeRcg": {"type": "size"},
     # Pure integer options
-    'MaxPartitions': {'type': 'integer', 'min': 0},
-    'MaxIconsPE': {'type': 'integer', 'min': 0},
-    'TCPSocket': {'type': 'integer', 'min': 1, 'max': 65535},
-    'IdleTimeout': {'type': 'integer', 'min': 0},
-    'ReadTimeout': {'type': 'integer', 'min': 0},
-    'CommandReadTimeout': {'type': 'integer', 'min': 0},
-    'SendBufTimeout': {'type': 'integer', 'min': 0},
-
+    "MaxPartitions": {"type": "integer", "min": 0},
+    "MaxIconsPE": {"type": "integer", "min": 0},
+    "TCPSocket": {"type": "integer", "min": 1, "max": 65535},
+    "IdleTimeout": {"type": "integer", "min": 0},
+    "ReadTimeout": {"type": "integer", "min": 0},
+    "CommandReadTimeout": {"type": "integer", "min": 0},
+    "SendBufTimeout": {"type": "integer", "min": 0},
     # Size options (accept integer or size suffix like M, K)
-    'MaxScanSize': {'type': 'size'},
-    'MaxFileSize': {'type': 'size'},
-    'StreamMaxLength': {'type': 'size'},
-    'MaxScanTime': {'type': 'integer', 'min': 0},
-
+    "MaxScanSize": {"type": "size"},
+    "MaxFileSize": {"type": "size"},
+    "StreamMaxLength": {"type": "size"},
+    "MaxScanTime": {"type": "integer", "min": 0},
     # String options (no special validation, just non-empty)
-    'HTTPProxyServer': {'type': 'string'},
-    'HTTPProxyUsername': {'type': 'string'},
-    'HTTPProxyPassword': {'type': 'string'},
-    'DatabaseMirror': {'type': 'string'},
-    'DatabaseOwner': {'type': 'string'},
-    'TCPAddr': {'type': 'string'},
-    'User': {'type': 'string'},
-    'LocalSocketGroup': {'type': 'string'},
-    'LocalSocketMode': {'type': 'string'},
-
-    # On-Access scanning options (clamonacc)
-    # Path options
-    'OnAccessIncludePath': {'type': 'path', 'must_exist': False},
-    'OnAccessExcludePath': {'type': 'path', 'must_exist': False},
-    'OnAccessMountPath': {'type': 'path', 'must_exist': False},
-
-    # Boolean options
-    'OnAccessPrevention': {'type': 'boolean'},
-    'OnAccessExtraScanning': {'type': 'boolean'},
-    'OnAccessDenyOnError': {'type': 'boolean'},
-    'OnAccessDisableDDD': {'type': 'boolean'},
-    'OnAccessExcludeRootUID': {'type': 'boolean'},
-
-    # Integer options
-    'OnAccessMaxThreads': {'type': 'integer', 'min': 1, 'max': 256},
-    'OnAccessCurlTimeout': {'type': 'integer', 'min': 0, 'max': 60000},
-    'OnAccessRetryAttempts': {'type': 'integer', 'min': 0, 'max': 10},
-    'OnAccessExcludeUID': {'type': 'integer', 'min': 0},
-
-    # Size options
-    'OnAccessMaxFileSize': {'type': 'size'},
-
-    # String options
-    'OnAccessExcludeUname': {'type': 'string'},
+    "HTTPProxyServer": {"type": "string"},
+    "HTTPProxyUsername": {"type": "string"},
+    "HTTPProxyPassword": {"type": "string"},
+    "DatabaseMirror": {"type": "string"},
+    "DatabaseOwner": {"type": "string"},
+    "User": {"type": "string"},
 }
 
 
-def validate_path(value: str) -> Tuple[bool, Optional[str]]:
+def validate_option(key: str, value: str) -> Tuple[bool, Optional[str]]:
     """
-    Validate a path configuration value.
-
-    Checks that the path is well-formed. Does not require the path to exist
-    since config files may reference paths that will be created.
-
-    Args:
-        value: The path value to validate
-
-    Returns:
-        Tuple of (is_valid, error_message):
-        - (True, None) if path is valid
-        - (False, error_message) if path is invalid
-    """
-    if not value or not value.strip():
-        return (False, "Path cannot be empty")
-
-    try:
-        # Check if it's a valid path format
-        path = Path(value)
-
-        # Check for obviously invalid paths
-        if not path.parts:
-            return (False, "Invalid path format")
-
-        # Path should be absolute for system configs
-        if not path.is_absolute():
-            return (False, "Path must be absolute")
-
-        return (True, None)
-    except (OSError, RuntimeError, ValueError) as e:
-        return (False, f"Invalid path format: {str(e)}")
-
-
-def validate_integer(value: str, min_val: Optional[int] = None,
-                     max_val: Optional[int] = None) -> Tuple[bool, Optional[str]]:
-    """
-    Validate an integer configuration value.
-
-    Args:
-        value: The integer value to validate (as string)
-        min_val: Optional minimum allowed value (inclusive)
-        max_val: Optional maximum allowed value (inclusive)
-
-    Returns:
-        Tuple of (is_valid, error_message):
-        - (True, None) if integer is valid
-        - (False, error_message) if integer is invalid
-    """
-    if not value or not value.strip():
-        return (False, "Integer value cannot be empty")
-
-    try:
-        int_val = int(value.strip())
-    except ValueError:
-        return (False, f"Invalid integer value: {value}")
-
-    if min_val is not None and int_val < min_val:
-        return (False, f"Value must be at least {min_val}")
-
-    if max_val is not None and int_val > max_val:
-        return (False, f"Value must be at most {max_val}")
-
-    return (True, None)
-
-
-def validate_boolean(value: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate a boolean configuration value.
-
-    ClamAV accepts 'yes', 'no', 'true', 'false', '1', '0' as boolean values.
-
-    Args:
-        value: The boolean value to validate (as string)
-
-    Returns:
-        Tuple of (is_valid, error_message):
-        - (True, None) if boolean is valid
-        - (False, error_message) if boolean is invalid
-    """
-    if not value or not value.strip():
-        return (False, "Boolean value cannot be empty")
-
-    value_lower = value.strip().lower()
-    valid_values = ('yes', 'no', 'true', 'false', '1', '0')
-
-    if value_lower not in valid_values:
-        return (False, f"Invalid boolean value: {value}. Use 'yes' or 'no'")
-
-    return (True, None)
-
-
-def validate_size(value: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate a size configuration value.
-
-    ClamAV accepts sizes as integers with optional suffix (K, M, G).
-
-    Args:
-        value: The size value to validate (e.g., "25M", "1024K", "100")
-
-    Returns:
-        Tuple of (is_valid, error_message):
-        - (True, None) if size is valid
-        - (False, error_message) if size is invalid
-    """
-    if not value or not value.strip():
-        return (False, "Size value cannot be empty")
-
-    value = value.strip().upper()
-
-    # Check for size suffix
-    suffix = ''
-    num_part = value
-
-    if value.endswith(('K', 'M', 'G')):
-        suffix = value[-1]
-        num_part = value[:-1]
-
-    try:
-        num_val = int(num_part)
-        if num_val < 0:
-            return (False, "Size cannot be negative")
-        return (True, None)
-    except ValueError:
-        return (False, f"Invalid size value: {value}. Use integer or integer with K/M/G suffix")
-
-
-def validate_string(value: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate a string configuration value.
-
-    String values just need to be non-empty (after stripping whitespace).
-
-    Args:
-        value: The string value to validate
-
-    Returns:
-        Tuple of (is_valid, error_message):
-        - (True, None) if string is valid
-        - (False, error_message) if string is invalid
-    """
-    # Empty strings are allowed for some options, so we just do basic validation
-    # Allow any non-null value
-    if value is None:
-        return (False, "Value cannot be None")
-
-    return (True, None)
-
-
-def validate_config_value(key: str, value: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate a configuration value based on its key.
-
-    Looks up the expected type for the key and applies appropriate validation.
-    Unknown keys are accepted without validation.
+    Validate a configuration option value.
 
     Args:
         key: The configuration option name
@@ -621,197 +433,159 @@ def validate_config_value(key: str, value: str) -> Tuple[bool, Optional[str]]:
 
     Returns:
         Tuple of (is_valid, error_message):
-        - (True, None) if value is valid for the key
-        - (False, error_message) if value is invalid
+        - (True, None) if valid
+        - (False, error_message) if invalid
     """
-    # Get option definition
-    option_def = CONFIG_OPTION_TYPES.get(key)
-
-    if option_def is None:
-        # Unknown option - accept any value
+    if key not in CONFIG_OPTION_TYPES:
+        # Unknown option - allow it (ClamAV may support options we don't know about)
         return (True, None)
 
-    opt_type = option_def.get('type', 'string')
+    option_spec = CONFIG_OPTION_TYPES[key]
+    option_type = option_spec.get("type", "string")
 
-    if opt_type == 'path':
-        return validate_path(value)
-    elif opt_type == 'integer':
-        min_val = option_def.get('min')
-        max_val = option_def.get('max')
-        return validate_integer(value, min_val, max_val)
-    elif opt_type == 'boolean':
-        return validate_boolean(value)
-    elif opt_type == 'size':
-        return validate_size(value)
-    elif opt_type == 'string':
-        return validate_string(value)
-    else:
-        # Unknown type - accept any value
+    if option_type == "path":
+        if not value:
+            return (False, f"{key}: path cannot be empty")
+        must_exist = option_spec.get("must_exist", False)
+        path = Path(value).expanduser()
+        if must_exist and not path.exists():
+            return (False, f"{key}: path does not exist: {value}")
         return (True, None)
 
+    elif option_type == "boolean":
+        if value.lower() not in ("yes", "no", "true", "false", "1", "0"):
+            return (False, f"{key}: invalid boolean value: {value}")
+        return (True, None)
 
-def validate_config(config: ClamAVConfig) -> Tuple[bool, List[str]]:
+    elif option_type == "integer":
+        try:
+            int_val = int(value)
+        except ValueError:
+            return (False, f"{key}: not a valid integer: {value}")
+        # Check range constraints
+        if "min" in option_spec and int_val < option_spec["min"]:
+            return (False, f"{key}: value {int_val} is below minimum {option_spec['min']}")
+        if "max" in option_spec and int_val > option_spec["max"]:
+            return (False, f"{key}: value {int_val} exceeds maximum {option_spec['max']}")
+        return (True, None)
+
+    elif option_type == "size":
+        # Parse size with optional suffix (M, K, G, etc.)
+        if not value:
+            return (False, f"{key}: size cannot be empty")
+        # Basic validation - just check it starts with a number
+        if not value[0].isdigit():
+            return (False, f"{key}: size must start with a number: {value}")
+        return (True, None)
+
+    elif option_type == "string":
+        if not value:
+            return (False, f"{key}: string value cannot be empty")
+        return (True, None)
+
+    return (True, None)
+
+
+def write_config(config: ClamAVConfig) -> Tuple[bool, Optional[str]]:
     """
-    Validate all values in a ClamAV configuration.
-
-    Args:
-        config: The ClamAVConfig object to validate
-
-    Returns:
-        Tuple of (is_valid, errors):
-        - (True, []) if all values are valid
-        - (False, [error_messages]) if any values are invalid
-    """
-    errors = []
-
-    for key, value_list in config.values.items():
-        for config_value in value_list:
-            is_valid, error = validate_config_value(key, config_value.value)
-            if not is_valid:
-                errors.append(f"{key}: {error}")
-
-    return (len(errors) == 0, errors)
-
-
-def write_config_with_elevation(config: ClamAVConfig) -> Tuple[bool, Optional[str]]:
-    """
-    Write configuration file with root permissions via pkexec.
-
-    ClamAV configuration files are typically located in /etc/clamav/ and
-    require root permissions to modify. This function writes the config
-    to a temporary file first, then uses pkexec to copy it to the target
-    location with elevated privileges.
+    Write a configuration object back to its file.
 
     Args:
         config: The ClamAVConfig object to write
 
     Returns:
-        Tuple of (success, error):
+        Tuple of (success, error_message):
         - (True, None) on success
         - (False, error_message) on failure
     """
-    if config.file_path is None:
-        return (False, "No file path specified in configuration")
+    if not config.file_path:
+        return (False, "No file path specified in config object")
 
-    # Validate the configuration before writing
-    is_valid, errors = validate_config(config)
-    if not is_valid:
-        return (False, f"Configuration validation failed: {'; '.join(errors)}")
-
-    # Generate the config content
     try:
-        config_content = config.to_string()
-    except Exception as e:
-        return (False, f"Failed to serialize configuration: {str(e)}")
+        # Create a backup of the original file
+        backup_path = Path(str(config.file_path) + ".bak")
+        if config.file_path.exists():
+            shutil.copy2(config.file_path, backup_path)
 
-    # Write to a temporary file first
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            delete=False,
-            suffix='.conf',
-            encoding='utf-8'
-        ) as f:
-            f.write(config_content)
-            temp_path = f.name
+        # Write the updated config
+        content = config.to_string()
+        with open(config.file_path, "w", encoding="utf-8") as f:
+            f.write(content)
 
-        # Use pkexec to copy the temp file to the target location
-        try:
-            result = subprocess.run(
-                ['pkexec', 'cp', temp_path, str(config.file_path)],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-
-            if result.returncode == 0:
-                return (True, None)
-
-            # Handle pkexec-specific errors
-            stderr = result.stderr.strip() if result.stderr else ""
-            if result.returncode == 126:
-                # User dismissed the authentication dialog
-                return (False, "Authentication cancelled")
-            elif result.returncode == 127:
-                return (False, "pkexec not found - cannot elevate privileges")
-            else:
-                return (False, stderr or "Permission denied")
-
-        except subprocess.TimeoutExpired:
-            return (False, "Operation timed out waiting for authentication")
-        except FileNotFoundError:
-            return (False, "pkexec not found - cannot elevate privileges")
-        except PermissionError as e:
-            return (False, f"Permission denied: {str(e)}")
-        except Exception as e:
-            return (False, f"Failed to write configuration: {str(e)}")
-
+        return (True, None)
+    except PermissionError:
+        return (False, f"Permission denied: Cannot write to {config.file_path}")
     except IOError as e:
-        return (False, f"Failed to create temporary file: {str(e)}")
+        return (False, f"Error writing configuration file: {str(e)}")
     except Exception as e:
-        return (False, f"Unexpected error: {str(e)}")
-    finally:
-        # Clean up the temporary file
-        if temp_path:
-            try:
-                Path(temp_path).unlink(missing_ok=True)
-            except (OSError, PermissionError):
-                pass  # Best effort cleanup
+        return (False, f"Unexpected error writing configuration: {str(e)}")
 
 
-def backup_config(config_path: str) -> Tuple[bool, str]:
+def validate_config_file(file_path: str) -> Tuple[bool, list[str]]:
     """
-    Create a timestamped backup of a configuration file.
+    Validate all options in a configuration file.
 
-    Creates a backup copy of the specified configuration file with a
-    timestamp in the filename. The backup is created in the same directory
-    as the original file.
-
-    Backup filename format: {original_name}.backup.{YYYYMMDD_HHMMSS}
-    Example: freshclam.conf.backup.20251230_143256
+    Checks that all configuration values are valid according to their type
+    and constraints.
 
     Args:
-        config_path: Path to the configuration file to back up
+        file_path: Path to the configuration file
 
     Returns:
-        Tuple of (success, result):
-        - (True, backup_path) on success, where backup_path is the path
-          to the created backup file
-        - (False, error_message) on failure
+        Tuple of (is_valid, list_of_errors):
+        - (True, []) if all options are valid
+        - (False, [error1, error2, ...]) if there are validation errors
     """
-    # Validate input
-    if not config_path or not config_path.strip():
-        return (False, "No configuration file path specified")
+    config, error = parse_config(file_path)
+    if error:
+        return (False, [error])
 
-    try:
-        resolved_path = Path(config_path).resolve()
-    except (OSError, RuntimeError) as e:
-        return (False, f"Invalid file path: {str(e)}")
+    errors = []
+    for key, value_list in config.values.items():
+        for config_value in value_list:
+            is_valid, error_msg = validate_option(key, config_value.value)
+            if not is_valid:
+                errors.append(error_msg)
 
-    # Check if source file exists
-    if not resolved_path.exists():
-        return (False, f"Configuration file not found: {config_path}")
+    return (len(errors) == 0, errors)
 
-    # Check if it's a file (not a directory)
-    if not resolved_path.is_file():
-        return (False, f"Path is not a file: {config_path}")
 
-    # Check if source file is readable
-    if not os.access(resolved_path, os.R_OK):
-        return (False, f"Permission denied: Cannot read {config_path}")
+def get_config_summary(config: ClamAVConfig) -> str:
+    """
+    Get a human-readable summary of the configuration.
 
-    # Generate timestamped backup filename
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_path = f"{config_path}.backup.{timestamp}"
+    Args:
+        config: The ClamAVConfig object
 
-    try:
-        # Use shutil.copy2 to preserve metadata (permissions, timestamps)
-        shutil.copy2(resolved_path, backup_path)
-        return (True, backup_path)
-    except PermissionError:
-        return (False, f"Permission denied: Cannot create backup at {backup_path}")
-    except OSError as e:
-        return (False, f"Failed to create backup: {str(e)}")
-    except Exception as e:
-        return (False, f"Unexpected error creating backup: {str(e)}")
+    Returns:
+        A formatted string summary of the configuration
+    """
+    if not config.values:
+        return "No configuration options defined"
+
+    lines = []
+    lines.append(f"Configuration file: {config.file_path}")
+    lines.append(f"Total options: {len(config.values)}")
+    lines.append("")
+
+    # Group by type
+    by_type: Dict[str, List[Tuple[str, List[str]]]] = {}
+    for key, value_list in sorted(config.values.items()):
+        option_type = CONFIG_OPTION_TYPES.get(key, {}).get("type", "unknown")
+        if option_type not in by_type:
+            by_type[option_type] = []
+        values = [v.value for v in value_list]
+        by_type[option_type].append((key, values))
+
+    for option_type in sorted(by_type.keys()):
+        lines.append(f"{option_type.upper()} Options:")
+        for key, values in by_type[option_type]:
+            if len(values) == 1:
+                lines.append(f"  {key}: {values[0]}")
+            else:
+                lines.append(f"  {key}:")
+                for value in values:
+                    lines.append(f"    - {value}")
+        lines.append("")
+
+    return "\n".join(lines)

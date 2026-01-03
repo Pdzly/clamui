@@ -4,6 +4,7 @@ Profile manager module for ClamUI providing scan profile lifecycle management.
 Centralizes all profile operations including CRUD, validation, and import/export.
 """
 
+import contextlib
 import functools
 import json
 import os
@@ -12,11 +13,10 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .models import ScanProfile
 from .profile_storage import ProfileStorage
-
 
 # Validation constants
 MAX_PROFILE_NAME_LENGTH = 50
@@ -161,7 +161,7 @@ class ProfileManager:
 
     @staticmethod
     @functools.lru_cache(maxsize=128)
-    def _cached_expanduser(path_str: str) -> Optional[Path]:
+    def _cached_expanduser(path_str: str) -> Path | None:
         """
         Cache-enabled path expansion for home directory.
 
@@ -175,16 +175,13 @@ class ProfileManager:
             Expanded Path object, or None if expansion fails
         """
         try:
-            # Validate for null bytes (security/injection prevention)
-            if "\x00" in path_str:
-                return None
             return Path(path_str).expanduser()
         except (OSError, RuntimeError, ValueError):
             return None
 
     @staticmethod
     @functools.lru_cache(maxsize=128)
-    def _cached_resolve(path_str: str) -> Optional[Path]:
+    def _cached_resolve(path_str: str) -> Path | None:
         """
         Cache-enabled path resolution to absolute canonical path.
 
@@ -281,9 +278,7 @@ class ProfileManager:
             },
         }
 
-    def _validate_name(
-        self, name: str, exclude_id: Optional[str] = None
-    ) -> None:
+    def _validate_name(self, name: str, exclude_id: str | None = None) -> None:
         """
         Validate a profile name.
 
@@ -306,15 +301,13 @@ class ProfileManager:
             raise ValueError("Profile name cannot be empty")
 
         if len(stripped_name) > MAX_PROFILE_NAME_LENGTH:
-            raise ValueError(
-                f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters"
-            )
+            raise ValueError(f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters")
 
         # Check for duplicate name
         if self.name_exists(stripped_name, exclude_id):
             raise ValueError(f"Profile name '{stripped_name}' already exists")
 
-    def _validate_path_format(self, path: str) -> tuple[bool, Optional[str]]:
+    def _validate_path_format(self, path: str) -> tuple[bool, str | None]:
         """
         Validate a path format.
 
@@ -390,9 +383,7 @@ class ProfileManager:
 
         return warnings
 
-    def _validate_exclusions(
-        self, exclusions: dict[str, Any], targets: list[str]
-    ) -> list[str]:
+    def _validate_exclusions(self, exclusions: dict[str, Any], targets: list[str]) -> list[str]:
         """
         Validate exclusion settings.
 
@@ -428,9 +419,7 @@ class ProfileManager:
 
             for i, path in enumerate(paths):
                 if not isinstance(path, str):
-                    raise ValueError(
-                        f"Exclusion path at index {i} must be a string"
-                    )
+                    raise ValueError(f"Exclusion path at index {i} must be a string")
 
                 is_valid, error = self._validate_path_format(path)
                 if not is_valid:
@@ -449,9 +438,7 @@ class ProfileManager:
 
             for i, pattern in enumerate(patterns):
                 if not isinstance(pattern, str):
-                    raise ValueError(
-                        f"Exclusion pattern at index {i} must be a string"
-                    )
+                    raise ValueError(f"Exclusion pattern at index {i} must be a string")
 
                 if not pattern.strip():
                     raise ValueError("Exclusion pattern cannot be empty")
@@ -513,17 +500,12 @@ class ProfileManager:
                         break
 
                 # Check if target is the same as or is a child of exclusion
-                if not (
-                    target_path == excl_path
-                    or self._is_subpath(target_path, excl_path)
-                ):
+                if not (target_path == excl_path or self._is_subpath(target_path, excl_path)):
                     all_excluded = False
                     break
 
             if all_excluded and len(targets) > 0:
-                warnings.append(
-                    f"Exclusion '{exclusion}' would exclude all scan targets"
-                )
+                warnings.append(f"Exclusion '{exclusion}' would exclude all scan targets")
 
     def _is_subpath(self, path: Path, parent: Path) -> bool:
         """
@@ -547,7 +529,7 @@ class ProfileManager:
         name: str,
         targets: list[str],
         exclusions: dict[str, Any],
-        exclude_id: Optional[str] = None,
+        exclude_id: str | None = None,
     ) -> list[str]:
         """
         Validate all profile fields.
@@ -585,7 +567,7 @@ class ProfileManager:
         targets: list[str],
         exclusions: dict[str, Any],
         description: str = "",
-        options: Optional[dict[str, Any]] = None,
+        options: dict[str, Any] | None = None,
         is_default: bool = False,
     ) -> ScanProfile:
         """
@@ -628,7 +610,7 @@ class ProfileManager:
         self._save()
         return profile
 
-    def get_profile(self, profile_id: str) -> Optional[ScanProfile]:
+    def get_profile(self, profile_id: str) -> ScanProfile | None:
         """
         Retrieve a profile by ID.
 
@@ -641,7 +623,7 @@ class ProfileManager:
         with self._lock:
             return self._profiles.get(profile_id)
 
-    def get_profile_by_name(self, name: str) -> Optional[ScanProfile]:
+    def get_profile_by_name(self, name: str) -> ScanProfile | None:
         """
         Retrieve a profile by name.
 
@@ -657,7 +639,7 @@ class ProfileManager:
                     return profile
         return None
 
-    def update_profile(self, profile_id: str, **updates: Any) -> Optional[ScanProfile]:
+    def update_profile(self, profile_id: str, **updates: Any) -> ScanProfile | None:
         """
         Update an existing profile.
 
@@ -684,9 +666,7 @@ class ProfileManager:
 
         # Validate updated fields (raises ValueError if invalid)
         # Pass profile_id to exclude_id so name uniqueness check excludes this profile
-        self._validate_profile(
-            new_name, new_targets, new_exclusions, exclude_id=profile_id
-        )
+        self._validate_profile(new_name, new_targets, new_exclusions, exclude_id=profile_id)
 
         with self._lock:
             profile = self._profiles.get(profile_id)
@@ -773,7 +753,7 @@ class ProfileManager:
         with self._lock:
             return profile_id in self._profiles
 
-    def name_exists(self, name: str, exclude_id: Optional[str] = None) -> bool:
+    def name_exists(self, name: str, exclude_id: str | None = None) -> bool:
         """
         Check if a profile name already exists.
 
@@ -841,10 +821,8 @@ class ProfileManager:
             Path(temp_path).replace(export_path)
         except Exception:
             # Clean up temp file on failure
-            try:
+            with contextlib.suppress(OSError):
                 Path(temp_path).unlink(missing_ok=True)
-            except OSError:
-                pass
             raise
 
     def import_profile(self, import_path: Path) -> ScanProfile:
@@ -873,10 +851,10 @@ class ProfileManager:
 
         # Read and parse the JSON file
         try:
-            with open(import_path, "r", encoding="utf-8") as f:
+            with open(import_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON format: {e}")
+            raise ValueError(f"Invalid JSON format: {e}") from e
 
         # Validate export format
         if not isinstance(data, dict):
@@ -959,6 +937,4 @@ class ProfileManager:
 
             # Safety limit to prevent infinite loop
             if counter > 1000:
-                raise ValueError(
-                    f"Could not generate unique name for '{name}'"
-                )
+                raise ValueError(f"Could not generate unique name for '{name}'")

@@ -4,14 +4,14 @@ Daemon scanner module for ClamUI using clamdscan for clamd communication.
 Provides faster scanning by leveraging the ClamAV daemon's in-memory database.
 """
 
+import contextlib
 import fnmatch
 import os
-import re
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from gi.repository import GLib
 
@@ -23,11 +23,11 @@ from .threat_classifier import (
     classify_threat_severity_str,
 )
 from .utils import (
-    check_clamdscan_installed,
     check_clamd_connection,
+    check_clamdscan_installed,
     validate_path,
-    wrap_host_command,
     which_host_command,
+    wrap_host_command,
 )
 
 
@@ -40,9 +40,7 @@ class DaemonScanner:
     """
 
     def __init__(
-        self,
-        log_manager: Optional[LogManager] = None,
-        settings_manager: Optional[SettingsManager] = None
+        self, log_manager: LogManager | None = None, settings_manager: SettingsManager | None = None
     ):
         """
         Initialize the daemon scanner.
@@ -52,12 +50,12 @@ class DaemonScanner:
             settings_manager: Optional SettingsManager instance for reading
                               exclusion patterns and daemon settings.
         """
-        self._current_process: Optional[subprocess.Popen] = None
+        self._current_process: subprocess.Popen | None = None
         self._scan_cancelled = False
         self._log_manager = log_manager if log_manager else LogManager()
         self._settings_manager = settings_manager
 
-    def check_available(self) -> tuple[bool, Optional[str]]:
+    def check_available(self) -> tuple[bool, str | None]:
         """
         Check if daemon scanning is available.
 
@@ -79,10 +77,7 @@ class DaemonScanner:
         return (True, "clamd is available")
 
     def scan_sync(
-        self,
-        path: str,
-        recursive: bool = True,
-        profile_exclusions: dict | None = None
+        self, path: str, recursive: bool = True, profile_exclusions: dict | None = None
     ) -> ScanResult:
         """
         Execute a synchronous scan using clamdscan.
@@ -114,7 +109,7 @@ class DaemonScanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=error,
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -134,7 +129,7 @@ class DaemonScanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=error_msg,
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -149,10 +144,7 @@ class DaemonScanner:
         try:
             self._scan_cancelled = False
             self._current_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
 
             try:
@@ -181,7 +173,7 @@ class DaemonScanner:
                     scanned_dirs=dir_count,
                     infected_count=0,
                     error_message="Scan cancelled by user",
-                    threat_details=[]
+                    threat_details=[],
                 )
                 duration = time.monotonic() - start_time
                 self._save_scan_log(result, duration)
@@ -205,7 +197,7 @@ class DaemonScanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message="clamdscan executable not found",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -222,7 +214,7 @@ class DaemonScanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=f"Permission denied: {e}",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -239,7 +231,7 @@ class DaemonScanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=f"Scan failed: {e}",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -250,7 +242,7 @@ class DaemonScanner:
         path: str,
         callback: Callable[[ScanResult], None],
         recursive: bool = True,
-        profile_exclusions: dict | None = None
+        profile_exclusions: dict | None = None,
     ) -> None:
         """
         Execute an asynchronous scan using clamdscan.
@@ -264,6 +256,7 @@ class DaemonScanner:
             recursive: Whether to scan directories recursively
             profile_exclusions: Optional exclusions from a scan profile.
         """
+
         def scan_thread():
             result = self.scan_sync(path, recursive, profile_exclusions)
             GLib.idle_add(callback, result)
@@ -280,16 +273,11 @@ class DaemonScanner:
         """
         self._scan_cancelled = True
         if self._current_process is not None:
-            try:
+            with contextlib.suppress(OSError, ProcessLookupError):
                 self._current_process.terminate()
-            except (OSError, ProcessLookupError):
-                pass
 
     def _build_command(
-        self,
-        path: str,
-        recursive: bool,
-        profile_exclusions: dict | None = None
+        self, path: str, recursive: bool, profile_exclusions: dict | None = None
     ) -> list[str]:
         """
         Build the clamdscan command arguments.
@@ -320,45 +308,43 @@ class DaemonScanner:
         # Note: clamdscan exclusions work differently than clamscan
         # It uses --exclude and --exclude-dir with regex patterns
         if self._settings_manager is not None:
-            exclusions = self._settings_manager.get('exclusion_patterns', [])
+            exclusions = self._settings_manager.get("exclusion_patterns", [])
             for exclusion in exclusions:
-                if not exclusion.get('enabled', True):
+                if not exclusion.get("enabled", True):
                     continue
 
-                pattern = exclusion.get('pattern', '')
+                pattern = exclusion.get("pattern", "")
                 if not pattern:
                     continue
 
                 regex = glob_to_regex(pattern)
-                exclusion_type = exclusion.get('type', 'pattern')
+                exclusion_type = exclusion.get("type", "pattern")
 
-                if exclusion_type == 'directory':
-                    cmd.extend(['--exclude-dir', regex])
+                if exclusion_type == "directory":
+                    cmd.extend(["--exclude-dir", regex])
                 else:
-                    cmd.extend(['--exclude', regex])
+                    cmd.extend(["--exclude", regex])
 
         # Apply profile exclusions
         if profile_exclusions:
-            for excl_path in profile_exclusions.get('paths', []):
+            for excl_path in profile_exclusions.get("paths", []):
                 if not excl_path:
                     continue
-                if excl_path.startswith('~'):
+                if excl_path.startswith("~"):
                     excl_path = str(Path(excl_path).expanduser())
-                cmd.extend(['--exclude-dir', excl_path])
+                cmd.extend(["--exclude-dir", excl_path])
 
-            for pattern in profile_exclusions.get('patterns', []):
+            for pattern in profile_exclusions.get("patterns", []):
                 if not pattern:
                     continue
                 regex = glob_to_regex(pattern)
-                cmd.extend(['--exclude', regex])
+                cmd.extend(["--exclude", regex])
 
         cmd.append(path)
         return wrap_host_command(cmd)
 
     def _count_scan_targets(
-        self,
-        path: str,
-        profile_exclusions: dict | None = None
+        self, path: str, profile_exclusions: dict | None = None
     ) -> tuple[int, int]:
         """
         Count files and directories that will be scanned.
@@ -389,29 +375,29 @@ class DaemonScanner:
 
         # Global exclusions from settings
         if self._settings_manager is not None:
-            exclusions = self._settings_manager.get('exclusion_patterns', [])
+            exclusions = self._settings_manager.get("exclusion_patterns", [])
             for exclusion in exclusions:
-                if not exclusion.get('enabled', True):
+                if not exclusion.get("enabled", True):
                     continue
-                pattern = exclusion.get('pattern', '')
+                pattern = exclusion.get("pattern", "")
                 if not pattern:
                     continue
-                exclusion_type = exclusion.get('type', 'pattern')
-                if exclusion_type == 'directory':
+                exclusion_type = exclusion.get("type", "pattern")
+                if exclusion_type == "directory":
                     exclude_dirs.append(pattern)
                 else:
                     exclude_patterns.append(pattern)
 
         # Profile exclusions
         if profile_exclusions:
-            for excl_path in profile_exclusions.get('paths', []):
+            for excl_path in profile_exclusions.get("paths", []):
                 if excl_path:
                     # Expand ~ in paths
-                    if excl_path.startswith('~'):
+                    if excl_path.startswith("~"):
                         excl_path = str(Path(excl_path).expanduser())
                     exclude_dirs.append(excl_path)
 
-            for pattern in profile_exclusions.get('patterns', []):
+            for pattern in profile_exclusions.get("patterns", []):
                 if pattern:
                     exclude_patterns.append(pattern)
 
@@ -422,7 +408,8 @@ class DaemonScanner:
             for root, dirs, files in os.walk(path):
                 # Filter out excluded directories (modifies dirs in-place)
                 dirs[:] = [
-                    d for d in dirs
+                    d
+                    for d in dirs
                     if not self._is_excluded(os.path.join(root, d), d, exclude_dirs, is_dir=True)
                 ]
 
@@ -444,13 +431,7 @@ class DaemonScanner:
 
         return (file_count, dir_count)
 
-    def _is_excluded(
-        self,
-        full_path: str,
-        name: str,
-        patterns: list[str],
-        is_dir: bool
-    ) -> bool:
+    def _is_excluded(self, full_path: str, name: str, patterns: list[str], is_dir: bool) -> bool:
         """
         Check if a path matches any exclusion pattern.
 
@@ -465,15 +446,12 @@ class DaemonScanner:
         """
         for pattern in patterns:
             # Check if pattern is an absolute path
-            if pattern.startswith('/') or pattern.startswith('~'):
-                expanded = str(Path(pattern).expanduser()) if pattern.startswith('~') else pattern
+            if pattern.startswith("/") or pattern.startswith("~"):
+                expanded = str(Path(pattern).expanduser()) if pattern.startswith("~") else pattern
                 if full_path.startswith(expanded):
                     return True
             # Check glob pattern against filename
-            elif fnmatch.fnmatch(name, pattern):
-                return True
-            # Check glob pattern against full path
-            elif fnmatch.fnmatch(full_path, pattern):
+            elif fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(full_path, pattern):
                 return True
         return False
 
@@ -484,7 +462,7 @@ class DaemonScanner:
         stderr: str,
         exit_code: int,
         file_count: int = 0,
-        dir_count: int = 0
+        dir_count: int = 0,
     ) -> ScanResult:
         """
         Parse clamdscan output into a ScanResult.
@@ -520,7 +498,11 @@ class DaemonScanner:
                 if len(parts) == 2:
                     file_path = parts[0].strip()
                     threat_part = parts[1].strip()
-                    threat_name = threat_part.rsplit(" ", 1)[0].strip() if " FOUND" in threat_part else threat_part
+                    threat_name = (
+                        threat_part.rsplit(" ", 1)[0].strip()
+                        if " FOUND" in threat_part
+                        else threat_part
+                    )
 
                     infected_files.append(file_path)
 
@@ -528,7 +510,7 @@ class DaemonScanner:
                         file_path=file_path,
                         threat_name=threat_name,
                         category=categorize_threat(threat_name),
-                        severity=classify_threat_severity_str(threat_name)
+                        severity=classify_threat_severity_str(threat_name),
                     )
                     threat_details.append(threat_detail)
                     infected_count += 1
@@ -551,7 +533,7 @@ class DaemonScanner:
             scanned_dirs=scanned_dirs,
             infected_count=infected_count,
             error_message=stderr if status == ScanStatus.ERROR else None,
-            threat_details=threat_details
+            threat_details=threat_details,
         )
 
     def _save_scan_log(self, result: ScanResult, duration: float) -> None:
@@ -567,8 +549,7 @@ class DaemonScanner:
 
         # Convert threat details to dicts for the factory method
         threat_dicts = [
-            {"file_path": t.file_path, "threat_name": t.threat_name}
-            for t in result.threat_details
+            {"file_path": t.file_path, "threat_name": t.threat_name} for t in result.threat_details
         ]
 
         entry = LogEntry.from_scan_result_data(
@@ -582,6 +563,6 @@ class DaemonScanner:
             error_message=result.error_message,
             stdout=result.stdout,
             suffix="(daemon)",
-            scheduled=False
+            scheduled=False,
         )
         self._log_manager.save_log(entry)

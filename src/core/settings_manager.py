@@ -8,7 +8,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class SettingsManager:
@@ -40,7 +40,7 @@ class SettingsManager:
         "daemon_socket_path": "",  # Empty = auto-detect
     }
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, config_dir: Path | None = None):
         """
         Initialize the SettingsManager.
 
@@ -72,7 +72,7 @@ class SettingsManager:
         with self._lock:
             try:
                 if self._settings_file.exists():
-                    with open(self._settings_file, "r", encoding="utf-8") as f:
+                    with open(self._settings_file, encoding="utf-8") as f:
                         loaded = json.load(f)
                         # Merge with defaults to ensure all keys exist
                         return {**self.DEFAULT_SETTINGS, **loaded}

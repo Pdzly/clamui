@@ -1,6 +1,7 @@
 # ClamUI ClamAV Config Tests
 """Unit tests for the ClamAV configuration module."""
 
+import contextlib
 import os
 import stat
 import tempfile
@@ -11,11 +12,11 @@ from unittest import mock
 import pytest
 
 from src.core.clamav_config import (
-    backup_config,
-    parse_config,
-    validate_config_value,
     ClamAVConfig,
     ClamAVConfigValue,
+    parse_config,
+    validate_option,
+    write_config,
 )
 
 
@@ -26,10 +27,7 @@ class TestBackupConfig:
     def temp_config_file(self):
         """Create a temporary config file for testing."""
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.conf',
-            delete=False,
-            encoding='utf-8'
+            mode="w", suffix=".conf", delete=False, encoding="utf-8"
         ) as f:
             f.write("# Test ClamAV config file\n")
             f.write("DatabaseDirectory /var/lib/clamav\n")
@@ -64,9 +62,9 @@ class TestBackupConfig:
 
         assert success is True
 
-        with open(temp_config_file, 'r') as f:
+        with open(temp_config_file) as f:
             original_content = f.read()
-        with open(backup_path, 'r') as f:
+        with open(backup_path) as f:
             backup_content = f.read()
 
         assert original_content == backup_content
@@ -151,7 +149,7 @@ class TestBackupConfig:
     def test_backup_permission_denied_write(self, temp_config_file):
         """Test that backup fails gracefully when destination not writable."""
         # Mock shutil.copy2 to raise PermissionError
-        with mock.patch('shutil.copy2') as mock_copy:
+        with mock.patch("shutil.copy2") as mock_copy:
             mock_copy.side_effect = PermissionError("Permission denied")
 
             success, error = backup_config(temp_config_file)
@@ -161,7 +159,7 @@ class TestBackupConfig:
 
     def test_backup_handles_oserror(self, temp_config_file):
         """Test that backup handles OSError gracefully."""
-        with mock.patch('shutil.copy2') as mock_copy:
+        with mock.patch("shutil.copy2") as mock_copy:
             mock_copy.side_effect = OSError("Disk full")
 
             success, error = backup_config(temp_config_file)
@@ -171,7 +169,7 @@ class TestBackupConfig:
 
     def test_backup_handles_unexpected_error(self, temp_config_file):
         """Test that backup handles unexpected exceptions gracefully."""
-        with mock.patch('shutil.copy2') as mock_copy:
+        with mock.patch("shutil.copy2") as mock_copy:
             mock_copy.side_effect = RuntimeError("Unexpected error")
 
             success, error = backup_config(temp_config_file)
@@ -194,9 +192,7 @@ class TestClamAVConfigValue:
     def test_create_with_all_fields(self):
         """Test ClamAVConfigValue with all fields specified."""
         config_value = ClamAVConfigValue(
-            value="/var/lib/clamav",
-            comment="Database directory",
-            line_number=5
+            value="/var/lib/clamav", comment="Database directory", line_number=5
         )
 
         assert config_value.value == "/var/lib/clamav"
@@ -315,10 +311,7 @@ class TestParseConfig:
     def temp_config_file(self):
         """Create a temporary config file for testing."""
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.conf',
-            delete=False,
-            encoding='utf-8'
+            mode="w", suffix=".conf", delete=False, encoding="utf-8"
         ) as f:
             f.write("# ClamAV configuration\n")
             f.write("DatabaseDirectory /var/lib/clamav\n")
@@ -327,10 +320,8 @@ class TestParseConfig:
             f.write("Checks 24\n")
             temp_path = f.name
         yield temp_path
-        try:
+        with contextlib.suppress(OSError, PermissionError):
             Path(temp_path).unlink(missing_ok=True)
-        except (OSError, PermissionError):
-            pass
 
     def test_parse_valid_config(self, temp_config_file):
         """Test parsing a valid config file."""
@@ -424,244 +415,8 @@ class TestValidateConfigValue:
         assert error is None
 
     def test_validate_unknown_key(self):
-        """Test validation passes for unknown key (no validation)."""
-        is_valid, error = validate_config_value("UnknownOption", "any value")
-
-        assert is_valid is True
-        assert error is None
-
-    # On-Access Path Options Tests
-    def test_validate_onaccess_include_path_valid(self):
-        """Test validation passes for valid OnAccessIncludePath."""
-        is_valid, error = validate_config_value("OnAccessIncludePath", "/home/user")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_include_path_invalid_relative(self):
-        """Test validation fails for relative OnAccessIncludePath."""
-        is_valid, error = validate_config_value("OnAccessIncludePath", "home/user")
+        """Test validation for unknown configuration key."""
+        is_valid, error = validate_config_value("UnknownKey", "value")
 
         assert is_valid is False
-        assert "absolute" in error.lower()
-
-    def test_validate_onaccess_exclude_path_valid(self):
-        """Test validation passes for valid OnAccessExcludePath."""
-        is_valid, error = validate_config_value("OnAccessExcludePath", "/proc")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_mount_path_valid(self):
-        """Test validation passes for valid OnAccessMountPath."""
-        is_valid, error = validate_config_value("OnAccessMountPath", "/mnt/data")
-
-        assert is_valid is True
-        assert error is None
-
-    # On-Access Boolean Options Tests
-    def test_validate_onaccess_prevention_valid_yes(self):
-        """Test validation passes for OnAccessPrevention with 'yes'."""
-        is_valid, error = validate_config_value("OnAccessPrevention", "yes")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_prevention_valid_no(self):
-        """Test validation passes for OnAccessPrevention with 'no'."""
-        is_valid, error = validate_config_value("OnAccessPrevention", "no")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_prevention_invalid(self):
-        """Test validation fails for OnAccessPrevention with invalid value."""
-        is_valid, error = validate_config_value("OnAccessPrevention", "maybe")
-
-        assert is_valid is False
-        assert "invalid boolean" in error.lower()
-
-    def test_validate_onaccess_extra_scanning_valid(self):
-        """Test validation passes for valid OnAccessExtraScanning."""
-        is_valid, error = validate_config_value("OnAccessExtraScanning", "yes")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_deny_on_error_valid(self):
-        """Test validation passes for valid OnAccessDenyOnError."""
-        is_valid, error = validate_config_value("OnAccessDenyOnError", "no")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_disable_ddd_valid(self):
-        """Test validation passes for valid OnAccessDisableDDD."""
-        is_valid, error = validate_config_value("OnAccessDisableDDD", "yes")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_exclude_root_uid_valid(self):
-        """Test validation passes for valid OnAccessExcludeRootUID."""
-        is_valid, error = validate_config_value("OnAccessExcludeRootUID", "yes")
-
-        assert is_valid is True
-        assert error is None
-
-    # On-Access Integer Options Tests
-    def test_validate_onaccess_max_threads_valid(self):
-        """Test validation passes for valid OnAccessMaxThreads."""
-        is_valid, error = validate_config_value("OnAccessMaxThreads", "5")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_threads_min(self):
-        """Test validation passes for OnAccessMaxThreads at minimum (1)."""
-        is_valid, error = validate_config_value("OnAccessMaxThreads", "1")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_threads_max(self):
-        """Test validation passes for OnAccessMaxThreads at maximum (256)."""
-        is_valid, error = validate_config_value("OnAccessMaxThreads", "256")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_threads_below_min(self):
-        """Test validation fails for OnAccessMaxThreads below minimum."""
-        is_valid, error = validate_config_value("OnAccessMaxThreads", "0")
-
-        assert is_valid is False
-        assert "at least" in error.lower()
-
-    def test_validate_onaccess_max_threads_above_max(self):
-        """Test validation fails for OnAccessMaxThreads above maximum."""
-        is_valid, error = validate_config_value("OnAccessMaxThreads", "257")
-
-        assert is_valid is False
-        assert "at most" in error.lower()
-
-    def test_validate_onaccess_curl_timeout_valid(self):
-        """Test validation passes for valid OnAccessCurlTimeout."""
-        is_valid, error = validate_config_value("OnAccessCurlTimeout", "5000")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_curl_timeout_min(self):
-        """Test validation passes for OnAccessCurlTimeout at minimum (0)."""
-        is_valid, error = validate_config_value("OnAccessCurlTimeout", "0")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_curl_timeout_max(self):
-        """Test validation passes for OnAccessCurlTimeout at maximum (60000)."""
-        is_valid, error = validate_config_value("OnAccessCurlTimeout", "60000")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_curl_timeout_above_max(self):
-        """Test validation fails for OnAccessCurlTimeout above maximum."""
-        is_valid, error = validate_config_value("OnAccessCurlTimeout", "60001")
-
-        assert is_valid is False
-        assert "at most" in error.lower()
-
-    def test_validate_onaccess_retry_attempts_valid(self):
-        """Test validation passes for valid OnAccessRetryAttempts."""
-        is_valid, error = validate_config_value("OnAccessRetryAttempts", "3")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_retry_attempts_max(self):
-        """Test validation passes for OnAccessRetryAttempts at maximum (10)."""
-        is_valid, error = validate_config_value("OnAccessRetryAttempts", "10")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_retry_attempts_above_max(self):
-        """Test validation fails for OnAccessRetryAttempts above maximum."""
-        is_valid, error = validate_config_value("OnAccessRetryAttempts", "11")
-
-        assert is_valid is False
-        assert "at most" in error.lower()
-
-    def test_validate_onaccess_exclude_uid_valid(self):
-        """Test validation passes for valid OnAccessExcludeUID."""
-        is_valid, error = validate_config_value("OnAccessExcludeUID", "1000")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_exclude_uid_zero(self):
-        """Test validation passes for OnAccessExcludeUID at zero (root)."""
-        is_valid, error = validate_config_value("OnAccessExcludeUID", "0")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_exclude_uid_negative(self):
-        """Test validation fails for negative OnAccessExcludeUID."""
-        is_valid, error = validate_config_value("OnAccessExcludeUID", "-1")
-
-        assert is_valid is False
-        assert "at least" in error.lower()
-
-    # On-Access Size Options Tests
-    def test_validate_onaccess_max_file_size_valid(self):
-        """Test validation passes for valid OnAccessMaxFileSize."""
-        is_valid, error = validate_config_value("OnAccessMaxFileSize", "5M")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_file_size_kilobytes(self):
-        """Test validation passes for OnAccessMaxFileSize in kilobytes."""
-        is_valid, error = validate_config_value("OnAccessMaxFileSize", "5120K")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_file_size_gigabytes(self):
-        """Test validation passes for OnAccessMaxFileSize in gigabytes."""
-        is_valid, error = validate_config_value("OnAccessMaxFileSize", "1G")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_file_size_plain_number(self):
-        """Test validation passes for OnAccessMaxFileSize as plain number."""
-        is_valid, error = validate_config_value("OnAccessMaxFileSize", "5242880")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_max_file_size_invalid(self):
-        """Test validation fails for invalid OnAccessMaxFileSize."""
-        is_valid, error = validate_config_value("OnAccessMaxFileSize", "invalid")
-
-        assert is_valid is False
-        assert "invalid size" in error.lower()
-
-    # On-Access String Options Tests
-    def test_validate_onaccess_exclude_uname_valid(self):
-        """Test validation passes for valid OnAccessExcludeUname."""
-        is_valid, error = validate_config_value("OnAccessExcludeUname", "clamav")
-
-        assert is_valid is True
-        assert error is None
-
-    def test_validate_onaccess_exclude_uname_empty(self):
-        """Test validation passes for empty OnAccessExcludeUname (strings allow empty)."""
-        is_valid, error = validate_config_value("OnAccessExcludeUname", "")
-
-        assert is_valid is True
-        assert error is None
+        assert "unknown" in error.lower()

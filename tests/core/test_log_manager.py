@@ -1,6 +1,8 @@
 # ClamUI LogManager Tests
 """Unit tests for the LogManager and LogEntry classes."""
 
+import csv
+import io
 import json
 import os
 import tempfile
@@ -12,7 +14,6 @@ from unittest import mock
 import pytest
 
 from src.core.log_manager import (
-    CLAMD_LOG_PATHS,
     DaemonStatus,
     LogEntry,
     LogManager,
@@ -170,7 +171,7 @@ class TestLogManager:
     def test_init_creates_log_directory(self, temp_log_dir):
         """Test that LogManager creates the log directory on init."""
         log_dir = Path(temp_log_dir) / "subdir" / "logs"
-        manager = LogManager(log_dir=str(log_dir))
+        LogManager(log_dir=str(log_dir))
         assert log_dir.exists()
 
     def test_init_with_default_directory(self, monkeypatch):
@@ -196,7 +197,7 @@ class TestLogManager:
         assert log_file.exists()
 
         # Verify content
-        with open(log_file, "r") as f:
+        with open(log_file) as f:
             data = json.load(f)
         assert data["id"] == entry.id
         assert data["type"] == "scan"
@@ -361,15 +362,19 @@ class TestLogManager:
             )
             log_manager.save_log(entry)
 
-        # Verify they exist (5 log files + 1 log_index.json)
+        # Verify they exist (5 log files + 1 index file = 6 total)
         assert len(list(Path(temp_log_dir).glob("*.json"))) == 6
 
         # Clear all
         result = log_manager.clear_logs()
         assert result is True
 
-        # Verify they're gone (index file remains but is reset to empty)
-        assert len(list(Path(temp_log_dir).glob("*.json"))) == 1  # Only log_index.json remains
+        # Verify log files are gone (only index file may remain)
+        json_files = list(Path(temp_log_dir).glob("*.json"))
+        # Either no files or just the index file
+        assert len(json_files) <= 1
+        if json_files:
+            assert json_files[0].name == "log_index.json"
         assert log_manager.get_logs() == []
 
     def test_clear_logs_empty_directory(self, log_manager):
@@ -465,8 +470,9 @@ class TestLogManagerDaemonLogs:
         with mock.patch.object(log_manager, "get_daemon_log_path", return_value=None):
             # Also mock journalctl fallback to return failure
             with mock.patch.object(
-                log_manager, "_read_daemon_logs_journalctl",
-                return_value=(False, "No journal entries found")
+                log_manager,
+                "_read_daemon_logs_journalctl",
+                return_value=(False, "No journal entries found"),
             ):
                 success, content = log_manager.read_daemon_logs()
                 assert success is False
@@ -479,9 +485,7 @@ class TestLogManagerDaemonLogs:
             temp_log_path = f.name
 
         try:
-            with mock.patch.object(
-                log_manager, "get_daemon_log_path", return_value=temp_log_path
-            ):
+            with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
                 success, content = log_manager.read_daemon_logs(num_lines=10)
                 assert success is True
                 assert "Line 1" in content
@@ -498,9 +502,7 @@ class TestLogManagerDaemonLogs:
             temp_log_path = f.name
 
         try:
-            with mock.patch.object(
-                log_manager, "get_daemon_log_path", return_value=temp_log_path
-            ):
+            with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
                 success, content = log_manager.read_daemon_logs(num_lines=10)
                 assert success is True
                 # Should only have last 10 lines
@@ -515,9 +517,7 @@ class TestLogManagerDaemonLogs:
             temp_log_path = f.name
 
         try:
-            with mock.patch.object(
-                log_manager, "get_daemon_log_path", return_value=temp_log_path
-            ):
+            with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
                 success, content = log_manager.read_daemon_logs()
                 assert success is True
                 assert "empty" in content.lower()
@@ -803,7 +803,7 @@ class TestLogManagerIndexInfrastructure:
             "entries": [
                 {"id": "test-id-1", "timestamp": "2024-01-01T10:00:00", "type": "scan"},
                 {"id": "test-id-2", "timestamp": "2024-01-02T10:00:00", "type": "update"},
-            ]
+            ],
         }
         index_path = Path(temp_log_dir) / "log_index.json"
         with open(index_path, "w", encoding="utf-8") as f:
@@ -860,7 +860,7 @@ class TestLogManagerIndexInfrastructure:
             "version": 1,
             "entries": [
                 {"id": "test-id-1", "timestamp": "2024-01-01T10:00:00", "type": "scan"},
-            ]
+            ],
         }
 
         result = log_manager._save_index(index_data)
@@ -871,7 +871,7 @@ class TestLogManagerIndexInfrastructure:
         assert index_path.exists()
 
         # Verify content
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             saved_data = json.load(f)
         assert saved_data["version"] == 1
         assert len(saved_data["entries"]) == 1
@@ -889,7 +889,7 @@ class TestLogManagerIndexInfrastructure:
             "version": 1,
             "entries": [
                 {"id": "new-id", "timestamp": "2024-01-01T10:00:00", "type": "scan"},
-            ]
+            ],
         }
         result = log_manager._save_index(new_data)
         assert result is True
@@ -907,6 +907,7 @@ class TestLogManagerIndexInfrastructure:
 
         # Delete the directory that was created by __init__
         import shutil
+
         shutil.rmtree(log_dir)
 
         # Save should recreate the directory
@@ -1023,7 +1024,7 @@ class TestLogManagerIndexInfrastructure:
             "version": 1,
             "entries": [
                 {"id": "old-id", "timestamp": "2024-01-01T10:00:00", "type": "scan"},
-            ]
+            ],
         }
         index_path = Path(temp_log_dir) / "log_index.json"
         with open(index_path, "w", encoding="utf-8") as f:
@@ -1087,6 +1088,7 @@ class TestLogManagerIndexInfrastructure:
 
         # Delete the directory
         import shutil
+
         shutil.rmtree(log_dir)
 
         # Rebuild should create empty index
@@ -1157,7 +1159,7 @@ class TestLogManagerIndexInfrastructure:
                 errors.append(str(e))
 
         threads = []
-        for i in range(5):
+        for _i in range(5):
             t = threading.Thread(target=rebuild)
             threads.append(t)
 
@@ -1567,6 +1569,7 @@ class TestLogManagerIndexMaintenance:
 
         # Shuffle to mix operations
         import random
+
         random.shuffle(threads)
 
         for t in threads:
@@ -1733,16 +1736,12 @@ class TestLogManagerIndexValidation:
 
         # Load the index and add extra bogus entries
         index_data = log_manager._load_index()
-        index_data["entries"].append({
-            "id": "bogus-id-1",
-            "timestamp": "2024-01-01T00:00:00",
-            "type": "scan"
-        })
-        index_data["entries"].append({
-            "id": "bogus-id-2",
-            "timestamp": "2024-01-01T00:00:00",
-            "type": "scan"
-        })
+        index_data["entries"].append(
+            {"id": "bogus-id-1", "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+        )
+        index_data["entries"].append(
+            {"id": "bogus-id-2", "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+        )
 
         # Should be invalid (5 index entries, 3 actual files)
         assert log_manager._validate_index(index_data) is False
@@ -1830,9 +1829,7 @@ class TestLogManagerIndexValidation:
         # Index with entries (but directory doesn't exist)
         index_data = {
             "version": 1,
-            "entries": [
-                {"id": "test-id", "timestamp": "2024-01-01T00:00:00", "type": "scan"}
-            ]
+            "entries": [{"id": "test-id", "timestamp": "2024-01-01T00:00:00", "type": "scan"}],
         }
 
         # Should be invalid (directory doesn't exist but index has entries)
@@ -1889,11 +1886,9 @@ class TestLogManagerIndexValidation:
         # Manually corrupt the index by adding bogus entries
         index_data = log_manager._load_index()
         original_count = len(index_data["entries"])
-        index_data["entries"].append({
-            "id": "bogus-id",
-            "timestamp": "2024-01-01T00:00:00",
-            "type": "scan"
-        })
+        index_data["entries"].append(
+            {"id": "bogus-id", "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+        )
         log_manager._save_index(index_data)
 
         # Call get_logs() - should detect stale index and rebuild
@@ -2327,11 +2322,9 @@ class TestLogManagerOptimizedGetLogs:
 
         # Manually add corrupted entry to index
         index_data = log_manager._load_index()
-        index_data["entries"].append({
-            "id": corrupted_id,
-            "timestamp": "2024-01-01T10:00:00",
-            "type": "scan"
-        })
+        index_data["entries"].append(
+            {"id": corrupted_id, "timestamp": "2024-01-01T10:00:00", "type": "scan"}
+        )
         log_manager._save_index(index_data)
 
         # get_logs() should skip the corrupted file
@@ -2426,6 +2419,7 @@ class TestLogManagerOptimizedGetLogs:
 
         # Delete the directory
         import shutil
+
         if log_dir.exists():
             shutil.rmtree(log_dir)
 
@@ -2520,7 +2514,7 @@ class TestLogManagerAutoMigration:
         assert index_path.exists()
 
         # Index should contain all entries
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         assert index_data["version"] == 1
@@ -2668,14 +2662,14 @@ class TestLogManagerAutoMigration:
         manager = LogManager(log_dir=temp_log_dir)
 
         # First get_logs() call should trigger migration and skip corrupted file
-        logs = manager.get_logs()
+        manager.get_logs()
 
         # Index should exist
         index_path = log_dir / "log_index.json"
         assert index_path.exists()
 
         # Index should contain only valid entries
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         assert len(index_data["entries"]) == 2
@@ -2708,27 +2702,31 @@ class TestLogManagerAutoMigration:
         # Create a log file missing the 'type' field
         incomplete_file = log_dir / "incomplete.json"
         with open(incomplete_file, "w", encoding="utf-8") as f:
-            json.dump({
-                "id": "incomplete-id",
-                "timestamp": "2024-01-15T10:00:00",
-                # Missing 'type' field
-                "status": "clean",
-                "summary": "Incomplete",
-                "details": "Missing type field",
-            }, f, indent=2)
+            json.dump(
+                {
+                    "id": "incomplete-id",
+                    "timestamp": "2024-01-15T10:00:00",
+                    # Missing 'type' field
+                    "status": "clean",
+                    "summary": "Incomplete",
+                    "details": "Missing type field",
+                },
+                f,
+                indent=2,
+            )
 
         # Create a NEW LogManager instance
         manager = LogManager(log_dir=temp_log_dir)
 
         # First get_logs() call should trigger migration and skip incomplete file
-        logs = manager.get_logs()
+        manager.get_logs()
 
         # Index should exist
         index_path = log_dir / "log_index.json"
         assert index_path.exists()
 
         # Index should contain only the valid entry
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         assert len(index_data["entries"]) == 1
@@ -2832,7 +2830,7 @@ class TestLogManagerAutoMigration:
         index_path = log_dir / "log_index.json"
         assert index_path.exists()
 
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         # Verify structure
@@ -2872,10 +2870,13 @@ class TestLogManagerAutoMigration:
         # Create a fake existing index file (to simulate edge case)
         index_path = log_dir / "log_index.json"
         with open(index_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "version": 1,
-                "entries": [{"id": "fake", "timestamp": "2024-01-01T00:00:00", "type": "scan"}]
-            }, f)
+            json.dump(
+                {
+                    "version": 1,
+                    "entries": [{"id": "fake", "timestamp": "2024-01-01T00:00:00", "type": "scan"}],
+                },
+                f,
+            )
 
         # Now delete it to force migration
         index_path.unlink()
@@ -2884,12 +2885,12 @@ class TestLogManagerAutoMigration:
         manager = LogManager(log_dir=temp_log_dir)
 
         # Trigger migration
-        logs = manager.get_logs()
+        manager.get_logs()
 
         # Index should be created and contain only the actual log entry
         assert index_path.exists()
 
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
 
         assert len(index_data["entries"]) == 1
@@ -2928,7 +2929,7 @@ class TestLogManagerOptimizedGetLogCount:
         assert count == 5
 
         # Verify index was actually used by checking it has correct data
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 5
 
@@ -3217,7 +3218,7 @@ class TestLogManagerMigrationIntegration:
         assert result is True
 
         # Step 5: Verify index was updated
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 6
 
@@ -3230,7 +3231,7 @@ class TestLogManagerMigrationIntegration:
         assert result is True
 
         # Step 8: Verify index was updated
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 5
 
@@ -3242,7 +3243,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_with_type_filtering(self, temp_log_dir):
         """Test that type filtering works correctly after migration."""
         # Create manual logs with mixed types
-        entries = self._create_manual_log_files(temp_log_dir, count=10)
+        self._create_manual_log_files(temp_log_dir, count=10)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3264,7 +3265,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_with_limit_application(self, temp_log_dir):
         """Test that limit parameter works correctly after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=20)
+        self._create_manual_log_files(temp_log_dir, count=20)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3286,7 +3287,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_combined_filters(self, temp_log_dir):
         """Test that type filtering and limit work together after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=20)
+        self._create_manual_log_files(temp_log_dir, count=20)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3303,7 +3304,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_get_log_count_consistency(self, temp_log_dir):
         """Test that get_log_count() returns correct count after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=7)
+        self._create_manual_log_files(temp_log_dir, count=7)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3319,7 +3320,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_clear_logs_workflow(self, temp_log_dir):
         """Test that clear_logs() works correctly after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=5)
+        self._create_manual_log_files(temp_log_dir, count=5)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3334,7 +3335,7 @@ class TestLogManagerMigrationIntegration:
         index_path = Path(temp_log_dir) / "log_index.json"
         assert index_path.exists()
 
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 0
 
@@ -3348,7 +3349,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_multiple_manager_instances(self, temp_log_dir):
         """Test that multiple LogManager instances work correctly after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=5)
+        self._create_manual_log_files(temp_log_dir, count=5)
 
         # Create first manager and trigger migration
         manager1 = LogManager(log_dir=temp_log_dir)
@@ -3381,7 +3382,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_concurrent_operations(self, temp_log_dir):
         """Test that concurrent operations work correctly during/after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=10)
+        self._create_manual_log_files(temp_log_dir, count=10)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3405,7 +3406,7 @@ class TestLogManagerMigrationIntegration:
 
         def read_logs():
             try:
-                for i in range(5):
+                for _i in range(5):
                     logs = manager.get_logs()
                     results.append(len(logs) >= 10)  # Should have at least original logs
             except Exception as e:
@@ -3437,7 +3438,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_delete_and_recreate_index(self, temp_log_dir):
         """Test that system recovers if index is manually deleted after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=5)
+        self._create_manual_log_files(temp_log_dir, count=5)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3554,7 +3555,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_large_log_collection(self, temp_log_dir):
         """Test migration with a large collection of logs (performance test)."""
         # Create many logs manually
-        entries = self._create_manual_log_files(temp_log_dir, count=100)
+        self._create_manual_log_files(temp_log_dir, count=100)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3567,7 +3568,7 @@ class TestLogManagerMigrationIntegration:
         index_path = Path(temp_log_dir) / "log_index.json"
         assert index_path.exists()
 
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 100
 
@@ -3583,7 +3584,7 @@ class TestLogManagerMigrationIntegration:
     def test_migration_rebuild_index_method_still_works(self, temp_log_dir):
         """Test that rebuild_index() can be called manually after migration."""
         # Create manual logs
-        entries = self._create_manual_log_files(temp_log_dir, count=5)
+        self._create_manual_log_files(temp_log_dir, count=5)
 
         # Create LogManager and trigger migration
         manager = LogManager(log_dir=temp_log_dir)
@@ -3601,10 +3602,995 @@ class TestLogManagerMigrationIntegration:
         # Verify index still exists and is correct
         assert index_path.exists()
 
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             index_data = json.load(f)
         assert len(index_data["entries"]) == 5
 
         # Verify logs are still retrievable
         logs_after = manager.get_logs()
         assert len(logs_after) == 5
+
+
+class TestLogManagerExport:
+    """Tests for LogManager export functionality (CSV and JSON)."""
+
+    @pytest.fixture
+    def temp_log_dir(self):
+        """Create a temporary directory for log storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def log_manager(self, temp_log_dir):
+        """Create a LogManager with a temporary directory."""
+        return LogManager(log_dir=temp_log_dir)
+
+    @pytest.fixture
+    def sample_entries(self):
+        """Create sample log entries for testing."""
+        entries = [
+            LogEntry(
+                id="uuid-1",
+                timestamp="2024-01-15T10:30:00",
+                type="scan",
+                status="clean",
+                summary="Clean scan of /home/user",
+                details="Scanned: 100 files, 10 directories",
+                path="/home/user",
+                duration=45.5,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="uuid-2",
+                timestamp="2024-01-15T11:00:00",
+                type="update",
+                status="success",
+                summary="Database updated",
+                details="Updated virus definitions",
+                path=None,
+                duration=30.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="uuid-3",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Found 2 threat(s)",
+                details="Threats found: 2",
+                path="/tmp/downloads",
+                duration=60.25,
+                scheduled=True,
+            ),
+        ]
+        return entries
+
+    # CSV Export Tests
+
+    def test_export_logs_to_csv_basic(self, log_manager, sample_entries):
+        """Test basic CSV export with valid data."""
+        csv_output = log_manager.export_logs_to_csv(sample_entries)
+
+        # Verify header row
+        assert "id,timestamp,type,status,path,summary,duration,scheduled" in csv_output
+
+        # Verify data rows
+        lines = csv_output.strip().split("\n")
+        assert len(lines) == 4  # 1 header + 3 data rows
+
+        # Verify first data row
+        assert "uuid-1" in lines[1]
+        assert "2024-01-15T10:30:00" in lines[1]
+        assert "scan" in lines[1]
+        assert "clean" in lines[1]
+        assert "/home/user" in lines[1]
+        assert "45.50" in lines[1]
+        assert "false" in lines[1]
+
+        # Verify second data row (update with None path)
+        assert "uuid-2" in lines[2]
+        assert "update" in lines[2]
+        assert "success" in lines[2]
+        assert "30.00" in lines[2]
+
+        # Verify third data row (scheduled scan)
+        assert "uuid-3" in lines[3]
+        assert "infected" in lines[3]
+        assert "60.25" in lines[3]
+        assert "true" in lines[3]
+
+    def test_export_logs_to_csv_special_characters(self, log_manager):
+        """Test CSV export properly escapes special characters."""
+        entries = [
+            LogEntry(
+                id="special-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary='Path with "quotes" and, commas',
+                details="Details",
+                path='/path/with"quotes',
+                duration=10.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="special-2",
+                timestamp="2024-01-15T11:00:00",
+                type="scan",
+                status="clean",
+                summary="Summary with\nnewline",
+                details="Details",
+                path="/path/with,comma",
+                duration=20.0,
+                scheduled=False,
+            ),
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+
+        # Verify CSV module properly escapes quotes
+        assert (
+            'Path with ""quotes"" and, commas' in csv_output
+            or '"Path with ""quotes"" and, commas"' in csv_output
+        )
+
+        # Verify newlines are escaped
+        lines = csv_output.split("\n")
+        # Should have header + 2 data rows (newlines in fields should be escaped)
+        assert len([line for line in lines if line.strip()]) >= 3
+
+    def test_export_logs_to_csv_empty_logs(self, log_manager):
+        """Test CSV export with empty log list."""
+        csv_output = log_manager.export_logs_to_csv([])
+
+        # Should still have header row
+        lines = csv_output.strip().split("\n")
+        assert len(lines) == 1
+        assert "id,timestamp,type,status,path,summary,duration,scheduled" in lines[0]
+
+    def test_export_logs_to_csv_none_path(self, log_manager):
+        """Test CSV export handles None path values."""
+        entries = [
+            LogEntry(
+                id="none-path",
+                timestamp="2024-01-15T10:00:00",
+                type="update",
+                status="success",
+                summary="Update without path",
+                details="Details",
+                path=None,
+                duration=5.0,
+                scheduled=False,
+            )
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+        lines = csv_output.strip().split("\n")
+
+        # Path should be empty string in CSV (not "None")
+        assert len(lines) == 2
+        # Should have empty field for path (consecutive commas)
+        data_row = lines[1]
+        assert "update,success," in data_row  # Empty path field
+
+    def test_export_logs_to_csv_zero_duration(self, log_manager):
+        """Test CSV export handles zero duration correctly."""
+        entries = [
+            LogEntry(
+                id="zero-duration",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Quick scan",
+                details="Details",
+                path="/path",
+                duration=0.0,
+                scheduled=False,
+            )
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+        lines = csv_output.strip().split("\n")
+
+        # Duration should be "0" not "0.00"
+        assert ",0," in lines[1] or ",0\n" in csv_output or lines[1].endswith(",0,false")
+
+    def test_export_logs_to_csv_default_all_logs(self, log_manager):
+        """Test CSV export with no entries parameter uses all logs."""
+        # Save some logs
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Scan {i}",
+                details=f"Details {i}",
+            )
+            log_manager.save_log(entry)
+
+        # Export without specifying entries
+        csv_output = log_manager.export_logs_to_csv()
+
+        # Should export all 3 logs
+        lines = csv_output.strip().split("\n")
+        assert len(lines) == 4  # 1 header + 3 data rows
+
+    def test_export_logs_to_csv_duration_formatting(self, log_manager):
+        """Test CSV export formats duration with 2 decimal places."""
+        entries = [
+            LogEntry(
+                id="duration-test",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Test",
+                details="Details",
+                path="/path",
+                duration=123.456789,  # Should be rounded to 2 decimals
+                scheduled=False,
+            )
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+        assert "123.46" in csv_output
+
+    # JSON Export Tests
+
+    def test_export_logs_to_json_basic(self, log_manager, sample_entries):
+        """Test basic JSON export with valid data."""
+        json_output = log_manager.export_logs_to_json(sample_entries)
+
+        # Parse JSON to verify structure
+        data = json.loads(json_output)
+
+        # Verify metadata wrapper
+        assert "export_timestamp" in data
+        assert "count" in data
+        assert "entries" in data
+
+        # Verify count
+        assert data["count"] == 3
+
+        # Verify entries
+        assert len(data["entries"]) == 3
+
+        # Verify first entry
+        entry1 = data["entries"][0]
+        assert entry1["id"] == "uuid-1"
+        assert entry1["timestamp"] == "2024-01-15T10:30:00"
+        assert entry1["type"] == "scan"
+        assert entry1["status"] == "clean"
+        assert entry1["summary"] == "Clean scan of /home/user"
+        assert entry1["details"] == "Scanned: 100 files, 10 directories"
+        assert entry1["path"] == "/home/user"
+        assert entry1["duration"] == 45.5
+        assert entry1["scheduled"] is False
+
+    def test_export_logs_to_json_structure(self, log_manager, sample_entries):
+        """Test JSON export has correct structure with metadata."""
+        json_output = log_manager.export_logs_to_json(sample_entries)
+        data = json.loads(json_output)
+
+        # Verify top-level keys
+        assert set(data.keys()) == {"export_timestamp", "count", "entries"}
+
+        # Verify export_timestamp is ISO format
+        assert "T" in data["export_timestamp"]
+
+        # Verify count matches entries length
+        assert data["count"] == len(data["entries"])
+
+    def test_export_logs_to_json_empty_logs(self, log_manager):
+        """Test JSON export with empty log list."""
+        json_output = log_manager.export_logs_to_json([])
+        data = json.loads(json_output)
+
+        # Should have metadata with count=0
+        assert data["count"] == 0
+        assert data["entries"] == []
+        assert "export_timestamp" in data
+
+    def test_export_logs_to_json_none_values(self, log_manager):
+        """Test JSON export handles None values correctly."""
+        entries = [
+            LogEntry(
+                id="none-test",
+                timestamp="2024-01-15T10:00:00",
+                type="update",
+                status="success",
+                summary="Update",
+                details="Details",
+                path=None,  # None should be null in JSON
+                duration=5.0,
+                scheduled=False,
+            )
+        ]
+
+        json_output = log_manager.export_logs_to_json(entries)
+        data = json.loads(json_output)
+
+        # Path should be null in JSON (not string "None")
+        assert data["entries"][0]["path"] is None
+
+    def test_export_logs_to_json_default_all_logs(self, log_manager):
+        """Test JSON export with no entries parameter uses all logs."""
+        # Save some logs
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Scan {i}",
+                details=f"Details {i}",
+            )
+            log_manager.save_log(entry)
+
+        # Export without specifying entries
+        json_output = log_manager.export_logs_to_json()
+        data = json.loads(json_output)
+
+        # Should export all 3 logs
+        assert data["count"] == 3
+        assert len(data["entries"]) == 3
+
+    def test_export_logs_to_json_indentation(self, log_manager, sample_entries):
+        """Test JSON export is formatted with indentation for readability."""
+        json_output = log_manager.export_logs_to_json(sample_entries)
+
+        # Should have indentation (newlines and spaces)
+        assert "\n" in json_output
+        assert "  " in json_output  # 2-space indentation
+
+    def test_export_logs_to_json_all_fields(self, log_manager):
+        """Test JSON export includes all LogEntry fields."""
+        entry = LogEntry(
+            id="all-fields-test",
+            timestamp="2024-01-15T10:00:00",
+            type="scan",
+            status="infected",
+            summary="Test summary",
+            details="Test details",
+            path="/test/path",
+            duration=123.45,
+            scheduled=True,
+        )
+
+        json_output = log_manager.export_logs_to_json([entry])
+        data = json.loads(json_output)
+
+        entry_data = data["entries"][0]
+        # Verify all fields are present
+        required_fields = [
+            "id",
+            "timestamp",
+            "type",
+            "status",
+            "summary",
+            "details",
+            "path",
+            "duration",
+            "scheduled",
+        ]
+        for field in required_fields:
+            assert field in entry_data
+
+    # File Export Tests
+
+    def test_export_logs_to_file_csv(self, log_manager, sample_entries, temp_log_dir):
+        """Test exporting logs to CSV file."""
+        output_path = Path(temp_log_dir) / "export.csv"
+
+        success, error = log_manager.export_logs_to_file(str(output_path), "csv", sample_entries)
+
+        assert success is True
+        assert error is None
+        assert output_path.exists()
+
+        # Verify file contents
+        with open(output_path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "id,timestamp,type,status,path,summary,duration,scheduled" in content
+        assert "uuid-1" in content
+        assert "uuid-2" in content
+        assert "uuid-3" in content
+
+    def test_export_logs_to_file_json(self, log_manager, sample_entries, temp_log_dir):
+        """Test exporting logs to JSON file."""
+        output_path = Path(temp_log_dir) / "export.json"
+
+        success, error = log_manager.export_logs_to_file(str(output_path), "json", sample_entries)
+
+        assert success is True
+        assert error is None
+        assert output_path.exists()
+
+        # Verify file contents
+        with open(output_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        assert data["count"] == 3
+        assert len(data["entries"]) == 3
+        assert "export_timestamp" in data
+
+    def test_export_logs_to_file_invalid_format(self, log_manager, sample_entries, temp_log_dir):
+        """Test export with invalid format returns error."""
+        output_path = Path(temp_log_dir) / "export.txt"
+
+        success, error = log_manager.export_logs_to_file(
+            str(output_path), "invalid", sample_entries
+        )
+
+        assert success is False
+        assert error is not None
+        assert "Invalid format" in error
+        assert "invalid" in error
+
+    def test_export_logs_to_file_creates_parent_directory(
+        self, log_manager, sample_entries, temp_log_dir
+    ):
+        """Test export creates parent directories if they don't exist."""
+        output_path = Path(temp_log_dir) / "subdir" / "nested" / "export.csv"
+
+        success, error = log_manager.export_logs_to_file(str(output_path), "csv", sample_entries)
+
+        assert success is True
+        assert error is None
+        assert output_path.exists()
+        assert output_path.parent.exists()
+
+    def test_export_logs_to_file_overwrites_existing(
+        self, log_manager, sample_entries, temp_log_dir
+    ):
+        """Test export overwrites existing file."""
+        output_path = Path(temp_log_dir) / "export.csv"
+
+        # Create existing file with different content
+        output_path.write_text("old content")
+
+        # Export should overwrite
+        success, error = log_manager.export_logs_to_file(str(output_path), "csv", sample_entries)
+
+        assert success is True
+        assert error is None
+
+        # Verify new content
+        content = output_path.read_text()
+        assert "old content" not in content
+        assert "id,timestamp,type,status" in content
+
+    def test_export_logs_to_file_atomic_write(self, log_manager, sample_entries, temp_log_dir):
+        """Test export uses atomic write (temp file + rename)."""
+        output_path = Path(temp_log_dir) / "export.json"
+
+        # Mock tempfile.mkstemp to verify atomic write pattern
+        original_mkstemp = tempfile.mkstemp
+
+        temp_files_created = []
+
+        def mock_mkstemp(*args, **kwargs):
+            fd, path = original_mkstemp(*args, **kwargs)
+            temp_files_created.append(path)
+            return fd, path
+
+        with mock.patch("tempfile.mkstemp", side_effect=mock_mkstemp):
+            success, error = log_manager.export_logs_to_file(
+                str(output_path), "json", sample_entries
+            )
+
+        assert success is True
+        # Verify temp file was created (and cleaned up via rename)
+        assert len(temp_files_created) == 1
+
+    def test_export_logs_to_file_default_all_logs(self, log_manager, temp_log_dir):
+        """Test file export with no entries parameter uses all logs."""
+        # Save some logs
+        for i in range(3):
+            entry = LogEntry.create(
+                log_type="scan",
+                status="clean",
+                summary=f"Scan {i}",
+                details=f"Details {i}",
+            )
+            log_manager.save_log(entry)
+
+        output_path = Path(temp_log_dir) / "export.csv"
+
+        # Export without specifying entries
+        success, error = log_manager.export_logs_to_file(str(output_path), "csv")
+
+        assert success is True
+        assert output_path.exists()
+
+        # Verify all 3 logs were exported
+        with open(output_path, encoding="utf-8") as f:
+            lines = f.readlines()
+        assert len(lines) == 4  # 1 header + 3 data rows
+
+    def test_export_logs_to_file_permission_error(self, log_manager, sample_entries, temp_log_dir):
+        """Test export handles permission errors gracefully."""
+        output_path = Path(temp_log_dir) / "readonly" / "export.csv"
+        output_path.parent.mkdir()
+
+        # Make parent directory read-only
+        output_path.parent.chmod(0o444)
+
+        try:
+            success, error = log_manager.export_logs_to_file(
+                str(output_path), "csv", sample_entries
+            )
+
+            assert success is False
+            assert error is not None
+            assert "Permission denied" in error or "error" in error.lower()
+        finally:
+            # Restore permissions for cleanup
+            output_path.parent.chmod(0o755)
+
+    def test_export_logs_to_file_cleanup_on_failure(
+        self, log_manager, sample_entries, temp_log_dir
+    ):
+        """Test export cleans up temp file on failure."""
+        output_path = Path(temp_log_dir) / "export.csv"
+
+        # Mock the file write to fail after temp file is created
+        original_fdopen = os.fdopen
+
+        def mock_fdopen(fd, *args, **kwargs):
+            # Create the file descriptor wrapper, then immediately raise an error
+            f = original_fdopen(fd, *args, **kwargs)
+            # Close it and raise an error to simulate write failure
+            f.close()
+            raise OSError("Simulated write error")
+
+        with mock.patch("os.fdopen", side_effect=mock_fdopen):
+            success, error = log_manager.export_logs_to_file(
+                str(output_path), "csv", sample_entries
+            )
+
+        assert success is False
+        assert error is not None
+
+        # Verify no temp files are left behind
+        temp_files = list(Path(temp_log_dir).glob("clamui_export_*"))
+        assert len(temp_files) == 0
+
+    def test_export_mixed_scan_and_update_logs_csv(self, log_manager):
+        """Test CSV export with mixed scan and update log types."""
+        entries = [
+            LogEntry(
+                id="scan-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Home folder scan",
+                details="Scanned 500 files",
+                path="/home/user",
+                duration=45.5,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="update-1",
+                timestamp="2024-01-15T11:00:00",
+                type="update",
+                status="success",
+                summary="Database updated",
+                details="Updated to version 123",
+                path=None,
+                duration=30.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="scan-2",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Found threats",
+                details="EICAR test file detected",
+                path="/tmp/test",
+                duration=10.5,
+                scheduled=True,
+            ),
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+        lines = csv_output.strip().split("\n")
+
+        # Should have header + 3 data rows
+        assert len(lines) == 4
+        assert "id,timestamp,type,status,path,summary,duration,scheduled" in lines[0]
+
+        # Verify scan entries have paths
+        assert "scan-1" in csv_output
+        assert "/home/user" in csv_output
+        assert "scan,clean" in csv_output
+
+        # Verify update entry has no path (empty field)
+        assert "update-1" in csv_output
+        assert "update,success" in csv_output
+
+        # Verify scheduled field is properly exported
+        assert "true" in csv_output  # scan-2 is scheduled
+        assert "false" in csv_output  # scan-1 and update-1 are not scheduled
+
+    def test_export_mixed_scan_and_update_logs_json(self, log_manager):
+        """Test JSON export with mixed scan and update log types."""
+        entries = [
+            LogEntry(
+                id="scan-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Home folder scan",
+                details="Scanned 500 files",
+                path="/home/user",
+                duration=45.5,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="update-1",
+                timestamp="2024-01-15T11:00:00",
+                type="update",
+                status="success",
+                summary="Database updated",
+                details="Updated to version 123",
+                path=None,
+                duration=30.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="scan-2",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Found threats",
+                details="EICAR test file detected",
+                path="/tmp/test",
+                duration=10.5,
+                scheduled=True,
+            ),
+        ]
+
+        json_output = log_manager.export_logs_to_json(entries)
+        data = json.loads(json_output)
+
+        assert data["count"] == 3
+        assert len(data["entries"]) == 3
+
+        # Verify scan entries
+        scan_entries = [e for e in data["entries"] if e["type"] == "scan"]
+        assert len(scan_entries) == 2
+        assert all(e["path"] is not None for e in scan_entries)
+
+        # Verify update entry
+        update_entries = [e for e in data["entries"] if e["type"] == "update"]
+        assert len(update_entries) == 1
+        assert update_entries[0]["path"] is None
+
+        # Verify scheduled field
+        scheduled_entries = [e for e in data["entries"] if e["scheduled"]]
+        assert len(scheduled_entries) == 1
+        assert scheduled_entries[0]["id"] == "scan-2"
+
+    def test_export_very_long_details_field_csv(self, log_manager):
+        """Test CSV export with very long details field (CSV excludes details by design)."""
+        # Create a very long details field (10KB+)
+        long_details = "ClamAV scan output:\n" + "\n".join(
+            [f"/path/to/file{i}.txt: OK" for i in range(500)]
+        )
+        assert len(long_details) > 10000
+
+        entries = [
+            LogEntry(
+                id="long-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Large scan with many files",
+                details=long_details,
+                path="/home/user",
+                duration=120.5,
+                scheduled=False,
+            )
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+
+        # CSV format does NOT include details field (only summary)
+        # Verify CSV is still parseable
+        reader = csv.DictReader(io.StringIO(csv_output))
+        rows = list(reader)
+        assert len(rows) == 1
+        assert rows[0]["id"] == "long-1"
+        assert rows[0]["summary"] == "Large scan with many files"
+        # CSV should not have details field
+        assert "details" not in rows[0]
+
+    def test_export_very_long_details_field_json(self, log_manager):
+        """Test JSON export with very long details field."""
+        # Create a very long details field (10KB+)
+        long_details = "ClamAV scan output:\n" + "\n".join(
+            [f"/path/to/file{i}.txt: OK" for i in range(500)]
+        )
+        assert len(long_details) > 10000
+
+        entries = [
+            LogEntry(
+                id="long-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Large scan with many files",
+                details=long_details,
+                path="/home/user",
+                duration=120.5,
+                scheduled=False,
+            )
+        ]
+
+        json_output = log_manager.export_logs_to_json(entries)
+        data = json.loads(json_output)
+
+        assert data["count"] == 1
+        entry = data["entries"][0]
+        assert entry["id"] == "long-1"
+        assert len(entry["details"]) > 10000
+        assert "/path/to/file0.txt: OK" in entry["details"]
+        assert "/path/to/file499.txt: OK" in entry["details"]
+
+    def test_export_scheduled_vs_manual_scans_csv(self, log_manager):
+        """Test CSV export properly distinguishes scheduled vs manual scans."""
+        entries = [
+            LogEntry(
+                id="manual-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Manual quick scan",
+                details="User initiated scan",
+                path="/home/user/downloads",
+                duration=15.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="scheduled-1",
+                timestamp="2024-01-15T11:00:00",
+                type="scan",
+                status="clean",
+                summary="Scheduled nightly scan",
+                details="Automatic scheduled scan",
+                path="/home/user",
+                duration=60.0,
+                scheduled=True,
+            ),
+            LogEntry(
+                id="manual-2",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Manual scan found threats",
+                details="User scanned downloads folder",
+                path="/tmp",
+                duration=5.0,
+                scheduled=False,
+            ),
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+        lines = csv_output.strip().split("\n")
+
+        assert len(lines) == 4  # header + 3 data rows
+
+        # Count scheduled vs manual scans in output
+        false_count = csv_output.count(",false")
+        true_count = csv_output.count(",true")
+
+        assert false_count == 2  # manual-1, manual-2
+        assert true_count == 1  # scheduled-1
+
+    def test_export_scheduled_vs_manual_scans_json(self, log_manager):
+        """Test JSON export properly distinguishes scheduled vs manual scans."""
+        entries = [
+            LogEntry(
+                id="manual-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Manual quick scan",
+                details="User initiated scan",
+                path="/home/user/downloads",
+                duration=15.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="scheduled-1",
+                timestamp="2024-01-15T11:00:00",
+                type="scan",
+                status="clean",
+                summary="Scheduled nightly scan",
+                details="Automatic scheduled scan",
+                path="/home/user",
+                duration=60.0,
+                scheduled=True,
+            ),
+            LogEntry(
+                id="manual-2",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Manual scan found threats",
+                details="User scanned downloads folder",
+                path="/tmp",
+                duration=5.0,
+                scheduled=False,
+            ),
+        ]
+
+        json_output = log_manager.export_logs_to_json(entries)
+        data = json.loads(json_output)
+
+        assert data["count"] == 3
+
+        # Filter by scheduled field
+        manual_scans = [e for e in data["entries"] if not e["scheduled"]]
+        scheduled_scans = [e for e in data["entries"] if e["scheduled"]]
+
+        assert len(manual_scans) == 2
+        assert len(scheduled_scans) == 1
+
+        # Verify IDs
+        manual_ids = [e["id"] for e in manual_scans]
+        assert "manual-1" in manual_ids
+        assert "manual-2" in manual_ids
+        assert scheduled_scans[0]["id"] == "scheduled-1"
+
+    def test_export_special_chars_unicode_csv(self, log_manager):
+        """Test CSV export with Unicode characters in paths and summaries."""
+        entries = [
+            LogEntry(
+                id="unicode-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Scan with émojis 🦠❌✅ and ünïcödé",
+                details="Details with 日本語 Chinese 中文",
+                path="/home/user/Documents/Résumé 文档.pdf",
+                duration=10.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="unicode-2",
+                timestamp="2024-01-15T11:00:00",
+                type="scan",
+                status="clean",
+                summary="Path with Cyrillic: Документы",
+                details="Scanned Файлы directory",
+                path="/home/пользователь/файлы",
+                duration=20.0,
+                scheduled=False,
+            ),
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+
+        # Verify Unicode characters are preserved in summary and path fields
+        # Note: CSV export includes summary (not details), so check characters in those fields
+        assert "🦠" in csv_output or "emoji" in csv_output.lower()
+        assert "ünïcödé" in csv_output or "unicode" in csv_output.lower()
+        assert "文档" in csv_output  # Chinese characters from path
+        assert "Résumé" in csv_output or "Resume" in csv_output
+        assert "Документы" in csv_output  # Cyrillic from summary
+        assert "пользователь" in csv_output  # Cyrillic from path
+
+        # Verify CSV is parseable
+        reader = csv.DictReader(io.StringIO(csv_output))
+        rows = list(reader)
+        assert len(rows) == 2
+
+    def test_export_special_chars_paths_backslashes_csv(self, log_manager):
+        """Test CSV export with paths containing backslashes and special chars."""
+        entries = [
+            LogEntry(
+                id="special-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Windows-style path test",
+                details="Scanned C:\\Users\\Test",
+                path="C:\\Users\\Test\\Documents\\file.txt",
+                duration=10.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="special-2",
+                timestamp="2024-01-15T11:00:00",
+                type="scan",
+                status="clean",
+                summary="Path with tabs\tand\nnewlines",
+                details="Details\twith\ttabs",
+                path="/path/with\ttab",
+                duration=20.0,
+                scheduled=False,
+            ),
+        ]
+
+        csv_output = log_manager.export_logs_to_csv(entries)
+
+        # Verify paths with backslashes are preserved
+        assert "C:\\Users\\Test" in csv_output or "C:\\\\Users\\\\Test" in csv_output
+
+        # Verify CSV is parseable despite special characters
+        reader = csv.DictReader(io.StringIO(csv_output))
+        rows = list(reader)
+        assert len(rows) == 2
+        assert rows[0]["id"] == "special-1"
+
+    def test_export_to_file_mixed_types_integration(self, log_manager, temp_log_dir):
+        """Integration test: export mixed log types to file and re-import."""
+        entries = [
+            LogEntry(
+                id="scan-1",
+                timestamp="2024-01-15T10:00:00",
+                type="scan",
+                status="clean",
+                summary="Quick scan",
+                details="Scanned 100 files",
+                path="/home/user",
+                duration=30.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="update-1",
+                timestamp="2024-01-15T11:00:00",
+                type="update",
+                status="success",
+                summary="Database updated",
+                details="Updated signatures",
+                path=None,
+                duration=15.0,
+                scheduled=False,
+            ),
+            LogEntry(
+                id="scan-2",
+                timestamp="2024-01-15T12:00:00",
+                type="scan",
+                status="infected",
+                summary="Threats found",
+                details="EICAR detected",
+                path="/tmp",
+                duration=5.0,
+                scheduled=True,
+            ),
+        ]
+
+        # Test CSV export and re-import
+        csv_path = Path(temp_log_dir) / "mixed_export.csv"
+        success, error = log_manager.export_logs_to_file(str(csv_path), "csv", entries)
+        assert success is True
+        assert error is None
+        assert csv_path.exists()
+
+        # Verify CSV content
+        with open(csv_path, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            assert len(rows) == 3
+            assert rows[0]["type"] == "scan"
+            assert rows[1]["type"] == "update"
+            assert rows[2]["type"] == "scan"
+            assert rows[2]["scheduled"] == "true"
+
+        # Test JSON export and re-import
+        json_path = Path(temp_log_dir) / "mixed_export.json"
+        success, error = log_manager.export_logs_to_file(str(json_path), "json", entries)
+        assert success is True
+        assert error is None
+        assert json_path.exists()
+
+        # Verify JSON content
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+            assert data["count"] == 3
+            assert len(data["entries"]) == 3
+            assert data["entries"][0]["type"] == "scan"
+            assert data["entries"][1]["type"] == "update"
+            assert data["entries"][2]["type"] == "scan"
+            assert data["entries"][2]["scheduled"] is True

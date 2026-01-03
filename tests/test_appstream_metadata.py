@@ -1,4 +1,5 @@
 """Tests for AppStream metadata validation."""
+
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -13,7 +14,9 @@ def test_metainfo_xml_wellformed():
     root = tree.getroot()
 
     assert root.tag == "component", "Root element should be 'component'"
-    assert root.attrib.get("type") == "desktop-application", "Component type should be desktop-application"
+    assert root.attrib.get("type") == "desktop-application", (
+        "Component type should be desktop-application"
+    )
 
 
 def test_metainfo_required_elements():
@@ -55,7 +58,9 @@ def test_metainfo_launchable():
     launchable = root.find("launchable")
     assert launchable is not None, "Launchable element should be present"
     assert launchable.attrib.get("type") == "desktop-id", "Launchable type should be desktop-id"
-    assert launchable.text == "com.github.rooki.clamui.desktop", "Should reference correct desktop file"
+    assert launchable.text == "com.github.rooki.clamui.desktop", (
+        "Should reference correct desktop file"
+    )
 
 
 def test_metainfo_screenshots():

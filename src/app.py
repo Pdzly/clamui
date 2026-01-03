@@ -30,29 +30,28 @@ Example:
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib, Gio
 
-from .ui.window import MainWindow
-from .ui.scan_view import ScanView
-from .ui.update_view import UpdateView
-from .ui.logs_view import LogsView
-from .ui.components_view import ComponentsView
-from .ui.quarantine_view import QuarantineView
-from .ui.statistics_view import StatisticsView
-from .ui.preferences_window import PreferencesWindow
-from .core.settings_manager import SettingsManager
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk
+
 from .core.notification_manager import NotificationManager
-from .profiles.profile_manager import ProfileManager
+from .core.settings_manager import SettingsManager
 from .profiles.models import ScanProfile
+from .profiles.profile_manager import ProfileManager
+from .ui.components_view import ComponentsView
+from .ui.logs_view import LogsView
+from .ui.preferences_window import PreferencesWindow
+from .ui.quarantine_view import QuarantineView
+from .ui.scan_view import ScanView
+from .ui.statistics_view import StatisticsView
 
 # Tray manager - uses subprocess to avoid GTK3/GTK4 version conflict
 from .ui.tray_manager import TrayManager
-
+from .ui.update_view import UpdateView
+from .ui.window import MainWindow
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +67,7 @@ class ClamUIApp(Adw.Application):
     def __init__(self):
         """Initialize the ClamUI application."""
         super().__init__(
-            application_id="com.github.rooki.clamui",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            application_id="com.github.rooki.clamui", flags=Gio.ApplicationFlags.FLAGS_NONE
         )
 
         # Application metadata
@@ -263,18 +261,14 @@ class ClamUIApp(Adw.Application):
                 on_quick_scan=self._on_tray_quick_scan,
                 on_full_scan=self._on_tray_full_scan,
                 on_update=self._on_tray_update,
-                on_quit=self._on_tray_quit
+                on_quit=self._on_tray_quit,
             )
 
             # Set window toggle callback
-            self._tray_indicator.set_window_toggle_callback(
-                on_toggle=self._on_tray_window_toggle
-            )
+            self._tray_indicator.set_window_toggle_callback(on_toggle=self._on_tray_window_toggle)
 
             # Set profile selection callback
-            self._tray_indicator.set_profile_select_callback(
-                on_select=self._on_tray_profile_select
-            )
+            self._tray_indicator.set_profile_select_callback(on_select=self._on_tray_profile_select)
 
             # Start the tray subprocess
             if self._tray_indicator.start():
@@ -322,7 +316,7 @@ class ClamUIApp(Adw.Application):
         except Exception as e:
             logger.warning(f"Failed to sync profiles to tray: {e}")
 
-    def _get_quick_scan_profile(self) -> Optional[ScanProfile]:
+    def _get_quick_scan_profile(self) -> ScanProfile | None:
         """
         Retrieve the Quick Scan profile by name.
 
@@ -342,7 +336,9 @@ class ClamUIApp(Adw.Application):
         """Handle preferences action - show preferences window."""
         win = self.props.active_window
         if win:
-            preferences = PreferencesWindow(transient_for=win, settings_manager=self._settings_manager)
+            preferences = PreferencesWindow(
+                transient_for=win, settings_manager=self._settings_manager
+            )
             preferences.present()
 
     def _on_show_scan(self, action, param):
@@ -701,7 +697,7 @@ class ClamUIApp(Adw.Application):
         if self._scan_view is not None:
             try:
                 # Cancel any ongoing scan
-                if hasattr(self._scan_view, '_scanner') and self._scan_view._scanner is not None:
+                if hasattr(self._scan_view, "_scanner") and self._scan_view._scanner is not None:
                     self._scan_view._scanner.cancel()
                     logger.debug("Active scan cancelled during shutdown")
             except Exception as e:

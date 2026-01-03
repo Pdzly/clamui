@@ -4,8 +4,6 @@ Notification manager module for ClamUI providing GNOME desktop notifications.
 Uses Gio.Notification API for native GNOME integration.
 """
 
-from typing import Optional
-
 from gi.repository import Gio
 
 from .settings_manager import SettingsManager
@@ -25,7 +23,7 @@ class NotificationManager:
     NOTIFICATION_ID_UPDATE = "update-complete"
     NOTIFICATION_ID_SCHEDULED_SCAN = "scheduled-scan-complete"
 
-    def __init__(self, settings_manager: Optional[SettingsManager] = None):
+    def __init__(self, settings_manager: SettingsManager | None = None):
         """
         Initialize the NotificationManager.
 
@@ -34,7 +32,7 @@ class NotificationManager:
                               notification preferences. If not provided, a
                               default instance is created.
         """
-        self._app: Optional[Gio.Application] = None
+        self._app: Gio.Application | None = None
         self._settings = settings_manager if settings_manager else SettingsManager()
 
     def set_application(self, app: Gio.Application) -> None:
@@ -50,10 +48,7 @@ class NotificationManager:
         self._app = app
 
     def notify_scan_complete(
-        self,
-        is_clean: bool,
-        infected_count: int = 0,
-        scanned_count: int = 0
+        self, is_clean: bool, infected_count: int = 0, scanned_count: int = 0
     ) -> bool:
         """
         Send notification for scan completion.
@@ -86,14 +81,10 @@ class NotificationManager:
             title=title,
             body=body,
             priority=priority,
-            default_action="app.show-scan"
+            default_action="app.show-scan",
         )
 
-    def notify_update_complete(
-        self,
-        success: bool,
-        databases_updated: int = 0
-    ) -> bool:
+    def notify_update_complete(self, success: bool, databases_updated: int = 0) -> bool:
         """
         Send notification for database update completion.
 
@@ -122,7 +113,7 @@ class NotificationManager:
             title=title,
             body=body,
             priority=Gio.NotificationPriority.NORMAL,
-            default_action="app.show-update"
+            default_action="app.show-update",
         )
 
     def notify_scheduled_scan_complete(
@@ -131,7 +122,7 @@ class NotificationManager:
         infected_count: int = 0,
         scanned_count: int = 0,
         quarantined_count: int = 0,
-        target_path: Optional[str] = None
+        target_path: str | None = None,
     ) -> bool:
         """
         Send notification for scheduled scan completion.
@@ -169,7 +160,7 @@ class NotificationManager:
             title=title,
             body=body,
             priority=priority,
-            default_action="app.show-scan"
+            default_action="app.show-scan",
         )
 
     def _can_notify(self) -> bool:
@@ -190,7 +181,7 @@ class NotificationManager:
         title: str,
         body: str,
         priority: Gio.NotificationPriority,
-        default_action: str
+        default_action: str,
     ) -> bool:
         """
         Send a notification.

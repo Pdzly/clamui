@@ -47,7 +47,7 @@ def mock_quarantine_entry():
 
 def _clear_src_modules():
     """Clear all cached src.* modules to prevent test pollution."""
-    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.")]
     for mod in modules_to_remove:
         del sys.modules[mod]
 
@@ -55,14 +55,18 @@ def _clear_src_modules():
 @pytest.fixture
 def quarantine_view_class(mock_gi_modules):
     """Get QuarantineView class with mocked dependencies."""
-    with mock.patch.dict(sys.modules, {
-        'src.core.quarantine': mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "src.core.quarantine": mock.MagicMock(),
+        },
+    ):
         # Clear any cached import
         if "src.ui.quarantine_view" in sys.modules:
             del sys.modules["src.ui.quarantine_view"]
 
         from src.ui.quarantine_view import QuarantineView
+
         yield QuarantineView
 
     # Critical: Clear all src.* modules after test to prevent pollution
@@ -110,33 +114,45 @@ class TestQuarantineViewImport:
 
     def test_import_quarantine_view(self, mock_gi_modules):
         """Test that QuarantineView can be imported."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import QuarantineView
+
             assert QuarantineView is not None
 
     def test_import_from_ui_package(self, mock_gi_modules):
         """Test that QuarantineView is exported from src.ui package."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-            'src.core.log_manager': mock.MagicMock(),
-            'src.core.utils': mock.MagicMock(),
-            'src.ui.fullscreen_dialog': mock.MagicMock(),
-            'src.ui.update_view': mock.MagicMock(),
-            'src.ui.logs_view': mock.MagicMock(),
-            'src.ui.components_view': mock.MagicMock(),
-            'src.ui.preferences_dialog': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+                "src.core.log_manager": mock.MagicMock(),
+                "src.core.utils": mock.MagicMock(),
+                "src.ui.fullscreen_dialog": mock.MagicMock(),
+                "src.ui.update_view": mock.MagicMock(),
+                "src.ui.logs_view": mock.MagicMock(),
+                "src.ui.components_view": mock.MagicMock(),
+                "src.ui.preferences_dialog": mock.MagicMock(),
+            },
+        ):
             from src.ui import QuarantineView
+
             assert QuarantineView is not None
 
     def test_pagination_constants_defined(self, mock_gi_modules):
         """Test that pagination constants are defined."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import INITIAL_DISPLAY_LIMIT, LOAD_MORE_BATCH_SIZE
+
             assert INITIAL_DISPLAY_LIMIT == 25
             assert LOAD_MORE_BATCH_SIZE == 25
 
@@ -146,40 +162,56 @@ class TestFormatFileSize:
 
     def test_format_file_size_bytes(self, mock_gi_modules):
         """Test formatting file size in bytes."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import format_file_size
+
             assert format_file_size(500) == "500 B"
             assert format_file_size(0) == "0 B"
             assert format_file_size(1023) == "1023 B"
 
     def test_format_file_size_kilobytes(self, mock_gi_modules):
         """Test formatting file size in kilobytes."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import format_file_size
+
             assert format_file_size(1024) == "1.0 KB"
             assert format_file_size(2048) == "2.0 KB"
             assert format_file_size(1536) == "1.5 KB"
 
     def test_format_file_size_megabytes(self, mock_gi_modules):
         """Test formatting file size in megabytes."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import format_file_size
+
             assert format_file_size(1024 * 1024) == "1.0 MB"
             assert format_file_size(2 * 1024 * 1024) == "2.0 MB"
             assert format_file_size(int(1.5 * 1024 * 1024)) == "1.5 MB"
 
     def test_format_file_size_gigabytes(self, mock_gi_modules):
         """Test formatting file size in gigabytes."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.ui.quarantine_view import format_file_size
+
             assert format_file_size(1024 * 1024 * 1024) == "1.00 GB"
             assert format_file_size(2 * 1024 * 1024 * 1024) == "2.00 GB"
 
@@ -215,7 +247,9 @@ class TestQuarantineViewInitialization:
 class TestQuarantineViewLoadingState:
     """Tests for loading state management."""
 
-    def test_set_loading_state_true_shows_spinner(self, quarantine_view_class, mock_quarantine_manager):
+    def test_set_loading_state_true_shows_spinner(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that setting loading True shows spinner."""
         view = object.__new__(quarantine_view_class)
         view._is_loading = False
@@ -233,7 +267,9 @@ class TestQuarantineViewLoadingState:
         view._refresh_button.set_sensitive.assert_called_with(False)
         view._clear_old_button.set_sensitive.assert_called_with(False)
 
-    def test_set_loading_state_false_hides_spinner(self, quarantine_view_class, mock_quarantine_manager):
+    def test_set_loading_state_false_hides_spinner(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that setting loading False hides spinner."""
         view = object.__new__(quarantine_view_class)
         view._is_loading = True
@@ -249,7 +285,9 @@ class TestQuarantineViewLoadingState:
         view._spinner.set_visible.assert_called_with(False)
         view._refresh_button.set_sensitive.assert_called_with(True)
 
-    def test_load_entries_async_prevents_double_load(self, quarantine_view_class, mock_quarantine_manager):
+    def test_load_entries_async_prevents_double_load(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that async load prevents loading when already loading."""
         view = object.__new__(quarantine_view_class)
         view._is_loading = True
@@ -264,7 +302,9 @@ class TestQuarantineViewLoadingState:
 class TestQuarantineViewEntriesLoaded:
     """Tests for entries loading completion."""
 
-    def test_on_entries_loaded_with_empty_list(self, quarantine_view_class, mock_quarantine_manager):
+    def test_on_entries_loaded_with_empty_list(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test handling empty entries list."""
         view = object.__new__(quarantine_view_class)
         view._is_loading = True
@@ -335,7 +375,9 @@ class TestQuarantineViewEntriesLoaded:
 class TestQuarantineViewPagination:
     """Tests for quarantine entry pagination."""
 
-    def test_display_entry_batch_increments_count(self, quarantine_view_class, mock_quarantine_entry):
+    def test_display_entry_batch_increments_count(
+        self, quarantine_view_class, mock_quarantine_entry
+    ):
         """Test that displaying entries increments the displayed count."""
         view = object.__new__(quarantine_view_class)
         view._all_entries = [mock_quarantine_entry, mock_quarantine_entry]
@@ -348,7 +390,9 @@ class TestQuarantineViewPagination:
 
         assert view._displayed_count == 2
 
-    def test_on_load_more_clicked_removes_load_more_row(self, quarantine_view_class, mock_quarantine_entry):
+    def test_on_load_more_clicked_removes_load_more_row(
+        self, quarantine_view_class, mock_quarantine_entry
+    ):
         """Test that clicking load more removes the load more row."""
         view = object.__new__(quarantine_view_class)
         view._all_entries = [mock_quarantine_entry] * 30
@@ -363,7 +407,9 @@ class TestQuarantineViewPagination:
 
         view._listbox.remove.assert_called_with(load_more_row)
 
-    def test_on_show_all_clicked_displays_remaining(self, quarantine_view_class, mock_quarantine_entry):
+    def test_on_show_all_clicked_displays_remaining(
+        self, quarantine_view_class, mock_quarantine_entry
+    ):
         """Test that clicking show all displays remaining entries."""
         view = object.__new__(quarantine_view_class)
         view._all_entries = [mock_quarantine_entry] * 50
@@ -381,7 +427,9 @@ class TestQuarantineViewPagination:
 class TestQuarantineViewStorageInfo:
     """Tests for storage info display."""
 
-    def test_update_storage_info_displays_size(self, quarantine_view_class, mock_quarantine_manager):
+    def test_update_storage_info_displays_size(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that storage info displays total size."""
         view = object.__new__(quarantine_view_class)
         view._manager = mock_quarantine_manager
@@ -395,7 +443,9 @@ class TestQuarantineViewStorageInfo:
         view._storage_row.set_subtitle.assert_called_with("1.0 MB")
         view._count_label.set_text.assert_called_with("5 items")
 
-    def test_update_storage_info_singular_item(self, quarantine_view_class, mock_quarantine_manager):
+    def test_update_storage_info_singular_item(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that storage info displays singular 'item' for count of 1."""
         view = object.__new__(quarantine_view_class)
         view._manager = mock_quarantine_manager
@@ -414,7 +464,7 @@ class TestQuarantineViewRestore:
 
     def test_on_restore_clicked_shows_dialog(self, quarantine_view_class, mock_quarantine_entry):
         """Test that restore click shows confirmation dialog."""
-        with mock.patch.dict(sys.modules, {'gi.repository.Adw': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.Adw": mock.MagicMock()}):
             from gi.repository import Adw
 
             view = object.__new__(quarantine_view_class)
@@ -442,7 +492,9 @@ class TestQuarantineViewRestore:
 
         view._perform_restore.assert_not_called()
 
-    def test_perform_restore_shows_banner(self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager):
+    def test_perform_restore_shows_banner(
+        self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager
+    ):
         """Test that performing restore shows status banner."""
         view = object.__new__(quarantine_view_class)
         view._manager = mock_quarantine_manager
@@ -471,9 +523,12 @@ class TestQuarantineViewRestore:
 
     def test_on_restore_complete_failure(self, quarantine_view_class):
         """Test restore completion with failure."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.quarantine': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.quarantine": mock.MagicMock(),
+            },
+        ):
             from src.core.quarantine import QuarantineStatus
 
             view = object.__new__(quarantine_view_class)
@@ -496,7 +551,7 @@ class TestQuarantineViewDelete:
 
     def test_on_delete_clicked_shows_dialog(self, quarantine_view_class, mock_quarantine_entry):
         """Test that delete click shows confirmation dialog."""
-        with mock.patch.dict(sys.modules, {'gi.repository.Adw': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.Adw": mock.MagicMock()}):
             from gi.repository import Adw
 
             view = object.__new__(quarantine_view_class)
@@ -524,7 +579,9 @@ class TestQuarantineViewDelete:
 
         view._perform_delete.assert_not_called()
 
-    def test_perform_delete_shows_banner(self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager):
+    def test_perform_delete_shows_banner(
+        self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager
+    ):
         """Test that performing delete shows status banner."""
         view = object.__new__(quarantine_view_class)
         view._manager = mock_quarantine_manager
@@ -570,7 +627,9 @@ class TestQuarantineViewDelete:
 class TestQuarantineViewClearOld:
     """Tests for clear old items functionality."""
 
-    def test_on_clear_old_clicked_no_old_entries(self, quarantine_view_class, mock_quarantine_manager):
+    def test_on_clear_old_clicked_no_old_entries(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that clear old with no old entries shows message."""
         view = object.__new__(quarantine_view_class)
         view._manager = mock_quarantine_manager
@@ -583,9 +642,11 @@ class TestQuarantineViewClearOld:
         view._status_banner.set_title.assert_called_with("No items older than 30 days")
         view._status_banner.set_revealed.assert_called_with(True)
 
-    def test_on_clear_old_clicked_shows_dialog(self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager):
+    def test_on_clear_old_clicked_shows_dialog(
+        self, quarantine_view_class, mock_quarantine_entry, mock_quarantine_manager
+    ):
         """Test that clear old with entries shows confirmation dialog."""
-        with mock.patch.dict(sys.modules, {'gi.repository.Adw': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.Adw": mock.MagicMock()}):
             from gi.repository import Adw
 
             view = object.__new__(quarantine_view_class)
@@ -654,8 +715,9 @@ class TestQuarantineViewRefresh:
 
     def test_refresh_public_method(self, quarantine_view_class):
         """Test that public refresh method works."""
-        with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock.MagicMock()}):
             from gi.repository import GLib
+
             GLib.idle_add = lambda f: f()
 
             view = object.__new__(quarantine_view_class)
@@ -674,10 +736,13 @@ class TestQuarantineViewCallback:
 
         assert mock_quarantine_view._on_quarantine_changed is callback
 
-    def test_notify_quarantine_changed_calls_callback(self, quarantine_view_class, mock_quarantine_manager):
+    def test_notify_quarantine_changed_calls_callback(
+        self, quarantine_view_class, mock_quarantine_manager
+    ):
         """Test that notify calls the callback."""
-        with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock.MagicMock()}):
             from gi.repository import GLib
+
             GLib.idle_add = lambda f: f()
 
             view = object.__new__(quarantine_view_class)
@@ -709,6 +774,7 @@ class TestQuarantineViewMapHandler:
     def test_on_view_mapped_debounces_refresh(self, quarantine_view_class):
         """Test that view mapped debounces refresh calls."""
         import time
+
         view = object.__new__(quarantine_view_class)
         view._last_refresh_time = time.time()  # Recent refresh
         view._load_entries_async = mock.MagicMock()
@@ -738,34 +804,43 @@ class TestQuarantineViewEntryRowCreation:
 
         mock_row = mock.MagicMock()
         from gi.repository import Adw
+
         Adw.ExpanderRow.return_value = mock_row
 
-        row = view._create_entry_row(mock_quarantine_entry)
+        view._create_entry_row(mock_quarantine_entry)
 
         mock_row.set_title.assert_called_with("Eicar-Test-Signature")
 
-    def test_create_entry_row_sets_row_name_to_id(self, quarantine_view_class, mock_quarantine_entry):
+    def test_create_entry_row_sets_row_name_to_id(
+        self, quarantine_view_class, mock_quarantine_entry
+    ):
         """Test that row name is set to entry ID."""
         view = object.__new__(quarantine_view_class)
 
         mock_row = mock.MagicMock()
         from gi.repository import Adw
+
         Adw.ExpanderRow.return_value = mock_row
 
-        row = view._create_entry_row(mock_quarantine_entry)
+        view._create_entry_row(mock_quarantine_entry)
 
         mock_row.set_name.assert_called_with("test-quarantine-id-123")
 
-    def test_create_entry_row_truncates_long_path(self, quarantine_view_class, mock_quarantine_entry):
+    def test_create_entry_row_truncates_long_path(
+        self, quarantine_view_class, mock_quarantine_entry
+    ):
         """Test that long paths are truncated in subtitle."""
         view = object.__new__(quarantine_view_class)
-        mock_quarantine_entry.original_path = "/home/user/very/long/path/that/exceeds/fifty/characters/limit/file.exe"
+        mock_quarantine_entry.original_path = (
+            "/home/user/very/long/path/that/exceeds/fifty/characters/limit/file.exe"
+        )
 
         mock_row = mock.MagicMock()
         from gi.repository import Adw
+
         Adw.ExpanderRow.return_value = mock_row
 
-        row = view._create_entry_row(mock_quarantine_entry)
+        view._create_entry_row(mock_quarantine_entry)
 
         # Verify subtitle was set with truncated path
         calls = mock_row.set_subtitle.call_args_list
@@ -782,13 +857,16 @@ def test_quarantine_view_basic(mock_gi_modules):
     This test verifies the core QuarantineView functionality
     using a minimal mock setup.
     """
-    with mock.patch.dict(sys.modules, {
-        'src.core.quarantine': mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "src.core.quarantine": mock.MagicMock(),
+        },
+    ):
         from src.ui.quarantine_view import (
-            QuarantineView,
             INITIAL_DISPLAY_LIMIT,
             LOAD_MORE_BATCH_SIZE,
+            QuarantineView,
             format_file_size,
         )
 

@@ -11,7 +11,6 @@ Generated icons are cached in XDG_CACHE_HOME/clamui/tray-icons/ for efficiency.
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ except ImportError:
     logger.debug("cairosvg not available, SVG icons will need PNG fallback")
 
 
-def find_clamui_base_icon() -> Optional[str]:
+def find_clamui_base_icon() -> str | None:
     """
     Find the ClamUI icon (PNG preferred, SVG fallback) for use as base.
 
@@ -79,10 +78,7 @@ def find_clamui_base_icon() -> Optional[str]:
             # For now, return it and let the caller handle it
             return str(icon_path.absolute())
 
-    logger.warning(
-        f"ClamUI base icon not found. Searched paths: "
-        f"{[str(p) for p in search_paths]}"
-    )
+    logger.warning(f"ClamUI base icon not found. Searched paths: {[str(p) for p in search_paths]}")
     return None
 
 
@@ -137,7 +133,7 @@ class TrayIconGenerator:
 
         self._base_icon_path = Path(base_icon_path)
         self._cache_dir = Path(cache_dir)
-        self._converted_png_path: Optional[Path] = None
+        self._converted_png_path: Path | None = None
 
         # Ensure cache directory exists
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -150,8 +146,7 @@ class TrayIconGenerator:
         if self._base_icon_path.suffix.lower() == ".svg":
             if not CAIROSVG_AVAILABLE:
                 raise RuntimeError(
-                    "cairosvg is required to use SVG icons. "
-                    "Install it with: pip install cairosvg"
+                    "cairosvg is required to use SVG icons. Install it with: pip install cairosvg"
                 )
             self._convert_svg_to_png()
 
@@ -208,9 +203,8 @@ class TrayIconGenerator:
 
         # Check if cached icon exists and is newer than base icon
         base_icon = self._get_base_icon_path()
-        if cache_path.exists():
-            if cache_path.stat().st_mtime >= base_icon.stat().st_mtime:
-                return str(cache_path)
+        if cache_path.exists() and cache_path.stat().st_mtime >= base_icon.stat().st_mtime:
+            return str(cache_path)
 
         # Generate new icon
         self._generate_icon(status, cache_path)
@@ -297,7 +291,7 @@ class TrayIconGenerator:
         return img
 
     def _draw_checkmark_badge(
-        self, draw: "ImageDraw.ImageDraw", color: Tuple[int, int, int, int]
+        self, draw: "ImageDraw.ImageDraw", color: tuple[int, int, int, int]
     ) -> None:
         """Draw a green circle with a white checkmark."""
         size = self.OVERLAY_SIZE
@@ -310,7 +304,7 @@ class TrayIconGenerator:
         draw.line([(4, 7), (8, 3)], fill=white, width=1)
 
     def _draw_sync_badge(
-        self, draw: "ImageDraw.ImageDraw", color: Tuple[int, int, int, int]
+        self, draw: "ImageDraw.ImageDraw", color: tuple[int, int, int, int]
     ) -> None:
         """Draw a blue circle indicating sync/scanning activity."""
         size = self.OVERLAY_SIZE
@@ -326,7 +320,7 @@ class TrayIconGenerator:
         draw.line([(5, 6), (3, 7), (5, 8)], fill=white, width=1)
 
     def _draw_warning_badge(
-        self, draw: "ImageDraw.ImageDraw", color: Tuple[int, int, int, int]
+        self, draw: "ImageDraw.ImageDraw", color: tuple[int, int, int, int]
     ) -> None:
         """Draw a yellow warning triangle with exclamation mark."""
         size = self.OVERLAY_SIZE
@@ -342,7 +336,7 @@ class TrayIconGenerator:
         draw.point((center_x, 8), fill=black)
 
     def _draw_threat_badge(
-        self, draw: "ImageDraw.ImageDraw", color: Tuple[int, int, int, int]
+        self, draw: "ImageDraw.ImageDraw", color: tuple[int, int, int, int]
     ) -> None:
         """Draw a red circle with white exclamation mark."""
         size = self.OVERLAY_SIZE

@@ -1,9 +1,6 @@
 # ClamUI Scheduler Tests
 """Unit tests for the Scheduler class."""
 
-import os
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -11,12 +8,12 @@ from unittest import mock
 import pytest
 
 from src.core.scheduler import (
+    ScheduleConfig,
+    ScheduleFrequency,
     Scheduler,
     SchedulerBackend,
-    ScheduleFrequency,
-    ScheduleConfig,
-    _check_systemd_available,
     _check_cron_available,
+    _check_systemd_available,
 )
 
 
@@ -45,7 +42,7 @@ class TestScheduleConfig:
             skip_on_battery=False,
             auto_quarantine=True,
             day_of_week=3,
-            day_of_month=15
+            day_of_month=15,
         )
         assert config.enabled is True
         assert config.frequency == ScheduleFrequency.WEEKLY
@@ -82,6 +79,7 @@ class TestSchedulerBackendDetection:
         """Test _check_systemd_available returns a boolean."""
         # Reset cache to test fresh
         import src.core.scheduler
+
         src.core.scheduler._systemd_available = None
 
         result = _check_systemd_available()
@@ -91,6 +89,7 @@ class TestSchedulerBackendDetection:
         """Test _check_cron_available returns a boolean."""
         # Reset cache to test fresh
         import src.core.scheduler
+
         src.core.scheduler._cron_available = None
 
         result = _check_cron_available()
@@ -107,7 +106,7 @@ class TestSchedulerInit:
         assert scheduler.backend in [
             SchedulerBackend.SYSTEMD,
             SchedulerBackend.CRON,
-            SchedulerBackend.NONE
+            SchedulerBackend.NONE,
         ]
 
     def test_scheduler_init_custom_config_dir(self):
@@ -171,51 +170,37 @@ class TestSchedulerOnCalendar:
 
     def test_generate_oncalendar_weekly_monday(self, scheduler):
         """Test OnCalendar generation for weekly on Monday."""
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.WEEKLY, "02:00", day_of_week=0
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.WEEKLY, "02:00", day_of_week=0)
         assert result == "Mon *-*-* 02:00:00"
 
     def test_generate_oncalendar_weekly_friday(self, scheduler):
         """Test OnCalendar generation for weekly on Friday."""
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.WEEKLY, "03:00", day_of_week=4
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.WEEKLY, "03:00", day_of_week=4)
         assert result == "Fri *-*-* 03:00:00"
 
     def test_generate_oncalendar_weekly_sunday(self, scheduler):
         """Test OnCalendar generation for weekly on Sunday."""
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.WEEKLY, "08:00", day_of_week=6
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.WEEKLY, "08:00", day_of_week=6)
         assert result == "Sun *-*-* 08:00:00"
 
     def test_generate_oncalendar_monthly_first(self, scheduler):
         """Test OnCalendar generation for monthly on 1st."""
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.MONTHLY, "02:00", day_of_month=1
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.MONTHLY, "02:00", day_of_month=1)
         assert result == "*-*-01 02:00:00"
 
     def test_generate_oncalendar_monthly_fifteenth(self, scheduler):
         """Test OnCalendar generation for monthly on 15th."""
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.MONTHLY, "04:00", day_of_month=15
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.MONTHLY, "04:00", day_of_month=15)
         assert result == "*-*-15 04:00:00"
 
     def test_generate_oncalendar_monthly_clamps_day(self, scheduler):
         """Test OnCalendar clamps day_of_month to 1-28 range."""
         # Day 31 should be clamped to 28
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.MONTHLY, "02:00", day_of_month=31
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.MONTHLY, "02:00", day_of_month=31)
         assert result == "*-*-28 02:00:00"
 
         # Day 0 should be clamped to 1
-        result = scheduler._generate_oncalendar(
-            ScheduleFrequency.MONTHLY, "02:00", day_of_month=0
-        )
+        result = scheduler._generate_oncalendar(ScheduleFrequency.MONTHLY, "02:00", day_of_month=0)
         assert result == "*-*-01 02:00:00"
 
     def test_generate_oncalendar_invalid_time(self, scheduler):
@@ -253,25 +238,19 @@ class TestSchedulerCrontabEntry:
     def test_generate_crontab_weekly_monday(self, scheduler):
         """Test crontab entry for weekly on Monday."""
         # 0=Monday in our format, cron uses 1=Monday
-        result = scheduler._generate_crontab_entry(
-            ScheduleFrequency.WEEKLY, "02:00", day_of_week=0
-        )
+        result = scheduler._generate_crontab_entry(ScheduleFrequency.WEEKLY, "02:00", day_of_week=0)
         assert result == "0 2 * * 1"
 
     def test_generate_crontab_weekly_friday(self, scheduler):
         """Test crontab entry for weekly on Friday."""
         # 4=Friday in our format, cron uses 5=Friday
-        result = scheduler._generate_crontab_entry(
-            ScheduleFrequency.WEEKLY, "03:00", day_of_week=4
-        )
+        result = scheduler._generate_crontab_entry(ScheduleFrequency.WEEKLY, "03:00", day_of_week=4)
         assert result == "0 3 * * 5"
 
     def test_generate_crontab_weekly_sunday(self, scheduler):
         """Test crontab entry for weekly on Sunday."""
         # 6=Sunday in our format, cron uses 0=Sunday
-        result = scheduler._generate_crontab_entry(
-            ScheduleFrequency.WEEKLY, "08:00", day_of_week=6
-        )
+        result = scheduler._generate_crontab_entry(ScheduleFrequency.WEEKLY, "08:00", day_of_week=6)
         assert result == "0 8 * * 0"
 
     def test_generate_crontab_monthly(self, scheduler):
@@ -310,7 +289,7 @@ class TestSchedulerServiceFiles:
             cli_path="/usr/bin/clamui-scheduled-scan",
             targets=["/home/user/Documents"],
             skip_on_battery=True,
-            auto_quarantine=False
+            auto_quarantine=False,
         )
 
         assert "[Unit]" in service
@@ -329,7 +308,7 @@ class TestSchedulerServiceFiles:
             cli_path="/usr/bin/clamui-scheduled-scan",
             targets=["/home/user/Downloads"],
             skip_on_battery=False,
-            auto_quarantine=True
+            auto_quarantine=True,
         )
 
         assert "--auto-quarantine" in service
@@ -341,7 +320,7 @@ class TestSchedulerServiceFiles:
             cli_path="/usr/bin/clamui-scheduled-scan",
             targets=["/home/user/Documents", "/home/user/Downloads"],
             skip_on_battery=True,
-            auto_quarantine=True
+            auto_quarantine=True,
         )
 
         # shlex.quote() doesn't add quotes for paths without special chars
@@ -365,7 +344,7 @@ class TestSchedulerServiceFiles:
             cli_path="/usr/bin/clamui-scheduled-scan",
             targets=["/home/user/My Documents", "/path/with'quotes"],
             skip_on_battery=True,
-            auto_quarantine=False
+            auto_quarantine=False,
         )
 
         # shlex.quote() should properly quote these paths
@@ -406,13 +385,15 @@ class TestSchedulerPathValidation:
         """Test that valid paths are accepted."""
         from src.core.scheduler import _validate_target_paths
 
-        error = _validate_target_paths([
-            "/home/user/Documents",
-            "/home/user/My Documents",
-            "/path/with'quotes",
-            "/path/with\"doublequotes\"",
-            "/path/with$dollar",
-        ])
+        error = _validate_target_paths(
+            [
+                "/home/user/Documents",
+                "/home/user/My Documents",
+                "/path/with'quotes",
+                '/path/with"doublequotes"',
+                "/path/with$dollar",
+            ]
+        )
         assert error is None
 
 
@@ -432,9 +413,7 @@ class TestSchedulerEnableDisable:
             scheduler._backend = SchedulerBackend.NONE
 
             success, error = scheduler.enable_schedule(
-                frequency="daily",
-                time="02:00",
-                targets=["/home/user"]
+                frequency="daily", time="02:00", targets=["/home/user"]
             )
 
             assert success is False
@@ -445,7 +424,7 @@ class TestSchedulerEnableDisable:
         success, error = scheduler.enable_schedule(
             frequency="biweekly",  # Invalid - not a valid frequency option
             time="02:00",
-            targets=["/home/user"]
+            targets=["/home/user"],
         )
 
         if scheduler.is_available:
@@ -506,24 +485,26 @@ class TestSchedulerSystemdIntegration:
         scheduler = scheduler_with_systemd
 
         # Mock the CLI path and systemctl commands
-        with mock.patch.object(scheduler, "_get_cli_command_path", return_value="/usr/bin/clamui-scheduled-scan"):
-            with mock.patch("subprocess.run") as mock_run:
-                mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
+        with (
+            mock.patch.object(
+                scheduler, "_get_cli_command_path", return_value="/usr/bin/clamui-scheduled-scan"
+            ),
+            mock.patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = mock.MagicMock(returncode=0, stdout="", stderr="")
 
-                success, error = scheduler.enable_schedule(
-                    frequency="daily",
-                    time="02:00",
-                    targets=["/tmp/test"]
-                )
+            success, error = scheduler.enable_schedule(
+                frequency="daily", time="02:00", targets=["/tmp/test"]
+            )
 
-                if success:
-                    # Check that service file was created
-                    service_path = scheduler._systemd_dir / f"{scheduler.SERVICE_NAME}.service"
-                    assert service_path.exists()
+            if success:
+                # Check that service file was created
+                service_path = scheduler._systemd_dir / f"{scheduler.SERVICE_NAME}.service"
+                assert service_path.exists()
 
-                    # Check that timer file was created
-                    timer_path = scheduler._systemd_dir / f"{scheduler.TIMER_NAME}.timer"
-                    assert timer_path.exists()
+                # Check that timer file was created
+                timer_path = scheduler._systemd_dir / f"{scheduler.TIMER_NAME}.timer"
+                assert timer_path.exists()
 
 
 class TestSchedulerCronIntegration:

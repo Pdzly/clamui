@@ -8,15 +8,18 @@ import re
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from gi.repository import GLib
 
 if TYPE_CHECKING:
     from .daemon_scanner import DaemonScanner
+
+import contextlib
 
 from .log_manager import LogEntry, LogManager
 from .settings_manager import SettingsManager
@@ -27,8 +30,8 @@ from .threat_classifier import (
 from .utils import (
     check_clamav_installed,
     check_clamd_connection,
-    validate_path,
     get_clamav_path,
+    validate_path,
     wrap_host_command,
 )
 
@@ -87,15 +90,17 @@ def validate_pattern(pattern: str) -> bool:
 
 class ScanStatus(Enum):
     """Status of a scan operation."""
-    CLEAN = "clean"           # No threats found (exit code 0)
-    INFECTED = "infected"     # Threats found (exit code 1)
-    ERROR = "error"           # Error occurred (exit code 2 or exception)
-    CANCELLED = "cancelled"   # Scan was cancelled
+
+    CLEAN = "clean"  # No threats found (exit code 0)
+    INFECTED = "infected"  # Threats found (exit code 1)
+    ERROR = "error"  # Error occurred (exit code 2 or exception)
+    CANCELLED = "cancelled"  # Scan was cancelled
 
 
 @dataclass
 class ThreatDetail:
     """Detailed information about a detected threat."""
+
     file_path: str
     threat_name: str
     category: str
@@ -105,6 +110,7 @@ class ThreatDetail:
 @dataclass
 class ScanResult:
     """Result of a scan operation."""
+
     status: ScanStatus
     path: str
     stdout: str
@@ -114,7 +120,7 @@ class ScanResult:
     scanned_files: int
     scanned_dirs: int
     infected_count: int
-    error_message: Optional[str]
+    error_message: str | None
     threat_details: list[ThreatDetail]
 
     @property
@@ -142,9 +148,7 @@ class Scanner:
     """
 
     def __init__(
-        self,
-        log_manager: Optional[LogManager] = None,
-        settings_manager: Optional[SettingsManager] = None
+        self, log_manager: LogManager | None = None, settings_manager: SettingsManager | None = None
     ):
         """
         Initialize the scanner.
@@ -155,11 +159,11 @@ class Scanner:
             settings_manager: Optional SettingsManager instance for reading
                               exclusion patterns and scan backend settings.
         """
-        self._current_process: Optional[subprocess.Popen] = None
+        self._current_process: subprocess.Popen | None = None
         self._scan_cancelled = False
         self._log_manager = log_manager if log_manager else LogManager()
         self._settings_manager = settings_manager
-        self._daemon_scanner: Optional['DaemonScanner'] = None
+        self._daemon_scanner: DaemonScanner | None = None
 
     def _get_backend(self) -> str:
         """Get the configured scan backend."""
@@ -167,13 +171,13 @@ class Scanner:
             return self._settings_manager.get("scan_backend", "auto")
         return "auto"
 
-    def _get_daemon_scanner(self) -> 'DaemonScanner':
+    def _get_daemon_scanner(self) -> "DaemonScanner":
         """Get or create the daemon scanner instance."""
         if self._daemon_scanner is None:
             from .daemon_scanner import DaemonScanner
+
             self._daemon_scanner = DaemonScanner(
-                log_manager=self._log_manager,
-                settings_manager=self._settings_manager
+                log_manager=self._log_manager, settings_manager=self._settings_manager
             )
         return self._daemon_scanner
 
@@ -194,7 +198,7 @@ class Scanner:
             is_available, _ = check_clamd_connection()
             return "daemon" if is_available else "clamscan"
 
-    def check_available(self) -> tuple[bool, Optional[str]]:
+    def check_available(self) -> tuple[bool, str | None]:
         """
         Check if the configured scan backend is available.
 
@@ -215,10 +219,7 @@ class Scanner:
             return check_clamav_installed()
 
     def scan_sync(
-        self,
-        path: str,
-        recursive: bool = True,
-        profile_exclusions: dict | None = None
+        self, path: str, recursive: bool = True, profile_exclusions: dict | None = None
     ) -> ScanResult:
         """
         Execute a synchronous scan on the given path.
@@ -251,7 +252,7 @@ class Scanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=error,
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -286,7 +287,7 @@ class Scanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=version_or_error,
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -298,10 +299,7 @@ class Scanner:
         try:
             self._scan_cancelled = False
             self._current_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
 
             try:
@@ -330,7 +328,7 @@ class Scanner:
                     scanned_dirs=0,
                     infected_count=0,
                     error_message="Scan cancelled by user",
-                    threat_details=[]
+                    threat_details=[],
                 )
                 duration = time.monotonic() - start_time
                 self._save_scan_log(result, duration)
@@ -354,7 +352,7 @@ class Scanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message="ClamAV executable not found",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -371,7 +369,7 @@ class Scanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=f"Permission denied: {e}",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -388,7 +386,7 @@ class Scanner:
                 scanned_dirs=0,
                 infected_count=0,
                 error_message=f"Scan failed: {e}",
-                threat_details=[]
+                threat_details=[],
             )
             duration = time.monotonic() - start_time
             self._save_scan_log(result, duration)
@@ -399,7 +397,7 @@ class Scanner:
         path: str,
         callback: Callable[[ScanResult], None],
         recursive: bool = True,
-        profile_exclusions: dict | None = None
+        profile_exclusions: dict | None = None,
     ) -> None:
         """
         Execute an asynchronous scan on the given path.
@@ -414,6 +412,7 @@ class Scanner:
             profile_exclusions: Optional exclusions from a scan profile.
                                Format: {"paths": ["/path1", ...], "patterns": ["*.ext", ...]}
         """
+
         def scan_thread():
             result = self.scan_sync(path, recursive, profile_exclusions)
             # Schedule callback on main thread
@@ -432,19 +431,14 @@ class Scanner:
         """
         self._scan_cancelled = True
         if self._current_process is not None:
-            try:
+            with contextlib.suppress(OSError, ProcessLookupError):
                 self._current_process.terminate()
-            except (OSError, ProcessLookupError):
-                pass
         # Also cancel daemon scanner if it exists
         if self._daemon_scanner is not None:
             self._daemon_scanner.cancel()
 
     def _build_command(
-        self,
-        path: str,
-        recursive: bool,
-        profile_exclusions: dict | None = None
+        self, path: str, recursive: bool, profile_exclusions: dict | None = None
     ) -> list[str]:
         """
         Build the clamscan command arguments.
@@ -473,42 +467,42 @@ class Scanner:
 
         # Inject exclusion patterns from settings
         if self._settings_manager is not None:
-            exclusions = self._settings_manager.get('exclusion_patterns', [])
+            exclusions = self._settings_manager.get("exclusion_patterns", [])
             for exclusion in exclusions:
-                if not exclusion.get('enabled', True):
+                if not exclusion.get("enabled", True):
                     continue
 
-                pattern = exclusion.get('pattern', '')
+                pattern = exclusion.get("pattern", "")
                 if not pattern:
                     continue
 
                 regex = glob_to_regex(pattern)
-                exclusion_type = exclusion.get('type', 'pattern')
+                exclusion_type = exclusion.get("type", "pattern")
 
-                if exclusion_type == 'directory':
-                    cmd.extend(['--exclude-dir', regex])
+                if exclusion_type == "directory":
+                    cmd.extend(["--exclude-dir", regex])
                 else:  # file or pattern
-                    cmd.extend(['--exclude', regex])
+                    cmd.extend(["--exclude", regex])
 
         # Apply profile exclusions (paths and patterns)
         if profile_exclusions:
             # Handle path exclusions (directories)
-            for excl_path in profile_exclusions.get('paths', []):
+            for excl_path in profile_exclusions.get("paths", []):
                 if not excl_path:
                     continue
                 # Expand ~ in exclusion paths
-                if excl_path.startswith('~'):
+                if excl_path.startswith("~"):
                     excl_path = str(Path(excl_path).expanduser())
                 # Use the path directly for --exclude-dir (ClamAV accepts paths)
-                cmd.extend(['--exclude-dir', excl_path])
+                cmd.extend(["--exclude-dir", excl_path])
 
             # Handle pattern exclusions (file patterns like *.tmp)
-            for pattern in profile_exclusions.get('patterns', []):
+            for pattern in profile_exclusions.get("patterns", []):
                 if not pattern:
                     continue
                 # Convert glob pattern to regex for ClamAV
                 regex = glob_to_regex(pattern)
-                cmd.extend(['--exclude', regex])
+                cmd.extend(["--exclude", regex])
 
         # Add the path to scan
         cmd.append(path)
@@ -516,13 +510,7 @@ class Scanner:
         # Wrap with flatpak-spawn if running inside Flatpak sandbox
         return wrap_host_command(cmd)
 
-    def _parse_results(
-        self,
-        path: str,
-        stdout: str,
-        stderr: str,
-        exit_code: int
-    ) -> ScanResult:
+    def _parse_results(self, path: str, stdout: str, stderr: str, exit_code: int) -> ScanResult:
         """
         Parse clamscan output into a ScanResult.
 
@@ -559,7 +547,11 @@ class Scanner:
                     file_path = parts[0].strip()
                     # Extract threat name (remove " FOUND" suffix)
                     threat_part = parts[1].strip()
-                    threat_name = threat_part.rsplit(" ", 1)[0].strip() if " FOUND" in threat_part else threat_part
+                    threat_name = (
+                        threat_part.rsplit(" ", 1)[0].strip()
+                        if " FOUND" in threat_part
+                        else threat_part
+                    )
 
                     infected_files.append(file_path)
 
@@ -568,7 +560,7 @@ class Scanner:
                         file_path=file_path,
                         threat_name=threat_name,
                         category=categorize_threat(threat_name),
-                        severity=classify_threat_severity_str(threat_name)
+                        severity=classify_threat_severity_str(threat_name),
                     )
                     threat_details.append(threat_detail)
                     infected_count += 1
@@ -603,7 +595,7 @@ class Scanner:
             scanned_dirs=scanned_dirs,
             infected_count=infected_count,
             error_message=stderr if status == ScanStatus.ERROR else None,
-            threat_details=threat_details
+            threat_details=threat_details,
         )
 
     def _save_scan_log(self, result: ScanResult, duration: float) -> None:
@@ -625,8 +617,7 @@ class Scanner:
 
         # Convert threat details to dicts for the factory method
         threat_dicts = [
-            {"file_path": t.file_path, "threat_name": t.threat_name}
-            for t in result.threat_details
+            {"file_path": t.file_path, "threat_name": t.threat_name} for t in result.threat_details
         ]
 
         entry = LogEntry.from_scan_result_data(
@@ -639,6 +630,6 @@ class Scanner:
             threat_details=threat_dicts,
             error_message=result.error_message,
             stdout=result.stdout,
-            scheduled=False
+            scheduled=False,
         )
         self._log_manager.save_log(entry)

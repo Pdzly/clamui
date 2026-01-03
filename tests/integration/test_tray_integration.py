@@ -6,7 +6,6 @@ from unittest import mock
 
 import pytest
 
-
 # Create mock modules for GTK3, GTK4, Adwaita, and AppIndicator
 # These mocks allow testing without a display and handle GTK version conflicts
 
@@ -51,8 +50,8 @@ def mock_gtk_modules(monkeypatch):
     mock_repo.AyatanaAppIndicator3 = _mock_appindicator
 
     # Install mocks
-    monkeypatch.setitem(sys.modules, 'gi', _mock_gi)
-    monkeypatch.setitem(sys.modules, 'gi.repository', mock_repo)
+    monkeypatch.setitem(sys.modules, "gi", _mock_gi)
+    monkeypatch.setitem(sys.modules, "gi.repository", mock_repo)
 
     # Mock require_version to do nothing
     _mock_gi.require_version = mock.MagicMock()
@@ -71,6 +70,7 @@ class TestTrayMenuActionsIntegration:
     def test_quick_scan_action_triggers_scan_view(self, mock_gtk_modules):
         """Test that Quick Scan tray action triggers scan in ScanView."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -96,6 +96,7 @@ class TestTrayMenuActionsIntegration:
     def test_full_scan_action_triggers_folder_selection(self, mock_gtk_modules):
         """Test that Full Scan tray action triggers folder selection."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -115,6 +116,7 @@ class TestTrayMenuActionsIntegration:
     def test_update_action_triggers_database_update(self, mock_gtk_modules):
         """Test that Update Definitions action triggers update in UpdateView."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -134,6 +136,7 @@ class TestTrayMenuActionsIntegration:
     def test_quit_action_triggers_app_quit(self, mock_gtk_modules):
         """Test that Quit action triggers application quit."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -157,6 +160,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_start_updates_tray_to_scanning(self, mock_gtk_modules):
         """Test that starting a scan updates tray to scanning state."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -167,7 +171,7 @@ class TestScanStateToTrayPropagation:
         tray._available = True
 
         # Simulate scan start by updating status to scanning
-        with mock.patch.object(tray, '_resolve_icon', return_value='emblem-synchronizing-symbolic'):
+        with mock.patch.object(tray, "_resolve_icon", return_value="emblem-synchronizing-symbolic"):
             tray.update_status("scanning")
 
         assert tray.current_status == "scanning"
@@ -176,6 +180,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_complete_clean_updates_tray_to_protected(self, mock_gtk_modules):
         """Test that clean scan result updates tray to protected state."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -187,7 +192,7 @@ class TestScanStateToTrayPropagation:
         tray._current_status = "scanning"
 
         # Update to protected state (clean scan)
-        with mock.patch.object(tray, '_resolve_icon', return_value='security-high-symbolic'):
+        with mock.patch.object(tray, "_resolve_icon", return_value="security-high-symbolic"):
             tray.update_status("protected")
 
         assert tray.current_status == "protected"
@@ -195,6 +200,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_complete_threats_updates_tray_to_threat(self, mock_gtk_modules):
         """Test that threat detection updates tray to threat state."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -206,7 +212,7 @@ class TestScanStateToTrayPropagation:
         tray._current_status = "scanning"
 
         # Update to threat state (threats detected)
-        with mock.patch.object(tray, '_resolve_icon', return_value='dialog-error-symbolic'):
+        with mock.patch.object(tray, "_resolve_icon", return_value="dialog-error-symbolic"):
             tray.update_status("threat")
 
         assert tray.current_status == "threat"
@@ -214,6 +220,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_error_updates_tray_to_warning(self, mock_gtk_modules):
         """Test that scan error updates tray to warning state."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -225,7 +232,7 @@ class TestScanStateToTrayPropagation:
         tray._current_status = "scanning"
 
         # Update to warning state (scan error)
-        with mock.patch.object(tray, '_resolve_icon', return_value='dialog-warning-symbolic'):
+        with mock.patch.object(tray, "_resolve_icon", return_value="dialog-warning-symbolic"):
             tray.update_status("warning")
 
         assert tray.current_status == "warning"
@@ -233,6 +240,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_progress_updates_tray_label(self, mock_gtk_modules):
         """Test that scan progress updates tray label percentage."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -244,7 +252,7 @@ class TestScanStateToTrayPropagation:
         tray._current_status = "protected"
 
         # Update progress
-        with mock.patch.object(tray, 'update_status'):
+        with mock.patch.object(tray, "update_status"):
             tray.update_scan_progress(50)
 
         mock_indicator.set_label.assert_called_with("50%", "")
@@ -252,6 +260,7 @@ class TestScanStateToTrayPropagation:
     def test_scan_complete_clears_progress_label(self, mock_gtk_modules):
         """Test that scan completion clears progress label."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -272,6 +281,7 @@ class TestWindowToggleIntegration:
     def test_window_toggle_callback_invoked(self, mock_gtk_modules):
         """Test that window toggle callback is invoked on menu click."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -294,6 +304,7 @@ class TestWindowToggleIntegration:
     def test_window_menu_label_shows_hide_when_visible(self, mock_gtk_modules):
         """Test menu shows 'Hide Window' when window is visible."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -310,6 +321,7 @@ class TestWindowToggleIntegration:
     def test_window_menu_label_shows_show_when_hidden(self, mock_gtk_modules):
         """Test menu shows 'Show Window' when window is hidden."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -326,6 +338,7 @@ class TestWindowToggleIntegration:
     def test_window_toggle_syncs_menu_label(self, mock_gtk_modules):
         """Test that toggling window syncs the menu label."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -361,6 +374,7 @@ class TestMinimizeToTrayIntegration:
     def test_tray_available_for_minimize(self, mock_gtk_modules):
         """Test tray availability check for minimize-to-tray."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -373,6 +387,7 @@ class TestMinimizeToTrayIntegration:
     def test_minimize_hides_window_and_updates_menu(self, mock_gtk_modules):
         """Test that minimizing to tray hides window and updates menu."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -407,6 +422,7 @@ class TestMinimizeToTrayIntegration:
     def test_restore_from_tray_shows_window(self, mock_gtk_modules):
         """Test that clicking tray when minimized shows window."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -446,6 +462,7 @@ class TestTrayCleanupIntegration:
     def test_cleanup_clears_all_callbacks(self, mock_gtk_modules):
         """Test that cleanup clears all registered callbacks."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -457,12 +474,9 @@ class TestTrayCleanupIntegration:
             on_quick_scan=mock.MagicMock(),
             on_full_scan=mock.MagicMock(),
             on_update=mock.MagicMock(),
-            on_quit=mock.MagicMock()
+            on_quit=mock.MagicMock(),
         )
-        tray.set_window_toggle_callback(
-            mock.MagicMock(),
-            mock.MagicMock()
-        )
+        tray.set_window_toggle_callback(mock.MagicMock(), mock.MagicMock())
 
         # Verify callbacks are set
         assert tray._on_quick_scan is not None
@@ -482,6 +496,7 @@ class TestTrayCleanupIntegration:
     def test_cleanup_deactivates_indicator(self, mock_gtk_modules):
         """Test that cleanup deactivates the indicator."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -500,6 +515,7 @@ class TestTrayCleanupIntegration:
     def test_cleanup_clears_gtk_resources(self, mock_gtk_modules):
         """Test that cleanup clears GTK resources."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -522,6 +538,7 @@ class TestTrayAppCallbackChain:
     def test_complete_scan_workflow_updates_tray(self, mock_gtk_modules):
         """Test complete scan workflow: start -> progress -> complete -> status."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -534,7 +551,6 @@ class TestTrayAppCallbackChain:
         status_changes = []
 
         # Track status changes
-        original_update_status = tray.update_status
 
         def tracking_update_status(status):
             status_changes.append(status)
@@ -558,6 +574,7 @@ class TestTrayAppCallbackChain:
     def test_multiple_callbacks_can_be_set_and_replaced(self, mock_gtk_modules):
         """Test that callbacks can be set and replaced without issues."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -586,6 +603,7 @@ class TestTrayAppCallbackChain:
     def test_callbacks_work_independently(self, mock_gtk_modules):
         """Test that different callbacks work independently."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -607,10 +625,7 @@ class TestTrayAppCallbackChain:
             actions.append("quit")
 
         tray.set_action_callbacks(
-            on_quick_scan=quick_scan,
-            on_full_scan=full_scan,
-            on_update=update,
-            on_quit=quit_app
+            on_quick_scan=quick_scan, on_full_scan=full_scan, on_update=update, on_quit=quit_app
         )
 
         # Trigger each action in random order
@@ -629,6 +644,7 @@ class TestTrayStatusIconIntegration:
     def test_status_transitions_are_tracked(self, mock_gtk_modules):
         """Test that status transitions are properly tracked."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -645,13 +661,14 @@ class TestTrayStatusIconIntegration:
         states = ["scanning", "threat", "warning", "protected"]
 
         for state in states:
-            with mock.patch.object(tray, '_resolve_icon', return_value=f'icon-{state}'):
+            with mock.patch.object(tray, "_resolve_icon", return_value=f"icon-{state}"):
                 tray.update_status(state)
                 assert tray.current_status == state
 
     def test_invalid_status_falls_back_to_protected(self, mock_gtk_modules):
         """Test that invalid status falls back to protected."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -662,7 +679,7 @@ class TestTrayStatusIconIntegration:
         tray._available = True
 
         # Try invalid status
-        with mock.patch.object(tray, '_resolve_icon', return_value='security-high-symbolic'):
+        with mock.patch.object(tray, "_resolve_icon", return_value="security-high-symbolic"):
             tray.update_status("invalid_status")
 
         # Should fall back to protected
@@ -675,6 +692,7 @@ class TestTrayAppLifecycle:
     def test_tray_can_be_created_before_window(self, mock_gtk_modules):
         """Test that tray can be created before main window exists."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -689,6 +707,7 @@ class TestTrayAppLifecycle:
     def test_tray_survives_window_destroy_recreate(self, mock_gtk_modules):
         """Test that tray remains functional when window is destroyed/recreated."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -703,8 +722,8 @@ class TestTrayAppLifecycle:
             def get_visible():
                 return True
 
-            def toggle():
-                visibility_cycle.append(f"toggle_{i}")
+            def toggle(idx=i):  # Capture i as default argument
+                visibility_cycle.append(f"toggle_{idx}")
 
             tray.set_window_toggle_callback(toggle, get_visible)
 
@@ -722,6 +741,7 @@ class TestTrayAppLifecycle:
     def test_cleanup_is_idempotent(self, mock_gtk_modules):
         """Test that cleanup can be called multiple times safely."""
         import importlib
+
         from src.ui import tray_indicator
 
         importlib.reload(tray_indicator)
@@ -746,6 +766,7 @@ class TestTrayUnavailableGracefulDegradation:
     def test_unavailable_tray_allows_all_operations(self, mock_gtk_modules):
         """Test all operations work when tray library is unavailable."""
         import importlib
+
         from src.ui import tray_indicator
 
         # Force unavailable state
@@ -760,7 +781,7 @@ class TestTrayUnavailableGracefulDegradation:
             on_quick_scan=mock.MagicMock(),
             on_full_scan=mock.MagicMock(),
             on_update=mock.MagicMock(),
-            on_quit=mock.MagicMock()
+            on_quit=mock.MagicMock(),
         )
         tray.set_window_toggle_callback(mock.MagicMock(), mock.MagicMock())
         tray.activate()
@@ -777,6 +798,7 @@ class TestTrayUnavailableGracefulDegradation:
     def test_unavailable_tray_reports_status_correctly(self, mock_gtk_modules):
         """Test unavailable tray reports its status correctly."""
         import importlib
+
         from src.ui import tray_indicator
 
         tray_indicator._APPINDICATOR_AVAILABLE = False

@@ -7,18 +7,16 @@ scheduling that runs even when the GUI application is closed.
 
 import os
 import shlex
-import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Tuple
 
-from .utils import is_flatpak, wrap_host_command, which_host_command
+from .utils import which_host_command, wrap_host_command
 
 
-def _validate_target_paths(targets: List[str]) -> Optional[str]:
+def _validate_target_paths(targets: list[str]) -> str | None:
     """
     Validate target paths for security issues.
 
@@ -34,16 +32,17 @@ def _validate_target_paths(targets: List[str]) -> Optional[str]:
     """
     for target in targets:
         # Check for newlines (crontab injection)
-        if '\n' in target or '\r' in target:
+        if "\n" in target or "\r" in target:
             return f"Invalid path contains newline characters: {target}"
         # Check for null bytes (path truncation attacks)
-        if '\x00' in target:
+        if "\x00" in target:
             return f"Invalid path contains null bytes: {target}"
     return None
 
 
 class SchedulerBackend(Enum):
     """Available scheduler backends."""
+
     SYSTEMD = "systemd"
     CRON = "cron"
     NONE = "none"
@@ -51,6 +50,7 @@ class SchedulerBackend(Enum):
 
 class ScheduleFrequency(Enum):
     """Schedule frequency options."""
+
     HOURLY = "hourly"
     DAILY = "daily"
     WEEKLY = "weekly"
@@ -72,10 +72,11 @@ class ScheduleConfig:
         day_of_week: Day for weekly scans (0=Monday, 6=Sunday)
         day_of_month: Day for monthly scans (1-28)
     """
+
     enabled: bool = False
     frequency: ScheduleFrequency = ScheduleFrequency.DAILY
     time: str = "02:00"
-    targets: List[str] = None
+    targets: list[str] = None
     skip_on_battery: bool = True
     auto_quarantine: bool = False
     day_of_week: int = 0  # Monday
@@ -88,8 +89,8 @@ class ScheduleConfig:
 
 
 # Detection caches (None = not checked)
-_systemd_available: Optional[bool] = None
-_cron_available: Optional[bool] = None
+_systemd_available: bool | None = None
+_cron_available: bool | None = None
 _scheduler_cache_lock = threading.Lock()
 
 
@@ -120,7 +121,7 @@ def _check_systemd_available() -> bool:
                 wrap_host_command(["systemctl", "--user", "status"]),
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             # systemctl --user status returns 0 even if no units
             # It returns non-zero if user session isn't available
@@ -170,7 +171,7 @@ class Scheduler:
     # Crontab marker for identifying ClamUI entries
     CRON_MARKER = "# ClamUI Scheduled Scan"
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, config_dir: Path | None = None):
         """
         Initialize the Scheduler.
 
@@ -258,7 +259,7 @@ class Scheduler:
         else:
             return "none"
 
-    def get_status(self) -> Tuple[bool, Optional[str]]:
+    def get_status(self) -> tuple[bool, str | None]:
         """
         Get current scheduler status.
 
@@ -278,7 +279,7 @@ class Scheduler:
         else:
             return (False, None)
 
-    def _get_systemd_status(self) -> Tuple[bool, Optional[str]]:
+    def _get_systemd_status(self) -> tuple[bool, str | None]:
         """
         Get status of systemd timer.
 
@@ -287,26 +288,27 @@ class Scheduler:
         """
         try:
             result = subprocess.run(
-                wrap_host_command([
-                    "systemctl", "--user", "is-active",
-                    f"{self.TIMER_NAME}.timer"
-                ]),
+                wrap_host_command(["systemctl", "--user", "is-active", f"{self.TIMER_NAME}.timer"]),
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if result.returncode == 0:
                 # Timer is active, get next run time
                 next_result = subprocess.run(
-                    wrap_host_command([
-                        "systemctl", "--user", "show",
-                        f"{self.TIMER_NAME}.timer",
-                        "--property=NextElapseUSecRealtime"
-                    ]),
+                    wrap_host_command(
+                        [
+                            "systemctl",
+                            "--user",
+                            "show",
+                            f"{self.TIMER_NAME}.timer",
+                            "--property=NextElapseUSecRealtime",
+                        ]
+                    ),
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=5,
                 )
 
                 if next_result.returncode == 0:
@@ -324,7 +326,7 @@ class Scheduler:
         except Exception as e:
             return (False, f"Error checking timer: {str(e)}")
 
-    def _get_cron_status(self) -> Tuple[bool, Optional[str]]:
+    def _get_cron_status(self) -> tuple[bool, str | None]:
         """
         Get status of cron entry.
 
@@ -333,10 +335,7 @@ class Scheduler:
         """
         try:
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]),
-                capture_output=True,
-                text=True,
-                timeout=5
+                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
             )
 
             if result.returncode == 0:
@@ -353,11 +352,7 @@ class Scheduler:
             return (False, f"Error checking crontab: {str(e)}")
 
     def _generate_oncalendar(
-        self,
-        frequency: ScheduleFrequency,
-        time: str,
-        day_of_week: int = 0,
-        day_of_month: int = 1
+        self, frequency: ScheduleFrequency, time: str, day_of_week: int = 0, day_of_month: int = 1
     ) -> str:
         """
         Generate systemd OnCalendar specification.
@@ -402,11 +397,7 @@ class Scheduler:
             return f"*-*-* {time_str}"
 
     def _generate_crontab_entry(
-        self,
-        frequency: ScheduleFrequency,
-        time: str,
-        day_of_week: int = 0,
-        day_of_month: int = 1
+        self, frequency: ScheduleFrequency, time: str, day_of_week: int = 0, day_of_month: int = 1
     ) -> str:
         """
         Generate crontab entry specification.
@@ -450,7 +441,7 @@ class Scheduler:
         else:
             return f"{minute} {hour} * * *"
 
-    def _get_cli_command_path(self) -> Optional[str]:
+    def _get_cli_command_path(self) -> str | None:
         """
         Get the path to the clamui-scheduled-scan CLI command.
 
@@ -473,12 +464,12 @@ class Scheduler:
         self,
         frequency: str,
         time: str,
-        targets: List[str],
+        targets: list[str],
         day_of_week: int = 0,
         day_of_month: int = 1,
         skip_on_battery: bool = True,
-        auto_quarantine: bool = False
-    ) -> Tuple[bool, Optional[str]]:
+        auto_quarantine: bool = False,
+    ) -> tuple[bool, str | None]:
         """
         Enable scheduled scanning.
 
@@ -500,8 +491,11 @@ class Scheduler:
             - (False, error_message) if failed
         """
         if not self.is_available:
-            return (False, "No scheduler backend available. "
-                          "Install systemd or cron to enable scheduled scans.")
+            return (
+                False,
+                "No scheduler backend available. "
+                "Install systemd or cron to enable scheduled scans.",
+            )
 
         # Validate target paths for security issues (newlines, null bytes)
         validation_error = _validate_target_paths(targets)
@@ -516,13 +510,11 @@ class Scheduler:
 
         if self._backend == SchedulerBackend.SYSTEMD:
             return self._enable_systemd_schedule(
-                freq, time, targets, day_of_week, day_of_month,
-                skip_on_battery, auto_quarantine
+                freq, time, targets, day_of_week, day_of_month, skip_on_battery, auto_quarantine
             )
         elif self._backend == SchedulerBackend.CRON:
             return self._enable_cron_schedule(
-                freq, time, targets, day_of_week, day_of_month,
-                skip_on_battery, auto_quarantine
+                freq, time, targets, day_of_week, day_of_month, skip_on_battery, auto_quarantine
             )
         else:
             return (False, "No scheduler backend available")
@@ -531,12 +523,12 @@ class Scheduler:
         self,
         frequency: ScheduleFrequency,
         time: str,
-        targets: List[str],
+        targets: list[str],
         day_of_week: int,
         day_of_month: int,
         skip_on_battery: bool,
-        auto_quarantine: bool
-    ) -> Tuple[bool, Optional[str]]:
+        auto_quarantine: bool,
+    ) -> tuple[bool, str | None]:
         """
         Create and enable systemd timer/service.
 
@@ -553,9 +545,7 @@ class Scheduler:
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate OnCalendar specification
-            on_calendar = self._generate_oncalendar(
-                frequency, time, day_of_week, day_of_month
-            )
+            on_calendar = self._generate_oncalendar(frequency, time, day_of_week, day_of_month)
 
             # Create service file
             service_content = self._generate_service_file(
@@ -573,18 +563,17 @@ class Scheduler:
             subprocess.run(
                 wrap_host_command(["systemctl", "--user", "daemon-reload"]),
                 capture_output=True,
-                timeout=10
+                timeout=10,
             )
 
             # Enable and start timer
             result = subprocess.run(
-                wrap_host_command([
-                    "systemctl", "--user", "enable", "--now",
-                    f"{self.TIMER_NAME}.timer"
-                ]),
+                wrap_host_command(
+                    ["systemctl", "--user", "enable", "--now", f"{self.TIMER_NAME}.timer"]
+                ),
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             if result.returncode != 0:
@@ -602,11 +591,7 @@ class Scheduler:
             return (False, f"Error enabling schedule: {str(e)}")
 
     def _generate_service_file(
-        self,
-        cli_path: str,
-        targets: List[str],
-        skip_on_battery: bool,
-        auto_quarantine: bool
+        self, cli_path: str, targets: list[str], skip_on_battery: bool, auto_quarantine: bool
     ) -> str:
         """
         Generate systemd service file content.
@@ -664,12 +649,12 @@ WantedBy=timers.target
         self,
         frequency: ScheduleFrequency,
         time: str,
-        targets: List[str],
+        targets: list[str],
         day_of_week: int,
         day_of_month: int,
         skip_on_battery: bool,
-        auto_quarantine: bool
-    ) -> Tuple[bool, Optional[str]]:
+        auto_quarantine: bool,
+    ) -> tuple[bool, str | None]:
         """
         Create and enable cron entry.
 
@@ -683,9 +668,7 @@ WantedBy=timers.target
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate cron time specification
-            cron_time = self._generate_crontab_entry(
-                frequency, time, day_of_week, day_of_month
-            )
+            cron_time = self._generate_crontab_entry(frequency, time, day_of_week, day_of_month)
 
             # Build command
             # Use shlex.quote() to prevent command injection via malicious paths
@@ -702,10 +685,7 @@ WantedBy=timers.target
 
             # Get current crontab
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]),
-                capture_output=True,
-                text=True,
-                timeout=5
+                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
             )
 
             if result.returncode == 0:
@@ -738,7 +718,7 @@ WantedBy=timers.target
                 input=new_crontab,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if result.returncode != 0:
@@ -751,7 +731,7 @@ WantedBy=timers.target
         except Exception as e:
             return (False, f"Error enabling schedule: {str(e)}")
 
-    def disable_schedule(self) -> Tuple[bool, Optional[str]]:
+    def disable_schedule(self) -> tuple[bool, str | None]:
         """
         Disable scheduled scanning.
 
@@ -772,7 +752,7 @@ WantedBy=timers.target
         else:
             return (True, None)
 
-    def _disable_systemd_schedule(self) -> Tuple[bool, Optional[str]]:
+    def _disable_systemd_schedule(self) -> tuple[bool, str | None]:
         """
         Disable and remove systemd timer/service.
 
@@ -782,12 +762,11 @@ WantedBy=timers.target
         try:
             # Stop and disable timer
             subprocess.run(
-                wrap_host_command([
-                    "systemctl", "--user", "disable", "--now",
-                    f"{self.TIMER_NAME}.timer"
-                ]),
+                wrap_host_command(
+                    ["systemctl", "--user", "disable", "--now", f"{self.TIMER_NAME}.timer"]
+                ),
                 capture_output=True,
-                timeout=10
+                timeout=10,
             )
 
             # Remove files
@@ -803,7 +782,7 @@ WantedBy=timers.target
             subprocess.run(
                 wrap_host_command(["systemctl", "--user", "daemon-reload"]),
                 capture_output=True,
-                timeout=10
+                timeout=10,
             )
 
             return (True, None)
@@ -817,7 +796,7 @@ WantedBy=timers.target
         except Exception as e:
             return (False, f"Error disabling schedule: {str(e)}")
 
-    def _disable_cron_schedule(self) -> Tuple[bool, Optional[str]]:
+    def _disable_cron_schedule(self) -> tuple[bool, str | None]:
         """
         Remove cron entry.
 
@@ -827,10 +806,7 @@ WantedBy=timers.target
         try:
             # Get current crontab
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]),
-                capture_output=True,
-                text=True,
-                timeout=5
+                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
             )
 
             if result.returncode != 0:
@@ -857,18 +833,19 @@ WantedBy=timers.target
                     input=new_crontab,
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=5,
                 )
             else:
                 # Remove crontab entirely if empty
                 result = subprocess.run(
-                    wrap_host_command(["crontab", "-r"]),
-                    capture_output=True,
-                    timeout=5
+                    wrap_host_command(["crontab", "-r"]), capture_output=True, timeout=5
                 )
 
             if result.returncode != 0:
-                return (False, f"Failed to update crontab: {result.stderr.strip() if hasattr(result, 'stderr') else ''}")
+                return (
+                    False,
+                    f"Failed to update crontab: {result.stderr.strip() if hasattr(result, 'stderr') else ''}",
+                )
 
             return (True, None)
 

@@ -6,10 +6,10 @@ battery-aware scheduled scanning (skip scans when on battery power).
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 try:
     import psutil
+
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
@@ -26,10 +26,11 @@ class BatteryStatus:
         percent: Battery charge percentage (0-100), None if no battery
         time_remaining: Estimated seconds until battery empty/full, None if unknown
     """
+
     has_battery: bool
     is_plugged: bool
-    percent: Optional[float] = None
-    time_remaining: Optional[int] = None
+    percent: float | None = None
+    time_remaining: int | None = None
 
 
 class BatteryManager:
@@ -61,10 +62,7 @@ class BatteryManager:
         if not self._psutil_available:
             # psutil not installed - assume plugged in
             return BatteryStatus(
-                has_battery=False,
-                is_plugged=True,
-                percent=None,
-                time_remaining=None
+                has_battery=False, is_plugged=True, percent=None, time_remaining=None
             )
 
         try:
@@ -72,19 +70,13 @@ class BatteryManager:
         except Exception:
             # Handle any psutil errors gracefully
             return BatteryStatus(
-                has_battery=False,
-                is_plugged=True,
-                percent=None,
-                time_remaining=None
+                has_battery=False, is_plugged=True, percent=None, time_remaining=None
             )
 
         if battery is None:
             # No battery detected (desktop system)
             return BatteryStatus(
-                has_battery=False,
-                is_plugged=True,
-                percent=None,
-                time_remaining=None
+                has_battery=False, is_plugged=True, percent=None, time_remaining=None
             )
 
         # Battery detected (laptop or similar)
@@ -92,7 +84,7 @@ class BatteryManager:
             has_battery=True,
             is_plugged=battery.power_plugged,
             percent=battery.percent,
-            time_remaining=battery.secsleft if battery.secsleft > 0 else None
+            time_remaining=battery.secsleft if battery.secsleft > 0 else None,
         )
 
     def is_on_battery(self) -> bool:
@@ -143,7 +135,7 @@ class BatteryManager:
         return self.get_status().is_plugged
 
     @property
-    def battery_percent(self) -> Optional[float]:
+    def battery_percent(self) -> float | None:
         """
         Get current battery charge percentage.
 

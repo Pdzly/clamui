@@ -1,7 +1,6 @@
 # ClamUI StatisticsCalculator Tests
 """Unit tests for the StatisticsCalculator class and caching functionality."""
 
-import time
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -336,9 +335,7 @@ class TestStatisticsCalculatorBasicFunctionality:
 
     def test_get_scan_trend_data_returns_list(self, statistics_calculator):
         """Test that get_scan_trend_data returns a list of data points."""
-        trend_data = statistics_calculator.get_scan_trend_data(
-            timeframe="weekly", data_points=7
-        )
+        trend_data = statistics_calculator.get_scan_trend_data(timeframe="weekly", data_points=7)
         assert isinstance(trend_data, list)
 
 
@@ -391,9 +388,7 @@ class TestStatisticsCalculatorCacheHit:
         assert isinstance(stats, ScanStatistics)
 
         # Second call to get_scan_trend_data should use cached data (cache hit!)
-        trend_data = statistics_calculator.get_scan_trend_data(
-            timeframe="weekly", data_points=7
-        )
+        trend_data = statistics_calculator.get_scan_trend_data(timeframe="weekly", data_points=7)
         assert mock_log_manager.get_logs.call_count == 1  # Still 1 - cache hit!
         assert isinstance(trend_data, list)
 
@@ -410,9 +405,7 @@ class TestStatisticsCalculatorCacheHit:
         mock_log_manager.get_logs.reset_mock()
 
         # First call to get_scan_trend_data should fetch from log_manager
-        trend_data = statistics_calculator.get_scan_trend_data(
-            timeframe="weekly", data_points=7
-        )
+        trend_data = statistics_calculator.get_scan_trend_data(timeframe="weekly", data_points=7)
         assert mock_log_manager.get_logs.call_count == 1
         assert isinstance(trend_data, list)
 
@@ -421,9 +414,7 @@ class TestStatisticsCalculatorCacheHit:
         assert mock_log_manager.get_logs.call_count == 1  # Still 1 - cache hit!
         assert isinstance(stats, ScanStatistics)
 
-    def test_multiple_successive_calls_all_use_cache(
-        self, statistics_calculator, mock_log_manager
-    ):
+    def test_multiple_successive_calls_all_use_cache(self, statistics_calculator, mock_log_manager):
         """Test that multiple successive calls all benefit from caching."""
         # Reset call count
         mock_log_manager.get_logs.reset_mock()
@@ -485,14 +476,14 @@ class TestStatisticsCalculatorCacheExpiration:
             mock_time.return_value = 15.0
 
             # Second call should use cached data (cache still fresh)
-            stats2 = statistics_calculator.get_statistics(timeframe="all")
+            statistics_calculator.get_statistics(timeframe="all")
             assert mock_log_manager.get_logs.call_count == 1  # Still 1 - cache hit
 
             # Advance time by another 20 seconds (total 35 seconds - past TTL)
             mock_time.return_value = 35.0
 
             # Third call should fetch fresh data (cache expired)
-            stats3 = statistics_calculator.get_statistics(timeframe="all")
+            statistics_calculator.get_statistics(timeframe="all")
             assert mock_log_manager.get_logs.call_count == 2  # Now 2 - cache miss, fresh fetch
 
     def test_cache_expires_exactly_at_ttl(self, statistics_calculator, mock_log_manager):
@@ -520,9 +511,7 @@ class TestStatisticsCalculatorCacheExpiration:
             statistics_calculator.get_statistics()
             assert mock_log_manager.get_logs.call_count == 2  # Cache miss - expired
 
-    def test_cache_expiration_applies_to_all_methods(
-        self, statistics_calculator, mock_log_manager
-    ):
+    def test_cache_expiration_applies_to_all_methods(self, statistics_calculator, mock_log_manager):
         """Test that cache expiration applies to both get_statistics and get_scan_trend_data."""
         # Reset call count
         mock_log_manager.get_logs.reset_mock()
@@ -619,14 +608,14 @@ class TestStatisticsCalculatorCacheInvalidation:
         assert isinstance(stats1, ScanStatistics)
 
         # Second call should use cached data (cache hit)
-        stats2 = statistics_calculator.get_statistics(timeframe="all")
+        statistics_calculator.get_statistics(timeframe="all")
         assert mock_log_manager.get_logs.call_count == 1  # Still 1 - cache hit
 
         # Invalidate the cache
         statistics_calculator.invalidate_cache()
 
         # Third call should fetch fresh data (cache was invalidated)
-        stats3 = statistics_calculator.get_statistics(timeframe="all")
+        statistics_calculator.get_statistics(timeframe="all")
         assert mock_log_manager.get_logs.call_count == 2  # Now 2 - cache invalidated, fresh fetch
 
     def test_invalidate_cache_clears_cache_dict(self, statistics_calculator):

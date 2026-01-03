@@ -6,15 +6,11 @@ import os
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any
-from unittest import mock
 
 import pytest
 
-from src.profiles.models import ScanProfile
 from src.profiles.profile_manager import (
     MAX_PROFILE_NAME_LENGTH,
-    MIN_PROFILE_NAME_LENGTH,
     ProfileManager,
 )
 
@@ -505,6 +501,7 @@ class TestProfileManagerCRUD:
 
         # Small delay to ensure timestamp differs
         import time
+
         time.sleep(0.01)
 
         updated = manager.update_profile(profile.id, description="Changed")
@@ -542,7 +539,7 @@ class TestProfileManagerCRUD:
 
     def test_update_profile_duplicate_name_raises(self, manager):
         """Test that updating to duplicate name raises ValueError."""
-        profile1 = manager.create_profile(
+        manager.create_profile(
             name="First Profile",
             targets=["/home"],
             exclusions={},
@@ -707,7 +704,7 @@ class TestProfileManagerReload:
         manager2 = ProfileManager(config_dir=temp_config_dir)
 
         # Create profile with manager1
-        profile = manager1.create_profile(
+        manager1.create_profile(
             name="Reload Test",
             targets=["/home"],
             exclusions={},
@@ -760,7 +757,7 @@ class TestProfileManagerExportImport:
         export_path = Path(temp_config_dir) / "exported.json"
         manager.export_profile(profile.id, export_path)
 
-        with open(export_path, "r", encoding="utf-8") as f:
+        with open(export_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert "export_version" in data
@@ -1034,10 +1031,7 @@ class TestProfileManagerThreadSafety:
                 with lock:
                     errors.append(e)
 
-        threads = [
-            threading.Thread(target=create_profile, args=(i,))
-            for i in range(10)
-        ]
+        threads = [threading.Thread(target=create_profile, args=(i,)) for i in range(10)]
 
         for t in threads:
             t.start()
@@ -1172,7 +1166,6 @@ class TestProfileManagerPathCaching:
         test_dir.mkdir()
 
         # Use relative path
-        import os
         old_cwd = os.getcwd()
         try:
             os.chdir(temp_config_dir)
@@ -1320,8 +1313,10 @@ class TestProfileManagerPathCaching:
         # Check that caches were populated
         cache_info = ProfileManager.get_cache_info()
         total_calls = (
-            cache_info["expanduser"]["hits"] + cache_info["expanduser"]["misses"] +
-            cache_info["resolve"]["hits"] + cache_info["resolve"]["misses"]
+            cache_info["expanduser"]["hits"]
+            + cache_info["expanduser"]["misses"]
+            + cache_info["resolve"]["hits"]
+            + cache_info["resolve"]["misses"]
         )
 
         # Should have made some calls
@@ -1348,7 +1343,7 @@ class TestProfileManagerPathCaching:
         targets = [same_path, same_path, same_path]
 
         # This should use cache for duplicate paths
-        warnings = manager._validate_targets(targets)
+        manager._validate_targets(targets)
 
         cache_info = ProfileManager.get_cache_info()
         # With caching, we should have hits for duplicate paths
@@ -1435,7 +1430,10 @@ class TestProfileManagerPathCaching:
         assert error1 == error2
 
         # Second call should use cache (hits should increase, misses stay same)
-        assert cache_info_after_second["expanduser"]["hits"] > cache_info_after_first["expanduser"]["hits"]
+        assert (
+            cache_info_after_second["expanduser"]["hits"]
+            > cache_info_after_first["expanduser"]["hits"]
+        )
         assert cache_info_after_second["expanduser"]["misses"] == first_misses
 
     def test_check_circular_exclusions_uses_cache(self, manager, temp_config_dir):
@@ -1456,10 +1454,10 @@ class TestProfileManagerPathCaching:
 
         # Should have some cache activity
         first_total_calls = (
-            cache_info_after_first["expanduser"]["hits"] +
-            cache_info_after_first["expanduser"]["misses"] +
-            cache_info_after_first["resolve"]["hits"] +
-            cache_info_after_first["resolve"]["misses"]
+            cache_info_after_first["expanduser"]["hits"]
+            + cache_info_after_first["expanduser"]["misses"]
+            + cache_info_after_first["resolve"]["hits"]
+            + cache_info_after_first["resolve"]["misses"]
         )
         assert first_total_calls > 0
 
@@ -1470,6 +1468,5 @@ class TestProfileManagerPathCaching:
 
         # Should have cache hits on second call
         assert (
-            cache_info_after_second["resolve"]["hits"] >
-            cache_info_after_first["resolve"]["hits"]
+            cache_info_after_second["resolve"]["hits"] > cache_info_after_first["resolve"]["hits"]
         )

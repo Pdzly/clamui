@@ -27,6 +27,7 @@ class ScanProfile:
         description: Optional description of the profile's purpose
         options: Additional scan engine options (depth, file types, etc.)
     """
+
     id: str
     name: str
     targets: list[str]

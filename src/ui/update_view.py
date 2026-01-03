@@ -4,9 +4,10 @@ Database update interface component for ClamUI with update button, progress disp
 """
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GLib, Gtk
 
 from ..core.updater import FreshclamUpdater, UpdateResult, UpdateStatus
 from ..core.utils import check_freshclam_installed
@@ -156,7 +157,9 @@ class UpdateView(Gtk.Box):
 
         # Set placeholder text
         buffer = self._results_text.get_buffer()
-        buffer.set_text("No update results yet.\n\nClick 'Update Database' to download the latest virus definitions.")
+        buffer.set_text(
+            "No update results yet.\n\nClick 'Update Database' to download the latest virus definitions."
+        )
 
         scrolled.set_child(self._results_text)
         results_box.append(scrolled)
@@ -286,11 +289,10 @@ class UpdateView(Gtk.Box):
         root = self.get_root()
         if root:
             app = root.get_application()
-            if app and hasattr(app, 'notification_manager'):
+            if app and hasattr(app, "notification_manager"):
                 success = result.status in (UpdateStatus.SUCCESS, UpdateStatus.UP_TO_DATE)
                 app.notification_manager.notify_update_complete(
-                    success=success,
-                    databases_updated=result.databases_updated
+                    success=success, databases_updated=result.databases_updated
                 )
 
         return False  # Don't repeat GLib.idle_add
@@ -310,7 +312,9 @@ class UpdateView(Gtk.Box):
         """
         # Update status banner based on result
         if result.status == UpdateStatus.SUCCESS:
-            self._status_banner.set_title(f"Database updated successfully ({result.databases_updated} database(s) updated)")
+            self._status_banner.set_title(
+                f"Database updated successfully ({result.databases_updated} database(s) updated)"
+            )
             self._status_banner.add_css_class("success")
             self._status_banner.remove_css_class("error")
             self._status_banner.remove_css_class("warning")

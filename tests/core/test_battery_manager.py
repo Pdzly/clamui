@@ -1,12 +1,11 @@
 # ClamUI Battery Manager Tests
 """Unit tests for the BatteryManager class."""
 
-import sys
 from unittest import mock
 
 import pytest
 
-from src.core.battery_manager import BatteryManager, BatteryStatus, PSUTIL_AVAILABLE
+from src.core.battery_manager import PSUTIL_AVAILABLE, BatteryManager, BatteryStatus
 
 
 class TestBatteryStatus:
@@ -15,10 +14,7 @@ class TestBatteryStatus:
     def test_battery_status_creation(self):
         """Test BatteryStatus can be created with all fields."""
         status = BatteryStatus(
-            has_battery=True,
-            is_plugged=False,
-            percent=75.0,
-            time_remaining=3600
+            has_battery=True, is_plugged=False, percent=75.0, time_remaining=3600
         )
         assert status.has_battery is True
         assert status.is_plugged is False
@@ -127,32 +123,31 @@ class TestBatteryManagerIsOnBattery:
         """Test is_on_battery returns False for desktop systems."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=False,
-            is_plugged=True
-        )):
+        with mock.patch.object(
+            manager, "get_status", return_value=BatteryStatus(has_battery=False, is_plugged=True)
+        ):
             assert manager.is_on_battery() is False
 
     def test_is_on_battery_laptop_plugged_in(self):
         """Test is_on_battery returns False when laptop is plugged in."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=80.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=80.0),
+        ):
             assert manager.is_on_battery() is False
 
     def test_is_on_battery_laptop_unplugged(self):
         """Test is_on_battery returns True when laptop is on battery."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=False,
-            percent=60.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=False, percent=60.0),
+        ):
             assert manager.is_on_battery() is True
 
 
@@ -197,50 +192,48 @@ class TestBatteryManagerProperties:
         """Test has_battery property."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=100.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=100.0),
+        ):
             assert manager.has_battery is True
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=False,
-            is_plugged=True
-        )):
+        with mock.patch.object(
+            manager, "get_status", return_value=BatteryStatus(has_battery=False, is_plugged=True)
+        ):
             assert manager.has_battery is False
 
     def test_is_plugged_property(self):
         """Test is_plugged property."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=80.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=80.0),
+        ):
             assert manager.is_plugged is True
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=False,
-            percent=50.0
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=False, percent=50.0),
+        ):
             assert manager.is_plugged is False
 
     def test_battery_percent_property(self):
         """Test battery_percent property."""
         manager = BatteryManager()
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=True,
-            is_plugged=True,
-            percent=75.5
-        )):
+        with mock.patch.object(
+            manager,
+            "get_status",
+            return_value=BatteryStatus(has_battery=True, is_plugged=True, percent=75.5),
+        ):
             assert manager.battery_percent == 75.5
 
-        with mock.patch.object(manager, "get_status", return_value=BatteryStatus(
-            has_battery=False,
-            is_plugged=True
-        )):
+        with mock.patch.object(
+            manager, "get_status", return_value=BatteryStatus(has_battery=False, is_plugged=True)
+        ):
             assert manager.battery_percent is None

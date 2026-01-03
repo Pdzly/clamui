@@ -22,7 +22,7 @@ import pytest
 
 def _clear_src_modules():
     """Clear all cached src.* modules to prevent test pollution."""
-    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.")]
     for mod in modules_to_remove:
         del sys.modules[mod]
 
@@ -38,16 +38,20 @@ def statistics_view_class(mock_gi_modules):
     mock_backend.FigureCanvasGTK4Agg = mock_canvas
 
     # Use patch.dict to properly restore sys.modules after test
-    with mock.patch.dict(sys.modules, {
-        'matplotlib': mock_matplotlib,
-        'matplotlib.figure': mock_figure,
-        'matplotlib.backends.backend_gtk4agg': mock_backend,
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "matplotlib": mock_matplotlib,
+            "matplotlib.figure": mock_figure,
+            "matplotlib.backends.backend_gtk4agg": mock_backend,
+        },
+    ):
         # Clear any cached import
         if "src.ui.statistics_view" in sys.modules:
             del sys.modules["src.ui.statistics_view"]
 
         from src.ui.statistics_view import StatisticsView
+
         yield StatisticsView
 
     # Critical: Clear all src.* modules after test to prevent pollution
@@ -131,7 +135,9 @@ class TestStatisticsViewInitialization:
 class TestStatisticsViewTimeframeSwitching:
     """Tests for timeframe switching functionality."""
 
-    def test_on_timeframe_toggled_updates_current_timeframe(self, mock_statistics_view, statistics_view_class):
+    def test_on_timeframe_toggled_updates_current_timeframe(
+        self, mock_statistics_view, statistics_view_class
+    ):
         """Test that toggling timeframe updates the current timeframe."""
         # Get the actual method from the class
         view = object.__new__(statistics_view_class)
@@ -251,7 +257,7 @@ class TestStatisticsViewLoadingState:
 
     def test_load_statistics_async_prevents_double_load(self, statistics_view_class):
         """Test that async load prevents loading when already loading."""
-        with mock.patch.dict(sys.modules, {'gi.repository': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository": mock.MagicMock()}):
             view = object.__new__(statistics_view_class)
             view._is_loading = True
             view._set_loading_state = mock.MagicMock()
@@ -420,7 +426,7 @@ class TestStatisticsViewRefresh:
 
     def test_refresh_statistics_public_method(self, statistics_view_class):
         """Test that public refresh_statistics method works."""
-        with mock.patch.dict(sys.modules, {'gi.repository': mock.MagicMock()}):
+        with mock.patch.dict(sys.modules, {"gi.repository": mock.MagicMock()}):
             view = object.__new__(statistics_view_class)
             view._load_statistics_async = mock.MagicMock()
 
@@ -428,7 +434,7 @@ class TestStatisticsViewRefresh:
             mock_glib = mock.MagicMock()
             mock_glib.idle_add = lambda f: f()
 
-            with mock.patch.dict(sys.modules, {'gi.repository.GLib': mock_glib}):
+            with mock.patch.dict(sys.modules, {"gi.repository.GLib": mock_glib}):
                 # The method should schedule loading
                 view.refresh_statistics()
 
@@ -566,9 +572,12 @@ class TestStatisticsViewUpdateProtectionDisplay:
 
     def test_update_protection_display_protected(self, statistics_view_class):
         """Test that protected status shows correct UI."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.statistics_calculator': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.statistics_calculator": mock.MagicMock(),
+            },
+        ):
             # Create a mock ProtectionStatus
             mock_status = mock.MagicMock()
             mock_status.level = "protected"
@@ -584,7 +593,6 @@ class TestStatisticsViewUpdateProtectionDisplay:
             view._last_scan_row = mock.MagicMock()
 
             # Import ProtectionLevel to check against
-            from src.core.statistics_calculator import ProtectionLevel
             view._update_protection_display()
 
             view._protection_row.set_subtitle.assert_called_with("System is protected")
@@ -594,9 +602,12 @@ class TestStatisticsViewUpdateProtectionDisplay:
 
     def test_update_protection_display_at_risk(self, statistics_view_class):
         """Test that at_risk status shows warning UI."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.statistics_calculator': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.statistics_calculator": mock.MagicMock(),
+            },
+        ):
             mock_status = mock.MagicMock()
             mock_status.level = "at_risk"
             mock_status.message = "Last scan was over a week ago"
@@ -612,15 +623,20 @@ class TestStatisticsViewUpdateProtectionDisplay:
 
             view._update_protection_display()
 
-            view._protection_row_icon.set_from_icon_name.assert_called_with("dialog-warning-symbolic")
+            view._protection_row_icon.set_from_icon_name.assert_called_with(
+                "dialog-warning-symbolic"
+            )
             view._status_badge.set_label.assert_called_with("At Risk")
             view._status_badge.add_css_class.assert_called_with("warning")
 
     def test_update_protection_display_unprotected(self, statistics_view_class):
         """Test that unprotected status shows error UI."""
-        with mock.patch.dict(sys.modules, {
-            'src.core.statistics_calculator': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "src.core.statistics_calculator": mock.MagicMock(),
+            },
+        ):
             mock_status = mock.MagicMock()
             mock_status.level = "unprotected"
             mock_status.message = "No scans performed yet"
@@ -777,13 +793,17 @@ class TestStatisticsViewImport:
         mock_backend = mock.MagicMock()
         mock_backend.FigureCanvasGTK4Agg = mock.MagicMock()
 
-        with mock.patch.dict(sys.modules, {
-            'matplotlib': mock_matplotlib,
-            'matplotlib.figure': mock_figure,
-            'matplotlib.backends.backend_gtk4agg': mock_backend,
-            'src.core.statistics_calculator': mock.MagicMock(),
-        }):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "matplotlib": mock_matplotlib,
+                "matplotlib.figure": mock_figure,
+                "matplotlib.backends.backend_gtk4agg": mock_backend,
+                "src.core.statistics_calculator": mock.MagicMock(),
+            },
+        ):
             from src.ui.statistics_view import StatisticsView
+
             assert StatisticsView is not None
 
 

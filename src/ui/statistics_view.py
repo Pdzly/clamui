@@ -6,22 +6,23 @@ Statistics dashboard component for ClamUI displaying scan metrics and protection
 from datetime import datetime
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
 
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 # Import matplotlib with GTK4 backend for chart visualization
 import matplotlib
-matplotlib.use('GTK4Agg')
-from matplotlib.figure import Figure
+from gi.repository import Adw, GLib, Gtk
+
+matplotlib.use("GTK4Agg")
 from matplotlib.backends.backend_gtk4agg import FigureCanvasGTK4Agg as FigureCanvas
+from matplotlib.figure import Figure
 
 from ..core.statistics_calculator import (
-    StatisticsCalculator,
-    ScanStatistics,
-    ProtectionStatus,
-    Timeframe,
     ProtectionLevel,
+    ProtectionStatus,
+    ScanStatistics,
+    StatisticsCalculator,
+    Timeframe,
 )
 from .utils import add_row_icon
 
@@ -310,7 +311,7 @@ class StatisticsView(Gtk.Box):
         # Create matplotlib figure and canvas
         # Use appropriate figure size for the container
         self._figure = Figure(figsize=(8, 3), dpi=72)
-        self._figure.set_facecolor('none')  # Transparent background
+        self._figure.set_facecolor("none")  # Transparent background
 
         # Create canvas for GTK4 embedding
         self._canvas = FigureCanvas(self._figure)
@@ -389,7 +390,7 @@ class StatisticsView(Gtk.Box):
             self._figure.clear()
 
             # Check if we have any data
-            has_data = trend_data and any(d.get('scans', 0) > 0 for d in trend_data)
+            has_data = trend_data and any(d.get("scans", 0) > 0 for d in trend_data)
 
             if not has_data:
                 # Show empty state, hide canvas
@@ -424,13 +425,13 @@ class StatisticsView(Gtk.Box):
             for point in trend_data:
                 try:
                     # Parse ISO date and format for display
-                    dt = datetime.fromisoformat(point['date'].replace('Z', '+00:00').split('+')[0])
-                    dates.append(dt.strftime('%m/%d'))
+                    dt = datetime.fromisoformat(point["date"].replace("Z", "+00:00").split("+")[0])
+                    dates.append(dt.strftime("%m/%d"))
                 except (ValueError, KeyError):
-                    dates.append('?')
+                    dates.append("?")
 
-                scans.append(point.get('scans', 0))
-                threats.append(point.get('threats', 0))
+                scans.append(point.get("scans", 0))
+                threats.append(point.get("threats", 0))
 
             x_positions = range(len(dates))
             bar_width = 0.35
@@ -440,30 +441,30 @@ class StatisticsView(Gtk.Box):
                 [x - bar_width / 2 for x in x_positions],
                 scans,
                 bar_width,
-                label='Scans',
-                color='#3584e4',  # GNOME blue
-                alpha=0.8
+                label="Scans",
+                color="#3584e4",  # GNOME blue
+                alpha=0.8,
             )
             ax.bar(
                 [x + bar_width / 2 for x in x_positions],
                 threats,
                 bar_width,
-                label='Threats',
-                color='#e01b24',  # GNOME red
-                alpha=0.8
+                label="Threats",
+                color="#e01b24",  # GNOME red
+                alpha=0.8,
             )
 
             # Configure chart appearance
-            ax.set_xlabel('Date', fontsize=9)
-            ax.set_ylabel('Count', fontsize=9)
+            ax.set_xlabel("Date", fontsize=9)
+            ax.set_ylabel("Count", fontsize=9)
             ax.set_xticks(x_positions)
             ax.set_xticklabels(dates, fontsize=8)
-            ax.legend(fontsize=8, loc='upper right')
+            ax.legend(fontsize=8, loc="upper right")
 
             # Style adjustments for GNOME/Adwaita compatibility
-            ax.set_facecolor('none')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
+            ax.set_facecolor("none")
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
 
             # Detect dark mode by checking if the default text color is light
             # This is a simple heuristic - in dark mode, we need light text
@@ -474,18 +475,18 @@ class StatisticsView(Gtk.Box):
                 # If text color is light (sum of RGB > 1.5), we're in dark mode
                 is_dark = (color.red + color.green + color.blue) > 1.5
 
-                text_color = '#ffffff' if is_dark else '#2e3436'
-                spine_color = '#808080' if is_dark else '#d3d7cf'
+                text_color = "#ffffff" if is_dark else "#2e3436"
+                spine_color = "#808080" if is_dark else "#d3d7cf"
             except Exception:
                 # Fallback to light theme colors
-                text_color = '#2e3436'
-                spine_color = '#d3d7cf'
+                text_color = "#2e3436"
+                spine_color = "#d3d7cf"
 
             ax.tick_params(colors=text_color, labelsize=8)
             ax.xaxis.label.set_color(text_color)
             ax.yaxis.label.set_color(text_color)
-            ax.spines['bottom'].set_color(spine_color)
-            ax.spines['left'].set_color(spine_color)
+            ax.spines["bottom"].set_color(spine_color)
+            ax.spines["left"].set_color(spine_color)
 
             # Ensure integer y-axis ticks
             ax.yaxis.get_major_locator().set_params(integer=True)
@@ -534,7 +535,9 @@ class StatisticsView(Gtk.Box):
                     scroll_step = 50  # pixels per scroll unit
                     new_value = vadj.get_value() + (dy * scroll_step)
                     # Clamp to valid range
-                    new_value = max(vadj.get_lower(), min(new_value, vadj.get_upper() - vadj.get_page_size()))
+                    new_value = max(
+                        vadj.get_lower(), min(new_value, vadj.get_upper() - vadj.get_page_size())
+                    )
                     vadj.set_value(new_value)
                 break
             widget = widget.get_parent()
@@ -630,17 +633,13 @@ class StatisticsView(Gtk.Box):
             try:
                 data_points = self._get_data_points_for_timeframe(self._current_timeframe)
                 trend_data = self._calculator.get_scan_trend_data(
-                    self._current_timeframe,
-                    data_points
+                    self._current_timeframe, data_points
                 )
             except Exception:
                 trend_data = []
 
             # Check if we have any valid data
-            has_data = (
-                self._current_stats is not None and
-                self._current_stats.total_scans > 0
-            )
+            has_data = self._current_stats is not None and self._current_stats.total_scans > 0
 
             if has_data:
                 # Update UI with loaded data
@@ -722,6 +721,7 @@ class StatisticsView(Gtk.Box):
         if stats.start_date and stats.end_date:
             try:
                 from datetime import datetime
+
                 start = datetime.fromisoformat(stats.start_date)
                 end = datetime.fromisoformat(stats.end_date)
                 date_range = f"{start.strftime('%b %d')} - {end.strftime('%b %d, %Y')}"
@@ -774,6 +774,7 @@ class StatisticsView(Gtk.Box):
         if status.last_scan_timestamp:
             try:
                 from datetime import datetime
+
                 last_scan = datetime.fromisoformat(
                     status.last_scan_timestamp.replace("Z", "+00:00").split("+")[0]
                 )
@@ -1029,15 +1030,15 @@ class StatisticsView(Gtk.Box):
         else:
             # Try to activate the show-scan action
             app = self.get_root()
-            if app and hasattr(app, 'activate_action'):
-                app.activate_action('app.show-scan', None)
+            if app and hasattr(app, "activate_action"):
+                app.activate_action("app.show-scan", None)
 
     def _on_view_logs_clicked(self, row: Adw.ActionRow):
         """Handle view logs action click."""
         # Try to activate the show-logs action
         app = self.get_root()
-        if app and hasattr(app, 'activate_action'):
-            app.activate_action('app.show-logs', None)
+        if app and hasattr(app, "activate_action"):
+            app.activate_action("app.show-logs", None)
 
     def set_quick_scan_callback(self, callback):
         """

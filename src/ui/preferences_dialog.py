@@ -4,11 +4,12 @@ Preferences dialog component for ClamUI user settings.
 """
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw
 
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 from typing import TYPE_CHECKING
+
+from gi.repository import Adw, Gtk
 
 if TYPE_CHECKING:
     from ..core.settings_manager import SettingsManager
@@ -76,9 +77,7 @@ class PreferencesDialog(Adw.Dialog):
         # Notifications group
         notifications_group = Adw.PreferencesGroup()
         notifications_group.set_title("Notifications")
-        notifications_group.set_description(
-            "Configure desktop notification behavior"
-        )
+        notifications_group.set_description("Configure desktop notification behavior")
 
         # Notifications enabled switch row
         self._notifications_row = Adw.SwitchRow()
@@ -100,9 +99,7 @@ class PreferencesDialog(Adw.Dialog):
     def _load_settings(self):
         """Load current settings into UI widgets."""
         if self._settings_manager is not None:
-            notifications_enabled = self._settings_manager.get(
-                "notifications_enabled", True
-            )
+            notifications_enabled = self._settings_manager.get("notifications_enabled", True)
             # Block signal during initial load to avoid triggering save
             self._notifications_row.handler_block_by_func(self._on_notifications_toggled)
             self._notifications_row.set_active(notifications_enabled)

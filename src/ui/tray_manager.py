@@ -16,8 +16,8 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional
 
 from gi.repository import GLib
 
@@ -35,8 +35,8 @@ class TrayManager:
 
     def __init__(self) -> None:
         """Initialize the TrayManager."""
-        self._process: Optional[subprocess.Popen] = None
-        self._reader_thread: Optional[threading.Thread] = None
+        self._process: subprocess.Popen | None = None
+        self._reader_thread: threading.Thread | None = None
 
         # Thread lock for shared state accessed by reader threads
         self._state_lock = threading.Lock()
@@ -45,15 +45,15 @@ class TrayManager:
         self._current_status = "protected"
 
         # Callbacks for menu actions
-        self._on_quick_scan: Optional[Callable[[], None]] = None
-        self._on_full_scan: Optional[Callable[[], None]] = None
-        self._on_update: Optional[Callable[[], None]] = None
-        self._on_quit: Optional[Callable[[], None]] = None
-        self._on_window_toggle: Optional[Callable[[], None]] = None
-        self._on_profile_select: Optional[Callable[[str], None]] = None
+        self._on_quick_scan: Callable[[], None] | None = None
+        self._on_full_scan: Callable[[], None] | None = None
+        self._on_update: Callable[[], None] | None = None
+        self._on_quit: Callable[[], None] | None = None
+        self._on_window_toggle: Callable[[], None] | None = None
+        self._on_profile_select: Callable[[str], None] | None = None
 
         # Profile state
-        self._current_profile_id: Optional[str] = None
+        self._current_profile_id: str | None = None
 
     def start(self) -> bool:
         """
@@ -99,17 +99,13 @@ class TrayManager:
 
             # Start reader thread for stdout
             self._reader_thread = threading.Thread(
-                target=self._read_stdout,
-                daemon=True,
-                name="TrayManagerReader"
+                target=self._read_stdout, daemon=True, name="TrayManagerReader"
             )
             self._reader_thread.start()
 
             # Start stderr reader for logging
             stderr_thread = threading.Thread(
-                target=self._read_stderr,
-                daemon=True,
-                name="TrayManagerStderr"
+                target=self._read_stderr, daemon=True, name="TrayManagerStderr"
             )
             stderr_thread.start()
 
@@ -123,7 +119,7 @@ class TrayManager:
             self._process = None
             return False
 
-    def _get_service_path(self) -> Optional[Path]:
+    def _get_service_path(self) -> Path | None:
         """Get the path to tray_service.py."""
         # Try relative to this file
         this_dir = Path(__file__).parent
@@ -134,6 +130,7 @@ class TrayManager:
         # Try as module path
         # This handles the case when installed as a package
         import src.ui.tray_service as tray_service_module
+
         module_path = Path(tray_service_module.__file__)
         if module_path.exists():
             return module_path
@@ -186,9 +183,7 @@ class TrayManager:
     # Maximum nesting depth for JSON messages
     MAX_NESTING_DEPTH = 10
 
-    def _validate_message_structure(
-        self, obj: object, depth: int = 0
-    ) -> bool:
+    def _validate_message_structure(self, obj: object, depth: int = 0) -> bool:
         """
         Validate that a JSON message has a safe structure.
 
@@ -309,10 +304,10 @@ class TrayManager:
 
     def set_action_callbacks(
         self,
-        on_quick_scan: Optional[Callable[[], None]] = None,
-        on_full_scan: Optional[Callable[[], None]] = None,
-        on_update: Optional[Callable[[], None]] = None,
-        on_quit: Optional[Callable[[], None]] = None
+        on_quick_scan: Callable[[], None] | None = None,
+        on_full_scan: Callable[[], None] | None = None,
+        on_update: Callable[[], None] | None = None,
+        on_quit: Callable[[], None] | None = None,
     ) -> None:
         """
         Set callbacks for menu actions.
@@ -330,9 +325,7 @@ class TrayManager:
         logger.debug("Action callbacks configured")
 
     def set_window_toggle_callback(
-        self,
-        on_toggle: Callable[[], None],
-        get_visible: Optional[Callable[[], bool]] = None
+        self, on_toggle: Callable[[], None], get_visible: Callable[[], bool] | None = None
     ) -> None:
         """
         Set the callback for window show/hide toggle.
@@ -344,10 +337,7 @@ class TrayManager:
         self._on_window_toggle = on_toggle
         logger.debug("Window toggle callback configured")
 
-    def set_profile_select_callback(
-        self,
-        on_select: Callable[[str], None]
-    ) -> None:
+    def set_profile_select_callback(self, on_select: Callable[[str], None]) -> None:
         """
         Set the callback for profile selection from tray menu.
 
@@ -387,11 +377,7 @@ class TrayManager:
         """
         self._send_command({"action": "update_window_visible", "visible": visible})
 
-    def update_profiles(
-        self,
-        profiles: List[dict],
-        current_profile_id: Optional[str] = None
-    ) -> None:
+    def update_profiles(self, profiles: list[dict], current_profile_id: str | None = None) -> None:
         """
         Update the profiles list in the tray menu.
 
@@ -403,11 +389,13 @@ class TrayManager:
             if current_profile_id is not None:
                 self._current_profile_id = current_profile_id
             profile_id_to_send = self._current_profile_id
-        self._send_command({
-            "action": "update_profiles",
-            "profiles": profiles,
-            "current_profile_id": profile_id_to_send
-        })
+        self._send_command(
+            {
+                "action": "update_profiles",
+                "profiles": profiles,
+                "current_profile_id": profile_id_to_send,
+            }
+        )
         logger.debug(f"Updated tray profiles: {len(profiles)} profiles")
 
     def stop(self) -> None:
@@ -491,7 +479,7 @@ def is_available() -> bool:
     return True
 
 
-def get_unavailable_reason() -> Optional[str]:
+def get_unavailable_reason() -> str | None:
     """
     Get the reason why tray is unavailable.
 

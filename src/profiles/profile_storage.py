@@ -4,12 +4,12 @@ Profile storage module for ClamUI providing JSON-based profile persistence.
 Stores scan profiles in JSON format with thread-safe access and atomic writes.
 """
 
+import contextlib
 import json
 import os
 import tempfile
 import threading
 from pathlib import Path
-from typing import Optional
 
 from .models import ScanProfile
 
@@ -55,7 +55,7 @@ class ProfileStorage:
         with self._lock:
             try:
                 if self._storage_path.exists():
-                    with open(self._storage_path, "r", encoding="utf-8") as f:
+                    with open(self._storage_path, encoding="utf-8") as f:
                         data = json.load(f)
                         # Handle both versioned and legacy formats
                         if isinstance(data, dict) and "profiles" in data:
@@ -66,7 +66,7 @@ class ProfileStorage:
                             profiles_data = []
 
                         return [ScanProfile.from_dict(p) for p in profiles_data]
-            except (json.JSONDecodeError, OSError, PermissionError) as e:
+            except (json.JSONDecodeError, OSError, PermissionError):
                 # Handle corrupted files or permission issues
                 # Backup corrupted file for debugging
                 self._backup_corrupted_file()
@@ -115,10 +115,8 @@ class ProfileStorage:
                     return True
                 except Exception:
                     # Clean up temp file on failure
-                    try:
+                    with contextlib.suppress(OSError):
                         Path(temp_path).unlink(missing_ok=True)
-                    except OSError:
-                        pass
                     raise
 
             except Exception:
@@ -144,7 +142,7 @@ class ProfileStorage:
             # Silently fail - backup is best effort
             pass
 
-    def get_profile_by_id(self, profile_id: str) -> Optional[ScanProfile]:
+    def get_profile_by_id(self, profile_id: str) -> ScanProfile | None:
         """
         Load a specific profile by ID.
 

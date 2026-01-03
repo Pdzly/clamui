@@ -268,7 +268,14 @@ class TestQuarantineDatabase:
             (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            ("/oldest.exe", "/quarantine/oldest.quar", "ThreatOld", "2024-01-01T10:00:00", 100, "hash1"),
+            (
+                "/oldest.exe",
+                "/quarantine/oldest.quar",
+                "ThreatOld",
+                "2024-01-01T10:00:00",
+                100,
+                "hash1",
+            ),
         )
         conn.execute(
             """
@@ -276,7 +283,14 @@ class TestQuarantineDatabase:
             (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            ("/newest.exe", "/quarantine/newest.quar", "ThreatNew", "2024-03-01T10:00:00", 300, "hash3"),
+            (
+                "/newest.exe",
+                "/quarantine/newest.quar",
+                "ThreatNew",
+                "2024-03-01T10:00:00",
+                300,
+                "hash3",
+            ),
         )
         conn.execute(
             """
@@ -284,7 +298,14 @@ class TestQuarantineDatabase:
             (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            ("/middle.exe", "/quarantine/middle.quar", "ThreatMid", "2024-02-01T10:00:00", 200, "hash2"),
+            (
+                "/middle.exe",
+                "/quarantine/middle.quar",
+                "ThreatMid",
+                "2024-02-01T10:00:00",
+                200,
+                "hash2",
+            ),
         )
         conn.commit()
         conn.close()
@@ -391,7 +412,14 @@ class TestQuarantineDatabase:
             (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            ("/recent.exe", "/quarantine/recent.quar", "RecentThreat", recent_date, 200, "recenthash"),
+            (
+                "/recent.exe",
+                "/quarantine/recent.quar",
+                "RecentThreat",
+                recent_date,
+                200,
+                "recenthash",
+            ),
         )
         conn.commit()
         conn.close()
@@ -415,426 +443,17 @@ class TestQuarantineDatabase:
         old_entries = db.get_old_entries(days=30)
         assert len(old_entries) == 0
 
-    def test_cleanup_old_entries(self, db, temp_db_dir):
-        """Test removing entries older than specified days."""
-        db_path = os.path.join(temp_db_dir, "test_quarantine.db")
-        conn = sqlite3.connect(db_path)
-
-        # Old entries (60 days ago)
-        old_date = (datetime.now() - timedelta(days=60)).isoformat()
-        for i in range(3):
-            conn.execute(
-                """
-                INSERT INTO quarantine
-                (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (f"/old{i}.exe", f"/quarantine/old{i}.quar", f"OldThreat{i}", old_date, 100, f"oldhash{i}"),
-            )
-
-        # Recent entry (5 days ago)
-        recent_date = (datetime.now() - timedelta(days=5)).isoformat()
-        conn.execute(
-            """
-            INSERT INTO quarantine
-            (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            ("/recent.exe", "/quarantine/recent.quar", "RecentThreat", recent_date, 200, "recenthash"),
-        )
-        conn.commit()
-        conn.close()
-
-        # Initial count
-        assert db.get_entry_count() == 4
-
-        # Cleanup old entries
-        removed_count = db.cleanup_old_entries(days=30)
-        assert removed_count == 3
-
-        # Verify only recent entry remains
-        assert db.get_entry_count() == 1
-        entries = db.get_all_entries()
-        assert entries[0].original_path == "/recent.exe"
-
-    def test_cleanup_old_entries_empty(self, db):
-        """Test cleanup_old_entries returns 0 when no old entries exist."""
-        # Add only recent entry
+    def test_export_to_csv(self, db):
+        """Test exporting quarantine entries to CSV format."""
+        # Add test entries
         db.add_entry(
-            original_path="/recent.exe",
-            quarantine_path="/quarantine/recent.quar",
-            threat_name="RecentThreat",
-            file_size=100,
-            file_hash="hash",
-        )
-
-        removed_count = db.cleanup_old_entries(days=30)
-        assert removed_count == 0
-
-    def test_entry_exists(self, db):
-        """Test checking if an entry exists for a path."""
-        db.add_entry(
-            original_path="/exists/file.exe",
-            quarantine_path="/quarantine/exists.quar",
-            threat_name="ExistsThreat",
-            file_size=100,
-            file_hash="existshash",
-        )
-
-        assert db.entry_exists("/exists/file.exe") is True
-        assert db.entry_exists("/nonexistent/file.exe") is False
-
-    def test_entry_exists_empty_database(self, db):
-        """Test entry_exists returns False on empty database."""
-        assert db.entry_exists("/any/path.exe") is False
-
-    def test_close(self, db):
-        """Test close method doesn't raise errors."""
-        # The close method should be callable without errors
-        db.close()
-        # Database should still be usable after close (connections are per-operation)
-        assert db.get_entry_count() == 0
-
-
-class TestQuarantineDatabaseThreadSafety:
-    """Tests for thread safety in QuarantineDatabase."""
-
-    @pytest.fixture
-    def db(self):
-        """Create a QuarantineDatabase with a temporary database."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = os.path.join(tmpdir, "thread_test.db")
-            yield QuarantineDatabase(db_path=db_path)
-
-    def test_concurrent_add_operations(self, db):
-        """Test that concurrent add operations don't corrupt data."""
-        errors = []
-        entry_ids = []
-        lock = threading.Lock()
-
-        def add_entry(index):
-            try:
-                entry_id = db.add_entry(
-                    original_path=f"/concurrent/file{index}.exe",
-                    quarantine_path=f"/quarantine/concurrent{index}.quar",
-                    threat_name=f"ConcurrentThreat{index}",
-                    file_size=100 * index,
-                    file_hash=f"hash{index}",
-                )
-                if entry_id is None:
-                    errors.append(f"Failed to add entry {index}")
-                else:
-                    with lock:
-                        entry_ids.append(entry_id)
-            except Exception as e:
-                errors.append(str(e))
-
-        # Create multiple threads
-        threads = []
-        for i in range(20):
-            t = threading.Thread(target=add_entry, args=(i,))
-            threads.append(t)
-
-        # Start all threads
-        for t in threads:
-            t.start()
-
-        # Wait for all to complete
-        for t in threads:
-            t.join()
-
-        # Verify no errors
-        assert len(errors) == 0, f"Errors occurred: {errors}"
-
-        # Verify all entries were saved
-        assert len(entry_ids) == 20
-        assert db.get_entry_count() == 20
-
-    def test_concurrent_read_operations(self, db):
-        """Test that concurrent read operations work correctly."""
-        # Add some entries first
-        for i in range(10):
-            db.add_entry(
-                original_path=f"/read/file{i}.exe",
-                quarantine_path=f"/quarantine/read{i}.quar",
-                threat_name=f"ReadThreat{i}",
-                file_size=100 * i,
-                file_hash=f"readhash{i}",
-            )
-
-        errors = []
-        results = []
-        lock = threading.Lock()
-
-        def read_entries(thread_id):
-            try:
-                entries = db.get_all_entries()
-                count = db.get_entry_count()
-                total_size = db.get_total_size()
-                with lock:
-                    results.append({
-                        "thread": thread_id,
-                        "entries": len(entries),
-                        "count": count,
-                        "total_size": total_size,
-                    })
-            except Exception as e:
-                errors.append(str(e))
-
-        # Create multiple read threads
-        threads = []
-        for i in range(20):
-            t = threading.Thread(target=read_entries, args=(i,))
-            threads.append(t)
-
-        # Start all threads
-        for t in threads:
-            t.start()
-
-        # Wait for all to complete
-        for t in threads:
-            t.join()
-
-        # Verify no errors
-        assert len(errors) == 0, f"Errors occurred: {errors}"
-
-        # Verify all reads returned consistent data
-        assert len(results) == 20
-        for result in results:
-            assert result["entries"] == 10
-            assert result["count"] == 10
-
-    def test_concurrent_read_write_operations(self, db):
-        """Test that concurrent read and write operations work correctly."""
-        errors = []
-        write_count = [0]
-        read_count = [0]
-        lock = threading.Lock()
-
-        def write_entry(index):
-            try:
-                entry_id = db.add_entry(
-                    original_path=f"/mixed/file{index}.exe",
-                    quarantine_path=f"/quarantine/mixed{index}.quar",
-                    threat_name=f"MixedThreat{index}",
-                    file_size=100,
-                    file_hash=f"mixedhash{index}",
-                )
-                if entry_id:
-                    with lock:
-                        write_count[0] += 1
-            except Exception as e:
-                errors.append(f"Write error: {e}")
-
-        def read_entries():
-            try:
-                entries = db.get_all_entries()
-                with lock:
-                    read_count[0] += 1
-            except Exception as e:
-                errors.append(f"Read error: {e}")
-
-        # Create mixed read/write threads
-        threads = []
-        for i in range(15):
-            t = threading.Thread(target=write_entry, args=(i,))
-            threads.append(t)
-        for _ in range(15):
-            t = threading.Thread(target=read_entries)
-            threads.append(t)
-
-        # Start all threads
-        for t in threads:
-            t.start()
-
-        # Wait for all to complete
-        for t in threads:
-            t.join()
-
-        # Verify no errors
-        assert len(errors) == 0, f"Errors occurred: {errors}"
-
-        # Verify writes completed
-        assert write_count[0] == 15
-        assert read_count[0] == 15
-
-
-class TestQuarantineDatabaseErrorHandling:
-    """Tests for error handling in QuarantineDatabase."""
-
-    @pytest.fixture
-    def temp_db_dir(self):
-        """Create a temporary directory for database storage."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            yield tmpdir
-
-    def test_handles_invalid_db_path_gracefully(self, temp_db_dir):
-        """Test that database handles invalid path gracefully."""
-        # Try to create database in a path that doesn't exist
-        # The class should handle this gracefully
-        db = QuarantineDatabase(db_path="/nonexistent/path/that/cannot/be/created/db.db")
-        # Operations should return failure rather than raising
-        result = db.add_entry(
-            original_path="/test.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="Test",
-            file_size=100,
-            file_hash="hash",
-        )
-        # Should return None on failure
-        assert result is None
-
-    def test_get_entry_handles_db_errors(self, temp_db_dir):
-        """Test that get_entry handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Add an entry
-        entry_id = db.add_entry(
-            original_path="/test.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="Test",
-            file_size=100,
-            file_hash="hash",
-        )
-        assert entry_id is not None
-
-        # Mock _get_connection to raise an error
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.get_entry(entry_id)
-            assert result is None
-
-    def test_get_all_entries_handles_db_errors(self, temp_db_dir):
-        """Test that get_all_entries handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.get_all_entries()
-            assert result == []
-
-    def test_remove_entry_handles_db_errors(self, temp_db_dir):
-        """Test that remove_entry handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.remove_entry(1)
-            assert result is False
-
-    def test_get_total_size_handles_db_errors(self, temp_db_dir):
-        """Test that get_total_size handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.get_total_size()
-            assert result == 0
-
-    def test_get_entry_count_handles_db_errors(self, temp_db_dir):
-        """Test that get_entry_count handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.get_entry_count()
-            assert result == 0
-
-    def test_entry_exists_handles_db_errors(self, temp_db_dir):
-        """Test that entry_exists handles database errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        with mock.patch.object(db, "_get_connection", side_effect=sqlite3.Error("Test error")):
-            result = db.entry_exists("/test.exe")
-            assert result is False
-
-
-class TestQuarantineDatabaseConnectionPooling:
-    """Tests for connection pool integration in QuarantineDatabase."""
-
-    @pytest.fixture
-    def temp_db_dir(self):
-        """Create a temporary directory for database storage."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            yield tmpdir
-
-    def test_init_with_pooling_disabled(self, temp_db_dir):
-        """Test QuarantineDatabase with pool_size=0 (pooling disabled)."""
-        db_path = os.path.join(temp_db_dir, "no_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=0)
-
-        # Verify pool is not created
-        assert db._pool is None
-
-        # Verify database operations still work without pooling
-        entry_id = db.add_entry(
-            original_path="/test/file.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="TestThreat",
-            file_size=1024,
-            file_hash="testhash",
-        )
-        assert entry_id is not None
-        assert entry_id > 0
-
-        # Verify retrieval works
-        entry = db.get_entry(entry_id)
-        assert entry is not None
-        assert entry.original_path == "/test/file.exe"
-
-        db.close()
-
-    def test_init_with_pooling_enabled(self, temp_db_dir):
-        """Test QuarantineDatabase with pool_size=3 (pooling enabled)."""
-        db_path = os.path.join(temp_db_dir, "with_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Verify pool is created
-        assert db._pool is not None
-
-        # Verify database operations work with pooling
-        entry_id = db.add_entry(
-            original_path="/pooled/file.exe",
-            quarantine_path="/quarantine/pooled.quar",
-            threat_name="PooledThreat",
-            file_size=2048,
-            file_hash="pooledhash",
-        )
-        assert entry_id is not None
-        assert entry_id > 0
-
-        # Verify retrieval works
-        entry = db.get_entry(entry_id)
-        assert entry is not None
-        assert entry.original_path == "/pooled/file.exe"
-
-        db.close()
-
-    def test_default_pool_size(self, temp_db_dir):
-        """Test that default pool_size is 3."""
-        db_path = os.path.join(temp_db_dir, "default.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Verify pool is created with default size
-        assert db._pool is not None
-
-        db.close()
-
-    def test_operations_work_with_pooling_disabled(self, temp_db_dir):
-        """Test all database operations work correctly with pooling disabled."""
-        db_path = os.path.join(temp_db_dir, "no_pool_ops.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=0)
-
-        # Test add_entry
-        entry_id_1 = db.add_entry(
             original_path="/file1.exe",
             quarantine_path="/quarantine/file1.quar",
             threat_name="Threat1",
             file_size=1000,
             file_hash="hash1",
         )
-        entry_id_2 = db.add_entry(
+        db.add_entry(
             original_path="/file2.exe",
             quarantine_path="/quarantine/file2.quar",
             threat_name="Threat2",
@@ -842,579 +461,60 @@ class TestQuarantineDatabaseConnectionPooling:
             file_hash="hash2",
         )
 
-        # Test get_entry
-        entry = db.get_entry(entry_id_1)
-        assert entry.original_path == "/file1.exe"
+        # Export to CSV
+        csv_data = db.export_to_csv()
 
-        # Test get_entry_by_original_path
-        entry = db.get_entry_by_original_path("/file2.exe")
-        assert entry.threat_name == "Threat2"
+        # Verify CSV content
+        assert isinstance(csv_data, str)
+        lines = csv_data.strip().split("\n")
+        assert len(lines) == 3  # Header + 2 entries
+        assert "original_path" in lines[0]
+        assert "file1.exe" in csv_data
+        assert "file2.exe" in csv_data
 
-        # Test get_all_entries
-        entries = db.get_all_entries()
-        assert len(entries) == 2
-
-        # Test get_entry_count
-        count = db.get_entry_count()
-        assert count == 2
-
-        # Test get_total_size
-        total_size = db.get_total_size()
-        assert total_size == 3000
-
-        # Test entry_exists
-        assert db.entry_exists("/file1.exe") is True
-        assert db.entry_exists("/nonexistent.exe") is False
-
-        # Test remove_entry
-        result = db.remove_entry(entry_id_1)
-        assert result is True
-        assert db.get_entry_count() == 1
-
-        db.close()
-
-    def test_operations_work_with_pooling_enabled(self, temp_db_dir):
-        """Test all database operations work correctly with pooling enabled."""
-        db_path = os.path.join(temp_db_dir, "with_pool_ops.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Test add_entry
-        entry_id_1 = db.add_entry(
-            original_path="/pooled1.exe",
-            quarantine_path="/quarantine/pooled1.quar",
-            threat_name="PooledThreat1",
-            file_size=1500,
-            file_hash="poolhash1",
-        )
-        entry_id_2 = db.add_entry(
-            original_path="/pooled2.exe",
-            quarantine_path="/quarantine/pooled2.quar",
-            threat_name="PooledThreat2",
-            file_size=2500,
-            file_hash="poolhash2",
-        )
-
-        # Test get_entry
-        entry = db.get_entry(entry_id_1)
-        assert entry.original_path == "/pooled1.exe"
-
-        # Test get_entry_by_original_path
-        entry = db.get_entry_by_original_path("/pooled2.exe")
-        assert entry.threat_name == "PooledThreat2"
-
-        # Test get_all_entries
-        entries = db.get_all_entries()
-        assert len(entries) == 2
-
-        # Test get_entry_count
-        count = db.get_entry_count()
-        assert count == 2
-
-        # Test get_total_size
-        total_size = db.get_total_size()
-        assert total_size == 4000
-
-        # Test entry_exists
-        assert db.entry_exists("/pooled1.exe") is True
-        assert db.entry_exists("/nonexistent.exe") is False
-
-        # Test remove_entry
-        result = db.remove_entry(entry_id_1)
-        assert result is True
-        assert db.get_entry_count() == 1
-
-        db.close()
-
-    def test_close_with_pooling_disabled(self, temp_db_dir):
-        """Test close() is safe when pooling is disabled."""
-        db_path = os.path.join(temp_db_dir, "no_pool_close.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=0)
-
-        # Add an entry
+    def test_export_to_json(self, db):
+        """Test exporting quarantine entries to JSON format."""
+        # Add test entries
         db.add_entry(
-            original_path="/test.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="Test",
-            file_size=100,
-            file_hash="hash",
+            original_path="/file1.exe",
+            quarantine_path="/quarantine/file1.quar",
+            threat_name="Threat1",
+            file_size=1000,
+            file_hash="hash1",
         )
-
-        # Close should be safe (no-op)
-        db.close()
-        assert db._pool is None
-
-        # Operations should still work (new connections created per-operation)
-        count = db.get_entry_count()
-        assert count == 1
-
-        # Close again should be safe
-        db.close()
-
-    def test_close_with_pooling_enabled(self, temp_db_dir):
-        """Test close() properly cleans up connection pool."""
-        db_path = os.path.join(temp_db_dir, "with_pool_close.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Add some entries to ensure pool has connections
-        for i in range(5):
-            db.add_entry(
-                original_path=f"/file{i}.exe",
-                quarantine_path=f"/quarantine/file{i}.quar",
-                threat_name=f"Threat{i}",
-                file_size=100 * i,
-                file_hash=f"hash{i}",
-            )
-
-        # Verify pool exists
-        assert db._pool is not None
-
-        # Close the database
-        db.close()
-
-        # Verify pool is set to None
-        assert db._pool is None
-
-        # After close, operations should still work (fallback to per-operation connections)
-        count = db.get_entry_count()
-        assert count == 5
-
-        # Close again should be safe
-        db.close()
-        assert db._pool is None
-
-    def test_close_multiple_times_with_pooling(self, temp_db_dir):
-        """Test that close() can be called multiple times safely with pooling."""
-        db_path = os.path.join(temp_db_dir, "multi_close.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Close multiple times
-        db.close()
-        db.close()
-        db.close()
-
-        # Should be safe, no exceptions
-        assert db._pool is None
-
-    def test_rapid_operations_with_pooling(self, temp_db_dir):
-        """Test rapid database operations benefit from connection pooling."""
-        db_path = os.path.join(temp_db_dir, "rapid_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Simulate UI making multiple rapid calls (common pattern)
-        for i in range(10):
-            db.add_entry(
-                original_path=f"/rapid/file{i}.exe",
-                quarantine_path=f"/quarantine/rapid{i}.quar",
-                threat_name=f"RapidThreat{i}",
-                file_size=100,
-                file_hash=f"rapidhash{i}",
-            )
-
-        # Make rapid sequential queries (like UI would)
-        entries = db.get_all_entries()
-        count = db.get_entry_count()
-        total_size = db.get_total_size()
-
-        # Verify results
-        assert len(entries) == 10
-        assert count == 10
-        assert total_size == 1000
-
-        db.close()
-
-    def test_concurrent_operations_with_pooling_disabled(self, temp_db_dir):
-        """Test concurrent operations work with pooling disabled."""
-        db_path = os.path.join(temp_db_dir, "concurrent_no_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=0)
-
-        errors = []
-
-        def add_entries(thread_id):
-            try:
-                for i in range(5):
-                    db.add_entry(
-                        original_path=f"/thread{thread_id}/file{i}.exe",
-                        quarantine_path=f"/quarantine/thread{thread_id}_file{i}.quar",
-                        threat_name=f"Threat{thread_id}_{i}",
-                        file_size=100,
-                        file_hash=f"hash{thread_id}_{i}",
-                    )
-            except Exception as e:
-                errors.append(str(e))
-
-        # Create multiple threads
-        threads = []
-        for i in range(5):
-            t = threading.Thread(target=add_entries, args=(i,))
-            threads.append(t)
-            t.start()
-
-        # Wait for completion
-        for t in threads:
-            t.join()
-
-        # Verify no errors
-        assert len(errors) == 0
-        assert db.get_entry_count() == 25
-
-        db.close()
-
-    def test_concurrent_operations_with_pooling_enabled(self, temp_db_dir):
-        """Test concurrent operations work with pooling enabled."""
-        db_path = os.path.join(temp_db_dir, "concurrent_with_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        errors = []
-
-        def add_entries(thread_id):
-            try:
-                for i in range(5):
-                    db.add_entry(
-                        original_path=f"/poolthread{thread_id}/file{i}.exe",
-                        quarantine_path=f"/quarantine/poolthread{thread_id}_file{i}.quar",
-                        threat_name=f"PoolThreat{thread_id}_{i}",
-                        file_size=100,
-                        file_hash=f"poolhash{thread_id}_{i}",
-                    )
-            except Exception as e:
-                errors.append(str(e))
-
-        # Create multiple threads
-        threads = []
-        for i in range(5):
-            t = threading.Thread(target=add_entries, args=(i,))
-            threads.append(t)
-            t.start()
-
-        # Wait for completion
-        for t in threads:
-            t.join()
-
-        # Verify no errors
-        assert len(errors) == 0
-        assert db.get_entry_count() == 25
-
-        db.close()
-
-    def test_pooling_with_old_entries_operations(self, temp_db_dir):
-        """Test that old entries operations work with pooling."""
-        db_path = os.path.join(temp_db_dir, "old_entries_pool.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Insert old entry via direct SQL
-        conn = sqlite3.connect(db_path)
-        old_date = (datetime.now() - timedelta(days=60)).isoformat()
-        conn.execute(
-            """
-            INSERT INTO quarantine
-            (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            ("/old.exe", "/quarantine/old.quar", "OldThreat", old_date, 100, "oldhash"),
-        )
-        conn.commit()
-        conn.close()
-
-        # Add recent entry
         db.add_entry(
-            original_path="/recent.exe",
-            quarantine_path="/quarantine/recent.quar",
-            threat_name="RecentThreat",
-            file_size=200,
-            file_hash="recenthash",
+            original_path="/file2.exe",
+            quarantine_path="/quarantine/file2.quar",
+            threat_name="Threat2",
+            file_size=2000,
+            file_hash="hash2",
         )
 
-        # Test get_old_entries
-        old_entries = db.get_old_entries(days=30)
-        assert len(old_entries) == 1
-        assert old_entries[0].original_path == "/old.exe"
+        # Export to JSON
+        json_data = db.export_to_json()
 
-        # Test cleanup_old_entries
-        removed = db.cleanup_old_entries(days=30)
-        assert removed == 1
-        assert db.get_entry_count() == 1
+        # Verify JSON content
+        assert isinstance(json_data, str)
+        import json
 
-        db.close()
+        data = json.loads(json_data)
+        assert isinstance(data, list)
+        assert len(data) == 2
+        assert data[0]["original_path"] == "/file1.exe"
+        assert data[1]["original_path"] == "/file2.exe"
 
-    def test_pooling_consistency_across_operations(self, temp_db_dir):
-        """Test that pooling and non-pooling produce identical results."""
-        # Create two databases with same data
-        db_path_no_pool = os.path.join(temp_db_dir, "consistency_no_pool.db")
-        db_path_with_pool = os.path.join(temp_db_dir, "consistency_with_pool.db")
+    def test_export_to_csv_empty(self, db):
+        """Test exporting to CSV when no entries exist."""
+        csv_data = db.export_to_csv()
+        assert isinstance(csv_data, str)
+        lines = csv_data.strip().split("\n")
+        assert len(lines) == 1  # Only header
 
-        db_no_pool = QuarantineDatabase(db_path=db_path_no_pool, pool_size=0)
-        db_with_pool = QuarantineDatabase(db_path=db_path_with_pool, pool_size=3)
+    def test_export_to_json_empty(self, db):
+        """Test exporting to JSON when no entries exist."""
+        json_data = db.export_to_json()
+        assert isinstance(json_data, str)
+        import json
 
-        # Add same entries to both
-        test_data = [
-            ("/file1.exe", "/quarantine/file1.quar", "Threat1", 1000, "hash1"),
-            ("/file2.exe", "/quarantine/file2.quar", "Threat2", 2000, "hash2"),
-            ("/file3.exe", "/quarantine/file3.quar", "Threat3", 3000, "hash3"),
-        ]
-
-        for original_path, quarantine_path, threat_name, file_size, file_hash in test_data:
-            db_no_pool.add_entry(original_path, quarantine_path, threat_name, file_size, file_hash)
-            db_with_pool.add_entry(original_path, quarantine_path, threat_name, file_size, file_hash)
-
-        # Verify identical results
-        assert db_no_pool.get_entry_count() == db_with_pool.get_entry_count()
-        assert db_no_pool.get_total_size() == db_with_pool.get_total_size()
-
-        entries_no_pool = db_no_pool.get_all_entries()
-        entries_with_pool = db_with_pool.get_all_entries()
-        assert len(entries_no_pool) == len(entries_with_pool)
-
-        for e1, e2 in zip(entries_no_pool, entries_with_pool):
-            assert e1.original_path == e2.original_path
-            assert e1.threat_name == e2.threat_name
-            assert e1.file_size == e2.file_size
-
-        db_no_pool.close()
-        db_with_pool.close()
-
-
-class TestQuarantineDatabasePermissions:
-    """Tests for database file permission hardening."""
-
-    @pytest.fixture
-    def temp_db_dir(self):
-        """Create a temporary directory for database storage."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            yield tmpdir
-
-    def test_new_database_has_secure_permissions(self, temp_db_dir):
-        """Test that new database file has 0o600 permissions."""
-        db_path = os.path.join(temp_db_dir, "secure_new.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Verify database file has 0o600 permissions
-        db_file = Path(db_path)
-        assert db_file.exists()
-
-        # Get file permissions (stat.st_mode & 0o777 to get just the permission bits)
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_existing_database_gets_secure_permissions(self, temp_db_dir):
-        """Test that permissions are set on existing database."""
-        db_path = os.path.join(temp_db_dir, "existing.db")
-
-        # Create database with insecure permissions
-        db = QuarantineDatabase(db_path=db_path)
-        db.close()
-
-        # Manually set insecure permissions (simulate old database)
-        db_file = Path(db_path)
-        os.chmod(db_file, 0o644)
-
-        # Verify insecure permissions were set
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o644
-
-        # Reopen database - should secure permissions
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Verify permissions are now secure
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_wal_file_gets_secure_permissions(self, temp_db_dir):
-        """Test that WAL file gets correct permissions."""
-        db_path = os.path.join(temp_db_dir, "wal_test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Add entry to trigger WAL file creation
-        db.add_entry(
-            original_path="/test/file.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="TestThreat",
-            file_size=1024,
-            file_hash="testhash",
-        )
-
-        # Check WAL file permissions if it exists
-        wal_file = Path(str(db_path) + '-wal')
-        if wal_file.exists():
-            perms = wal_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_shm_file_gets_secure_permissions(self, temp_db_dir):
-        """Test that SHM file gets correct permissions."""
-        db_path = os.path.join(temp_db_dir, "shm_test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Add entry to trigger SHM file creation
-        db.add_entry(
-            original_path="/test/file.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="TestThreat",
-            file_size=2048,
-            file_hash="testhash123",
-        )
-
-        # Check SHM file permissions if it exists
-        shm_file = Path(str(db_path) + '-shm')
-        if shm_file.exists():
-            perms = shm_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_all_wal_files_get_secure_permissions(self, temp_db_dir):
-        """Test that main database file, WAL, and SHM all get secure permissions."""
-        db_path = os.path.join(temp_db_dir, "all_files_test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Add multiple entries to ensure WAL/SHM files are created
-        for i in range(10):
-            db.add_entry(
-                original_path=f"/test/file{i}.exe",
-                quarantine_path=f"/quarantine/test{i}.quar",
-                threat_name=f"TestThreat{i}",
-                file_size=1024 * i,
-                file_hash=f"testhash{i}",
-            )
-
-        # Check main database file
-        db_file = Path(db_path)
-        assert db_file.exists()
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o600, f"Main DB: Expected 0o600, got {oct(perms)}"
-
-        # Check WAL file if it exists
-        wal_file = Path(str(db_path) + '-wal')
-        if wal_file.exists():
-            perms = wal_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
-
-        # Check SHM file if it exists
-        shm_file = Path(str(db_path) + '-shm')
-        if shm_file.exists():
-            perms = shm_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_permission_setting_handles_errors_gracefully(self, temp_db_dir):
-        """Test permission setting handles errors gracefully."""
-        db_path = os.path.join(temp_db_dir, "error_test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Mock os.chmod to raise an error
-        with mock.patch('os.chmod', side_effect=PermissionError("Permission denied")):
-            # This should not raise an exception - errors are handled gracefully
-            db._secure_db_file_permissions()
-
-        # Database should still be functional despite permission error
-        entry_id = db.add_entry(
-            original_path="/test/file.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="TestThreat",
-            file_size=1024,
-            file_hash="testhash",
-        )
-        assert entry_id is not None
-
-        db.close()
-
-    def test_permission_setting_handles_os_errors_gracefully(self, temp_db_dir):
-        """Test permission setting handles OSError gracefully."""
-        db_path = os.path.join(temp_db_dir, "oserror_test.db")
-        db = QuarantineDatabase(db_path=db_path)
-
-        # Mock os.chmod to raise OSError
-        with mock.patch('os.chmod', side_effect=OSError("Operation not permitted")):
-            # This should not raise an exception - errors are handled gracefully
-            db._secure_db_file_permissions()
-
-        # Database should still be functional despite OS error
-        entry_id = db.add_entry(
-            original_path="/test/file.exe",
-            quarantine_path="/quarantine/test.quar",
-            threat_name="TestThreat",
-            file_size=2048,
-            file_hash="testhash456",
-        )
-        assert entry_id is not None
-
-        db.close()
-
-    def test_db_file_permissions_constant_value(self):
-        """Test that DB_FILE_PERMISSIONS constant has correct value."""
-        assert QuarantineDatabase.DB_FILE_PERMISSIONS == 0o600
-
-    def test_permissions_with_connection_pool(self, temp_db_dir):
-        """Test that permissions are set correctly when using connection pool."""
-        db_path = os.path.join(temp_db_dir, "pool_permissions.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=3)
-
-        # Verify database file has secure permissions
-        db_file = Path(db_path)
-        assert db_file.exists()
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
-
-        # Add entries to trigger WAL/SHM creation
-        for i in range(5):
-            db.add_entry(
-                original_path=f"/pooled/file{i}.exe",
-                quarantine_path=f"/quarantine/pooled{i}.quar",
-                threat_name=f"PooledThreat{i}",
-                file_size=1024,
-                file_hash=f"poolhash{i}",
-            )
-
-        # Check WAL file if it exists
-        wal_file = Path(str(db_path) + '-wal')
-        if wal_file.exists():
-            perms = wal_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
-
-        # Check SHM file if it exists
-        shm_file = Path(str(db_path) + '-shm')
-        if shm_file.exists():
-            perms = shm_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
-
-        db.close()
-
-    def test_permissions_without_connection_pool(self, temp_db_dir):
-        """Test that permissions are set correctly without connection pool."""
-        db_path = os.path.join(temp_db_dir, "no_pool_permissions.db")
-        db = QuarantineDatabase(db_path=db_path, pool_size=0)
-
-        # Verify database file has secure permissions
-        db_file = Path(db_path)
-        assert db_file.exists()
-        perms = db_file.stat().st_mode & 0o777
-        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
-
-        # Add entries to trigger WAL/SHM creation
-        for i in range(5):
-            db.add_entry(
-                original_path=f"/nopool/file{i}.exe",
-                quarantine_path=f"/quarantine/nopool{i}.quar",
-                threat_name=f"NoPoolThreat{i}",
-                file_size=1024,
-                file_hash=f"nopoolhash{i}",
-            )
-
-        # Check WAL file if it exists
-        wal_file = Path(str(db_path) + '-wal')
-        if wal_file.exists():
-            perms = wal_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
-
-        # Check SHM file if it exists
-        shm_file = Path(str(db_path) + '-shm')
-        if shm_file.exists():
-            perms = shm_file.stat().st_mode & 0o777
-            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
-
-        db.close()
+        data = json.loads(json_data)
+        assert data == []

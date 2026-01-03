@@ -1,9 +1,6 @@
 # ClamUI Scheduled Scan Integration Tests
 """Integration tests for the scheduled scan functionality."""
 
-import json
-import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -23,11 +20,9 @@ from src.core.battery_manager import BatteryManager
 from src.core.log_manager import LogEntry, LogManager
 from src.core.quarantine.manager import (
     QuarantineManager,
-    QuarantineResult,
     QuarantineStatus,
 )
-from src.core.scanner import Scanner
-from src.core.scheduler import Scheduler, SchedulerBackend, ScheduleFrequency
+from src.core.scheduler import Scheduler, SchedulerBackend
 from src.core.settings_manager import SettingsManager
 
 # Restore original gi modules after imports are done
@@ -90,10 +85,7 @@ class TestLogEntryScheduledField:
     def test_log_entry_scheduled_field_default(self):
         """Test LogEntry defaults scheduled to False."""
         entry = LogEntry.create(
-            log_type="scan",
-            status="clean",
-            summary="Test scan",
-            details="Test details"
+            log_type="scan", status="clean", summary="Test scan", details="Test details"
         )
         assert entry.scheduled is False
 
@@ -104,18 +96,14 @@ class TestLogEntryScheduledField:
             status="clean",
             summary="Scheduled scan",
             details="Details",
-            scheduled=True
+            scheduled=True,
         )
         assert entry.scheduled is True
 
     def test_log_entry_to_dict_includes_scheduled(self):
         """Test LogEntry.to_dict() includes scheduled field."""
         entry = LogEntry.create(
-            log_type="scan",
-            status="clean",
-            summary="Test",
-            details="Details",
-            scheduled=True
+            log_type="scan", status="clean", summary="Test", details="Details", scheduled=True
         )
         data = entry.to_dict()
         assert "scheduled" in data
@@ -130,7 +118,7 @@ class TestLogEntryScheduledField:
             "status": "clean",
             "summary": "Test",
             "details": "Details",
-            "scheduled": True
+            "scheduled": True,
         }
         entry = LogEntry.from_dict(data)
         assert entry.scheduled is True
@@ -143,7 +131,7 @@ class TestLogEntryScheduledField:
             "type": "scan",
             "status": "clean",
             "summary": "Test",
-            "details": "Details"
+            "details": "Details",
             # No scheduled field (old entry)
         }
         entry = LogEntry.from_dict(data)
@@ -170,7 +158,7 @@ class TestScheduledScanLogPersistence:
             details="No threats found",
             path="/home/user/Documents",
             duration=120.5,
-            scheduled=True
+            scheduled=True,
         )
         result = log_manager.save_log(entry)
         assert result is True
@@ -193,7 +181,7 @@ class TestScheduledScanLogPersistence:
                 status="clean",
                 summary=f"Scheduled scan {i}",
                 details="Details",
-                scheduled=True
+                scheduled=True,
             )
             log_manager.save_log(entry)
 
@@ -203,7 +191,7 @@ class TestScheduledScanLogPersistence:
                 status="clean",
                 summary=f"Manual scan {i}",
                 details="Details",
-                scheduled=False
+                scheduled=False,
             )
             log_manager.save_log(entry)
 
@@ -236,7 +224,7 @@ class TestSchedulerIntegration:
         assert scheduler.backend in [
             SchedulerBackend.SYSTEMD,
             SchedulerBackend.CRON,
-            SchedulerBackend.NONE
+            SchedulerBackend.NONE,
         ]
 
     def test_scheduler_status_check(self, temp_config_dir):
@@ -313,7 +301,9 @@ class TestQuarantineFunctionality:
             database_path=str(temp_environment["db_path"]),
         )
 
-    def create_test_file(self, source_dir: Path, name: str = "test_threat.exe", content: bytes = b"malware content"):
+    def create_test_file(
+        self, source_dir: Path, name: str = "test_threat.exe", content: bytes = b"malware content"
+    ):
         """Helper to create a test file for quarantine testing."""
         file_path = source_dir / name
         file_path.write_bytes(content)
@@ -379,9 +369,7 @@ class TestQuarantineFunctionality:
         )
 
         # Create test file
-        test_file = self.create_test_file(
-            temp_environment["source_dir"], "test.txt", b"content"
-        )
+        test_file = self.create_test_file(temp_environment["source_dir"], "test.txt", b"content")
 
         result = manager.quarantine_file(str(test_file), "Threat.Test")
 
@@ -401,9 +389,7 @@ class TestQuarantineFunctionality:
         )
 
         # Create test file
-        test_file = self.create_test_file(
-            temp_environment["source_dir"], "test.txt", b"content"
-        )
+        test_file = self.create_test_file(temp_environment["source_dir"], "test.txt", b"content")
 
         result = manager.quarantine_file(str(test_file), "Threat.Test")
         assert result.is_success is True
@@ -468,6 +454,7 @@ class TestCLIWrapperIntegration:
     def test_cli_module_importable(self):
         """Test CLI module can be imported."""
         from src.cli import scheduled_scan
+
         assert hasattr(scheduled_scan, "main")
         assert hasattr(scheduled_scan, "run_scheduled_scan")
         assert hasattr(scheduled_scan, "parse_arguments")
@@ -489,14 +476,19 @@ class TestCLIWrapperIntegration:
         """Test CLI argument parsing with options."""
         from src.cli.scheduled_scan import parse_arguments
 
-        with mock.patch("sys.argv", [
-            "clamui-scheduled-scan",
-            "--skip-on-battery",
-            "--auto-quarantine",
-            "--target", "/home/user/Documents",
-            "--target", "/home/user/Downloads",
-            "--verbose"
-        ]):
+        with mock.patch(
+            "sys.argv",
+            [
+                "clamui-scheduled-scan",
+                "--skip-on-battery",
+                "--auto-quarantine",
+                "--target",
+                "/home/user/Documents",
+                "--target",
+                "/home/user/Downloads",
+                "--verbose",
+            ],
+        ):
             args = parse_arguments()
             assert args.skip_on_battery is True
             assert args.auto_quarantine is True
@@ -518,7 +510,7 @@ class TestCLIWrapperIntegration:
                 skip_on_battery=False,
                 auto_quarantine=False,
                 dry_run=True,
-                verbose=False
+                verbose=False,
             )
 
             # Dry run should return success
@@ -544,11 +536,7 @@ class TestEndToEndScheduledScan:
             for i in range(5):
                 (scan_dir / f"file{i}.txt").write_text(f"content {i}")
 
-            yield {
-                "config_dir": config_dir,
-                "log_dir": log_dir,
-                "scan_dir": scan_dir
-            }
+            yield {"config_dir": config_dir, "log_dir": log_dir, "scan_dir": scan_dir}
 
     def test_full_workflow_configuration(self, test_environment):
         """Test complete workflow: configure -> save -> verify."""
@@ -577,7 +565,7 @@ class TestEndToEndScheduledScan:
         assert scheduler.backend in [
             SchedulerBackend.SYSTEMD,
             SchedulerBackend.CRON,
-            SchedulerBackend.NONE
+            SchedulerBackend.NONE,
         ]
 
     def test_scheduled_scan_creates_log(self, test_environment):
@@ -593,7 +581,7 @@ class TestEndToEndScheduledScan:
             details="Scan Duration: 2.5 seconds\nFiles Scanned: 5\nThreats Found: 0",
             path=str(test_environment["scan_dir"]),
             duration=2.5,
-            scheduled=True
+            scheduled=True,
         )
         log_manager.save_log(entry)
 

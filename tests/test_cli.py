@@ -14,11 +14,7 @@ Tests cover:
 """
 
 import os
-import stat
 import sys
-import tempfile
-from pathlib import Path
-from typing import List
 from unittest import mock
 
 import pytest
@@ -26,7 +22,7 @@ import pytest
 
 def _clear_src_modules():
     """Clear all cached src.* modules to prevent test pollution."""
-    modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith("src.")]
+    modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.")]
     for mod in modules_to_remove:
         del sys.modules[mod]
 
@@ -51,7 +47,8 @@ def parse_file_arguments():
     # Store original modules
     original_modules = {}
     modules_to_mock = [
-        "gi", "gi.repository",
+        "gi",
+        "gi.repository",
         "matplotlib.backends.backend_gtk4",
         "matplotlib.backends.backend_gtk4agg",
         "src.ui.statistics_view",
@@ -81,6 +78,7 @@ def parse_file_arguments():
 
     try:
         from src.main import parse_file_arguments as func
+
         yield func
     finally:
         # Restore original modules
@@ -232,10 +230,7 @@ class TestNonExistentPaths:
 class TestSymlinks:
     """Tests for handling symbolic links."""
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="Symlinks require special permissions on Windows"
-    )
+    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
     def test_symlink_to_file(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a file."""
         target_file = tmp_path / "target.txt"
@@ -250,10 +245,7 @@ class TestSymlinks:
         # Verify symlink exists
         assert os.path.exists(result[0])
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="Symlinks require special permissions on Windows"
-    )
+    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
     def test_symlink_to_directory(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a directory."""
         target_dir = tmp_path / "target_dir"
@@ -268,10 +260,7 @@ class TestSymlinks:
         # Verify symlink exists and points to directory
         assert os.path.isdir(result[0])
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="Symlinks require special permissions on Windows"
-    )
+    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
     def test_broken_symlink(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with broken symlink."""
         target = tmp_path / "target_that_will_be_deleted.txt"
@@ -410,7 +399,7 @@ class TestPermissionScenarios:
 
     @pytest.mark.skipif(
         os.name == "nt" or os.geteuid() == 0,
-        reason="Permission tests not applicable on Windows or when running as root"
+        reason="Permission tests not applicable on Windows or when running as root",
     )
     def test_unreadable_file_path_returned(self, parse_file_arguments, tmp_path):
         """Test that paths to unreadable files are still returned by parser.
@@ -437,7 +426,7 @@ class TestPermissionScenarios:
 
     @pytest.mark.skipif(
         os.name == "nt" or os.geteuid() == 0,
-        reason="Permission tests not applicable on Windows or when running as root"
+        reason="Permission tests not applicable on Windows or when running as root",
     )
     def test_unreadable_directory_path_returned(self, parse_file_arguments, tmp_path):
         """Test that paths to unreadable directories are still returned."""

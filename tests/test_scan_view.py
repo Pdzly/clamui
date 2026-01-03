@@ -28,13 +28,17 @@ pytestmark = pytest.mark.skip(reason="queue_files_for_scan method not implemente
 def scan_view_class(mock_gi_modules):
     """Get ScanView class with mocked dependencies."""
     # Also mock the dependent modules
-    with mock.patch.dict(sys.modules, {
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock.MagicMock(),
-        'src.core.quarantine': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "src.core.scanner": mock.MagicMock(),
+            "src.core.utils": mock.MagicMock(),
+            "src.core.quarantine": mock.MagicMock(),
+            "src.ui.fullscreen_dialog": mock.MagicMock(),
+        },
+    ):
         from src.ui.scan_view import ScanView
+
         return ScanView
 
 
@@ -244,10 +248,7 @@ class TestQueueFilesForScanPathTypes:
         assert result == 1
         mock_scan_view._set_selected_path.assert_called_with(str(subdir))
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="Symlinks require special permissions on Windows"
-    )
+    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
     def test_symlink_to_file(self, tmp_path, mock_scan_view):
         """Test queuing a symlink to a file."""
         target = tmp_path / "target.txt"
@@ -259,10 +260,7 @@ class TestQueueFilesForScanPathTypes:
         assert result == 1
         mock_scan_view._set_selected_path.assert_called_with(str(link))
 
-    @pytest.mark.skipif(
-        os.name == "nt",
-        reason="Symlinks require special permissions on Windows"
-    )
+    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
     def test_broken_symlink_filtered_out(self, tmp_path, mock_scan_view):
         """Test that broken symlinks are filtered out."""
         target = tmp_path / "target.txt"
@@ -317,11 +315,14 @@ def test_queue_files_for_scan(mock_gi_modules, tmp_path):
     This test verifies the core queue_files_for_scan functionality
     using the centralized mock setup from conftest.py.
     """
-    with mock.patch.dict(sys.modules, {
-        'src.core.scanner': mock.MagicMock(),
-        'src.core.utils': mock.MagicMock(),
-        'src.ui.fullscreen_dialog': mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "src.core.scanner": mock.MagicMock(),
+            "src.core.utils": mock.MagicMock(),
+            "src.ui.fullscreen_dialog": mock.MagicMock(),
+        },
+    ):
         from src.ui.scan_view import ScanView
 
         # Create mock instance without calling __init__ (Python 3.13+ compatible)

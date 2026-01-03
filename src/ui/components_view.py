@@ -4,14 +4,18 @@ Components status view for ClamUI displaying ClamAV component availability and s
 """
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
 
-from ..core.utils import check_clamav_installed, check_freshclam_installed, check_clamdscan_installed
-from ..core.log_manager import LogManager, DaemonStatus
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GLib, Gtk
+
+from ..core.log_manager import DaemonStatus, LogManager
+from ..core.utils import (
+    check_clamav_installed,
+    check_clamdscan_installed,
+    check_freshclam_installed,
+)
 from .utils import add_row_icon
-
 
 # Setup guide content for each component
 SETUP_GUIDES = {
@@ -45,9 +49,18 @@ SETUP_GUIDES = {
     "clamd": {
         "title": "clamd Daemon Setup",
         "commands": [
-            ("Ubuntu/Debian", "sudo apt install clamav-daemon\nsudo systemctl enable clamav-daemon\nsudo systemctl start clamav-daemon"),
-            ("Fedora", "sudo dnf install clamd\nsudo systemctl enable clamd@scan\nsudo systemctl start clamd@scan"),
-            ("Arch Linux", "sudo pacman -S clamav\nsudo systemctl enable clamav-daemon\nsudo systemctl start clamav-daemon"),
+            (
+                "Ubuntu/Debian",
+                "sudo apt install clamav-daemon\nsudo systemctl enable clamav-daemon\nsudo systemctl start clamav-daemon",
+            ),
+            (
+                "Fedora",
+                "sudo dnf install clamd\nsudo systemctl enable clamd@scan\nsudo systemctl start clamd@scan",
+            ),
+            (
+                "Arch Linux",
+                "sudo pacman -S clamav\nsudo systemctl enable clamav-daemon\nsudo systemctl start clamav-daemon",
+            ),
         ],
         "notes": "clamd is the ClamAV daemon for faster scanning. Configuration file: /etc/clamav/clamd.conf",
     },
@@ -108,7 +121,9 @@ class ComponentsView(Gtk.Box):
         """Create the info/description section."""
         info_group = Adw.PreferencesGroup()
         info_group.set_title("ClamAV Components")
-        info_group.set_description("Check the status of ClamAV components and get setup instructions")
+        info_group.set_description(
+            "Check the status of ClamAV components and get setup instructions"
+        )
 
         # Info row explaining the view
         info_row = Adw.ActionRow()
@@ -136,15 +151,25 @@ class ComponentsView(Gtk.Box):
         self._create_refresh_header_widget(components_group)
 
         # Create component rows
-        self._create_component_row(components_group, "clamscan", "Virus Scanner", "security-high-symbolic")
-        self._create_component_row(components_group, "freshclam", "Database Updater", "software-update-available-symbolic")
-        self._create_component_row(components_group, "clamdscan", "Daemon Scanner Client", "network-server-symbolic")
-        self._create_component_row(components_group, "clamd", "Scanner Daemon", "system-run-symbolic")
+        self._create_component_row(
+            components_group, "clamscan", "Virus Scanner", "security-high-symbolic"
+        )
+        self._create_component_row(
+            components_group, "freshclam", "Database Updater", "software-update-available-symbolic"
+        )
+        self._create_component_row(
+            components_group, "clamdscan", "Daemon Scanner Client", "network-server-symbolic"
+        )
+        self._create_component_row(
+            components_group, "clamd", "Scanner Daemon", "system-run-symbolic"
+        )
 
         scrolled.set_child(components_group)
         self.append(scrolled)
 
-    def _create_component_row(self, group: Adw.PreferencesGroup, component_id: str, title: str, icon_name: str):
+    def _create_component_row(
+        self, group: Adw.PreferencesGroup, component_id: str, title: str, icon_name: str
+    ):
         """
         Create an expandable row for a component with status and setup guide.
 

@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 
-
 # Mock PIL before importing tray_icons
 _mock_image = mock.MagicMock()
 _mock_image_draw = mock.MagicMock()
@@ -34,9 +33,9 @@ def mock_pil_modules(monkeypatch):
     mock_draw_instance = mock.MagicMock()
     _mock_image_draw.Draw.return_value = mock_draw_instance
 
-    monkeypatch.setitem(sys.modules, 'PIL', mock_pil)
-    monkeypatch.setitem(sys.modules, 'PIL.Image', _mock_image)
-    monkeypatch.setitem(sys.modules, 'PIL.ImageDraw', _mock_image_draw)
+    monkeypatch.setitem(sys.modules, "PIL", mock_pil)
+    monkeypatch.setitem(sys.modules, "PIL.Image", _mock_image)
+    monkeypatch.setitem(sys.modules, "PIL.ImageDraw", _mock_image_draw)
 
     yield
 
@@ -47,7 +46,9 @@ class TestFindClamuiBaseIcon:
     def test_finds_icon_in_development_path(self, tmp_path, monkeypatch, mock_pil_modules):
         """Test icon discovery in development environment."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         # Create a mock icon file in a temp directory
@@ -61,7 +62,7 @@ class TestFindClamuiBaseIcon:
         mock_module_path.parent.mkdir(parents=True)
         mock_module_path.touch()
 
-        with mock.patch.object(Path, 'parent', new_callable=mock.PropertyMock) as mock_parent:
+        with mock.patch.object(Path, "parent", new_callable=mock.PropertyMock):
             # This is complex to mock, so let's use a simpler approach
             pass
 
@@ -72,7 +73,9 @@ class TestFindClamuiBaseIcon:
     def test_returns_none_when_not_found(self, tmp_path, mock_pil_modules):
         """Test graceful handling when icon not found."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         # With no icon file present, should return None or find the real one
@@ -87,7 +90,9 @@ class TestGetTrayIconCacheDir:
     def test_returns_cache_path_string(self, mock_pil_modules):
         """Test that get_tray_icon_cache_dir returns a path string."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         result = tray_icons.get_tray_icon_cache_dir()
@@ -102,7 +107,9 @@ class TestGetTrayIconCacheDir:
     def test_respects_xdg_data_home(self, monkeypatch, mock_pil_modules):
         """Test that XDG_DATA_HOME is respected."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         monkeypatch.setenv("XDG_DATA_HOME", "/custom/data")
@@ -114,7 +121,9 @@ class TestGetTrayIconCacheDir:
     def test_uses_home_local_share_as_fallback(self, monkeypatch, mock_pil_modules):
         """Test fallback to ~/.local/share when XDG_DATA_HOME not set."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         monkeypatch.delenv("XDG_DATA_HOME", raising=False)
@@ -130,7 +139,9 @@ class TestTrayIconGeneratorInit:
     def test_init_creates_cache_directory(self, tmp_path, mock_pil_modules):
         """Test that generator creates cache directory if missing."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         # Create a mock base icon
@@ -139,14 +150,16 @@ class TestTrayIconGeneratorInit:
 
         cache_dir = tmp_path / "cache"
 
-        generator = tray_icons.TrayIconGenerator(str(base_icon), str(cache_dir))
+        tray_icons.TrayIconGenerator(str(base_icon), str(cache_dir))
 
         assert cache_dir.exists()
 
     def test_init_raises_on_missing_base_icon(self, tmp_path, mock_pil_modules):
         """Test that generator raises FileNotFoundError for missing base icon."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "nonexistent.png"
@@ -158,7 +171,9 @@ class TestTrayIconGeneratorInit:
     def test_init_stores_paths(self, tmp_path, mock_pil_modules):
         """Test that generator stores base icon and cache dir paths."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -177,7 +192,9 @@ class TestTrayIconGeneratorConstants:
     def test_overlay_colors_defined(self, tmp_path, mock_pil_modules):
         """Test OVERLAY_COLORS contains all expected statuses."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -195,7 +212,9 @@ class TestTrayIconGeneratorConstants:
     def test_icon_size_is_reasonable(self, tmp_path, mock_pil_modules):
         """Test ICON_SIZE is a reasonable value."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -209,7 +228,9 @@ class TestTrayIconGeneratorConstants:
     def test_overlay_size_smaller_than_icon_size(self, tmp_path, mock_pil_modules):
         """Test OVERLAY_SIZE is smaller than ICON_SIZE."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -226,7 +247,9 @@ class TestTrayIconGeneratorGetIconPath:
     def test_get_icon_path_returns_string(self, tmp_path, mock_pil_modules):
         """Test get_icon_path returns a path string."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -242,7 +265,9 @@ class TestTrayIconGeneratorGetIconPath:
     def test_get_icon_path_creates_file(self, tmp_path, mock_pil_modules):
         """Test get_icon_path creates the icon file."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -258,7 +283,9 @@ class TestTrayIconGeneratorGetIconPath:
     def test_get_icon_path_unknown_status_defaults_to_protected(self, tmp_path, mock_pil_modules):
         """Test get_icon_path defaults to 'protected' for unknown status."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -273,7 +300,9 @@ class TestTrayIconGeneratorGetIconPath:
     def test_get_icon_path_all_statuses(self, tmp_path, mock_pil_modules):
         """Test get_icon_path works for all valid statuses."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -293,7 +322,9 @@ class TestTrayIconGeneratorGetIconName:
     def test_get_icon_name_returns_correct_format(self, tmp_path, mock_pil_modules):
         """Test get_icon_name returns correct icon name format."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -308,7 +339,9 @@ class TestTrayIconGeneratorGetIconName:
     def test_get_icon_name_all_statuses(self, tmp_path, mock_pil_modules):
         """Test get_icon_name works for all valid statuses."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -324,7 +357,9 @@ class TestTrayIconGeneratorGetIconName:
     def test_get_icon_name_unknown_status_defaults_to_protected(self, tmp_path, mock_pil_modules):
         """Test get_icon_name defaults to 'protected' for unknown status."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -343,7 +378,9 @@ class TestTrayIconGeneratorPregenerateAll:
     def test_pregenerate_all_generates_all_statuses(self, tmp_path, mock_pil_modules):
         """Test pregenerate_all generates icons for all statuses."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -352,7 +389,7 @@ class TestTrayIconGeneratorPregenerateAll:
         generator = tray_icons.TrayIconGenerator(str(base_icon), str(tmp_path / "cache"))
 
         # Track calls to get_icon_path
-        with mock.patch.object(generator, 'get_icon_path') as mock_get:
+        with mock.patch.object(generator, "get_icon_path") as mock_get:
             generator.pregenerate_all()
 
             # Should be called for all 4 statuses
@@ -370,7 +407,9 @@ class TestTrayIconGeneratorCreateOverlay:
     def test_create_overlay_returns_image(self, tmp_path, mock_pil_modules):
         """Test _create_overlay returns an Image object."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -386,7 +425,9 @@ class TestTrayIconGeneratorCreateOverlay:
     def test_create_overlay_all_statuses(self, tmp_path, mock_pil_modules):
         """Test _create_overlay works for all statuses."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -406,7 +447,9 @@ class TestIsAvailable:
     def test_is_available_returns_boolean(self, mock_pil_modules):
         """Test is_available returns a boolean."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         result = tray_icons.is_available()
@@ -415,7 +458,6 @@ class TestIsAvailable:
 
     def test_is_available_false_when_pil_unavailable(self, monkeypatch, mock_pil_modules):
         """Test is_available returns False when PIL is not available."""
-        import importlib
         from src.ui import tray_icons
 
         # Set PIL_AVAILABLE to False
@@ -432,7 +474,9 @@ class TestTrayIconGeneratorCaching:
     def test_cached_icon_is_reused(self, tmp_path, mock_pil_modules):
         """Test that cached icons are reused without regeneration."""
         import importlib
+
         from src.ui import tray_icons
+
         importlib.reload(tray_icons)
 
         base_icon = tmp_path / "base.png"
@@ -447,10 +491,11 @@ class TestTrayIconGeneratorCaching:
 
         # Make the cache newer than base
         import os
+
         os.utime(cached_icon, None)
 
         # Mock _generate_icon to track if it's called
-        with mock.patch.object(generator, '_generate_icon') as mock_generate:
+        with mock.patch.object(generator, "_generate_icon"):
             result = generator.get_icon_path("protected")
 
             # Should not regenerate since cache is valid

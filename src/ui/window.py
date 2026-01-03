@@ -7,12 +7,13 @@ import logging
 from typing import TYPE_CHECKING
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gio, Gdk, GLib
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 if TYPE_CHECKING:
-    from ..core.settings_manager import SettingsManager
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Set window properties
         self.set_title("ClamUI")
         self.set_default_size(800, 800)
-        self.set_size_request(400, 800)  # Minimum size to keep ClamAV status bar and Profile section visible
+        self.set_size_request(
+            400, 800
+        )  # Minimum size to keep ClamAV status bar and Profile section visible
 
         # Set up minimize-to-tray handling
         self._setup_minimize_to_tray()
@@ -92,15 +95,14 @@ class MainWindow(Adw.ApplicationWindow):
         state = surface.get_state()
 
         # Check if minimized state was just set
-        if state & Gdk.ToplevelState.MINIMIZED:
-            if self._should_minimize_to_tray():
-                self._handling_minimize = True
-                try:
-                    # Unminimize first, then hide to tray
-                    # Use idle_add to defer after state change completes
-                    GLib.idle_add(self._do_minimize_to_tray)
-                finally:
-                    self._handling_minimize = False
+        if state & Gdk.ToplevelState.MINIMIZED and self._should_minimize_to_tray():
+            self._handling_minimize = True
+            try:
+                # Unminimize first, then hide to tray
+                # Use idle_add to defer after state change completes
+                GLib.idle_add(self._do_minimize_to_tray)
+            finally:
+                self._handling_minimize = False
 
     def _should_minimize_to_tray(self) -> bool:
         """
@@ -110,7 +112,7 @@ class MainWindow(Adw.ApplicationWindow):
             True if minimize_to_tray setting is enabled and tray is available
         """
         # Check if we have access to settings manager
-        if not hasattr(self._application, 'settings_manager'):
+        if not hasattr(self._application, "settings_manager"):
             return False
 
         settings = self._application.settings_manager
@@ -118,18 +120,15 @@ class MainWindow(Adw.ApplicationWindow):
             return False
 
         # Check if minimize_to_tray is enabled
-        if not settings.get('minimize_to_tray', False):
+        if not settings.get("minimize_to_tray", False):
             return False
 
         # Check if tray indicator is available
-        if not hasattr(self._application, 'tray_indicator'):
+        if not hasattr(self._application, "tray_indicator"):
             return False
 
         tray = self._application.tray_indicator
-        if tray is None:
-            return False
-
-        return True
+        return tray is not None
 
     def _do_minimize_to_tray(self) -> bool:
         """
@@ -149,9 +148,9 @@ class MainWindow(Adw.ApplicationWindow):
         logger.debug("Window minimized to tray")
 
         # Update tray menu label if tray is available
-        if hasattr(self._application, 'tray_indicator'):
+        if hasattr(self._application, "tray_indicator"):
             tray = self._application.tray_indicator
-            if tray is not None and hasattr(tray, 'update_window_menu_label'):
+            if tray is not None and hasattr(tray, "update_window_menu_label"):
                 tray.update_window_menu_label()
 
         return False  # Remove from idle queue

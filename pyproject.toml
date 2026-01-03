@@ -79,8 +79,15 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "E402",   # module level import not at top (necessary for gi.require_version calls)
     "B008",   # do not perform function calls in argument defaults
     "SIM108", # use ternary operator instead of if-else block
+    "SIM105", # use contextlib.suppress (stylistic preference)
+    "SIM102", # use single if with and (stylistic preference)
+    "SIM117", # use single with statement (readability preference for nested contexts)
+    "ARG001", # unused function argument (common in callbacks)
+    "ARG002", # unused method argument (common for test fixtures)
+    "ARG005", # unused lambda argument (common in GTK signal handlers)
 ]
 
 [tool.ruff.lint.isort]

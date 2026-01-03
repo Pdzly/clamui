@@ -9,18 +9,12 @@ with profile settings, export/import functionality, and data persistence.
 
 import json
 import os
-import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from typing import Any
-from unittest import mock
 
 import pytest
 
 from src.profiles.profile_manager import ProfileManager
-from src.profiles.profile_storage import ProfileStorage
-from src.profiles.models import ScanProfile
 
 
 class TestE2EProfileLifecycle:
@@ -108,14 +102,11 @@ class TestE2EProfileLifecycle:
         storage_file = config_dir / "profiles.json"
         assert storage_file.exists()
 
-        with open(storage_file, "r") as f:
+        with open(storage_file) as f:
             data = json.load(f)
 
         profiles_data = data.get("profiles", [])
-        saved_profile = next(
-            (p for p in profiles_data if p["name"] == "E2E Test Profile"),
-            None
-        )
+        saved_profile = next((p for p in profiles_data if p["name"] == "E2E Test Profile"), None)
         assert saved_profile is not None
         assert saved_profile["targets"] == test_targets
         assert saved_profile["exclusions"] == test_exclusions
@@ -195,8 +186,7 @@ class TestE2EProfileLifecycle:
 
         # Verify custom profile is in tray data
         custom_in_tray = next(
-            (p for p in profile_data if p["name"] == "Tray Menu Test Profile"),
-            None
+            (p for p in profile_data if p["name"] == "Tray Menu Test Profile"), None
         )
         assert custom_in_tray is not None
         assert custom_in_tray["id"] == custom_profile.id
@@ -392,7 +382,7 @@ class TestE2EProfileLifecycle:
         # Step 3: Verify file exists and is valid JSON
         assert export_path.exists()
 
-        with open(export_path, "r") as f:
+        with open(export_path) as f:
             exported_data = json.load(f)
 
         # Step 4: Verify exported data
@@ -446,14 +436,11 @@ class TestE2EProfileLifecycle:
 
         # Step 5: Verify removal from storage
         storage_file = config_dir / "profiles.json"
-        with open(storage_file, "r") as f:
+        with open(storage_file) as f:
             data = json.load(f)
 
         profiles_data = data.get("profiles", [])
-        deleted_profile = next(
-            (p for p in profiles_data if p.get("id") == profile_id),
-            None
-        )
+        deleted_profile = next((p for p in profiles_data if p.get("id") == profile_id), None)
         assert deleted_profile is None
 
     def test_e2e_profile_import_from_json(self, profile_test_env):
@@ -934,10 +921,7 @@ class TestE2EProfileCompleteWorkflow:
         assert any(p.id == profile_id for p in profiles)
 
         # Step 3: Verify tray menu data format
-        tray_data = [
-            {"id": p.id, "name": p.name, "is_default": p.is_default}
-            for p in profiles
-        ]
+        tray_data = [{"id": p.id, "name": p.name, "is_default": p.is_default} for p in profiles]
         tray_entry = next(d for d in tray_data if d["id"] == profile_id)
         assert tray_entry["name"] == "Complete Workflow Test"
         assert tray_entry["is_default"] is False

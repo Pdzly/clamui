@@ -16,9 +16,9 @@ import os
 import queue
 import sqlite3
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
 
 
 class ConnectionPool:
@@ -145,7 +145,7 @@ class ConnectionPool:
                     # on systems with restrictive security policies or immutable files
                     pass
 
-    def acquire(self, timeout: Optional[float] = None) -> sqlite3.Connection:
+    def acquire(self, timeout: float | None = None) -> sqlite3.Connection:
         """
         Acquire a connection from the pool.
 
@@ -218,7 +218,9 @@ class ConnectionPool:
                 self._total_connections -= 1
 
     @contextmanager
-    def get_connection(self, timeout: Optional[float] = None) -> Generator[sqlite3.Connection, None, None]:
+    def get_connection(
+        self, timeout: float | None = None
+    ) -> Generator[sqlite3.Connection, None, None]:
         """
         Context manager that acquires and releases a connection automatically.
 

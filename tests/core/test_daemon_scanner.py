@@ -1,8 +1,6 @@
 # ClamUI Daemon Scanner Tests
 """Unit tests for the daemon scanner module."""
 
-import sys
-from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,8 +8,8 @@ import pytest
 # Import directly - daemon_scanner uses GLib only for idle_add in async methods,
 # and those methods are not tested here (unit tests mock the async behavior)
 from src.core.daemon_scanner import DaemonScanner
-from src.core.scanner import ScanResult, ScanStatus, ThreatDetail
-from src.core.threat_classifier import classify_threat_severity_str, categorize_threat
+from src.core.scanner import ScanStatus
+from src.core.threat_classifier import categorize_threat, classify_threat_severity_str
 
 
 @pytest.fixture

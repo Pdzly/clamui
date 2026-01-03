@@ -58,19 +58,22 @@ def mock_gtk_modules():
     mock_backend = mock.MagicMock()
 
     # Patch modules
-    with mock.patch.dict(sys.modules, {
-        "gi": mock_gi,
-        "gi.repository": mock_gi_repository,
-        "matplotlib.backends.backend_gtk4": mock_backend,
-        "matplotlib.backends.backend_gtk4agg": mock_backend,
-        "src.ui.window": mock.MagicMock(),
-        "src.ui.scan_view": mock.MagicMock(),
-        "src.ui.update_view": mock.MagicMock(),
-        "src.ui.logs_view": mock.MagicMock(),
-        "src.ui.components_view": mock.MagicMock(),
-        "src.ui.preferences_window": mock.MagicMock(),
-        "src.ui.statistics_view": mock.MagicMock(),
-    }):
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "gi": mock_gi,
+            "gi.repository": mock_gi_repository,
+            "matplotlib.backends.backend_gtk4": mock_backend,
+            "matplotlib.backends.backend_gtk4agg": mock_backend,
+            "src.ui.window": mock.MagicMock(),
+            "src.ui.scan_view": mock.MagicMock(),
+            "src.ui.update_view": mock.MagicMock(),
+            "src.ui.logs_view": mock.MagicMock(),
+            "src.ui.components_view": mock.MagicMock(),
+            "src.ui.preferences_window": mock.MagicMock(),
+            "src.ui.statistics_view": mock.MagicMock(),
+        },
+    ):
         # Need to remove and reimport the app module for fresh mocks
         if "src.app" in sys.modules:
             del sys.modules["src.app"]
@@ -88,6 +91,7 @@ def gio_mock(mock_gtk_modules):
 def app(mock_gtk_modules):
     """Create a ClamUIApp instance for testing."""
     from src.app import ClamUIApp
+
     return ClamUIApp()
 
 
@@ -100,13 +104,13 @@ class TestClamUIAppSetup:
 
     def test_app_has_version(self, app):
         """Test that the application has a version string."""
-        assert hasattr(app, 'version')
+        assert hasattr(app, "version")
         assert isinstance(app.version, str)
         assert len(app.version) > 0
 
     def test_app_has_app_name(self, app):
         """Test that the application has an app name."""
-        assert hasattr(app, 'app_name')
+        assert hasattr(app, "app_name")
         assert app.app_name == "ClamUI"
 
 
@@ -120,8 +124,7 @@ class TestClamUIAppActions:
 
         # Find call to SimpleAction.new with "quit"
         quit_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "quit"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "quit"
         ]
         assert len(quit_calls) == 1
 
@@ -132,8 +135,7 @@ class TestClamUIAppActions:
 
         # Find call to SimpleAction.new with "about"
         about_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "about"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "about"
         ]
         assert len(about_calls) == 1
 
@@ -144,8 +146,7 @@ class TestClamUIAppActions:
 
         # Find call to SimpleAction.new with "preferences"
         preferences_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "preferences"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "preferences"
         ]
         assert len(preferences_calls) == 1
 
@@ -162,7 +163,8 @@ class TestClamUIAppActions:
 
         # Find call to set_accels_for_action with "app.preferences"
         accel_calls = [
-            call for call in app.set_accels_for_action.call_args_list
+            call
+            for call in app.set_accels_for_action.call_args_list
             if call[0][0] == "app.preferences"
         ]
         assert len(accel_calls) == 1
@@ -175,8 +177,7 @@ class TestClamUIAppActions:
 
         # Find call to set_accels_for_action with "app.quit"
         accel_calls = [
-            call for call in app.set_accels_for_action.call_args_list
-            if call[0][0] == "app.quit"
+            call for call in app.set_accels_for_action.call_args_list if call[0][0] == "app.quit"
         ]
         assert len(accel_calls) == 1
         assert accel_calls[0][0][1] == ["<Control>q"]
@@ -187,7 +188,7 @@ class TestClamUIAppPreferencesHandler:
 
     def test_on_preferences_handler_exists(self, app):
         """Test that the _on_preferences handler method exists."""
-        assert hasattr(app, '_on_preferences')
+        assert hasattr(app, "_on_preferences")
         assert callable(app._on_preferences)
 
     def test_on_preferences_callable_without_error(self, app, mock_gtk_modules):
@@ -209,8 +210,7 @@ class TestClamUIAppViewSwitching:
         app._setup_actions()
 
         show_scan_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "show-scan"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "show-scan"
         ]
         assert len(show_scan_calls) == 1
 
@@ -220,8 +220,7 @@ class TestClamUIAppViewSwitching:
         app._setup_actions()
 
         show_update_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "show-update"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "show-update"
         ]
         assert len(show_update_calls) == 1
 
@@ -231,8 +230,7 @@ class TestClamUIAppViewSwitching:
         app._setup_actions()
 
         show_logs_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
-            if call[0][0] == "show-logs"
+            call for call in gio_mock.SimpleAction.new.call_args_list if call[0][0] == "show-logs"
         ]
         assert len(show_logs_calls) == 1
 
@@ -242,29 +240,30 @@ class TestClamUIAppViewSwitching:
         app._setup_actions()
 
         show_components_calls = [
-            call for call in gio_mock.SimpleAction.new.call_args_list
+            call
+            for call in gio_mock.SimpleAction.new.call_args_list
             if call[0][0] == "show-components"
         ]
         assert len(show_components_calls) == 1
 
     def test_on_show_scan_handler_exists(self, app):
         """Test that the _on_show_scan handler method exists."""
-        assert hasattr(app, '_on_show_scan')
+        assert hasattr(app, "_on_show_scan")
         assert callable(app._on_show_scan)
 
     def test_on_show_update_handler_exists(self, app):
         """Test that the _on_show_update handler method exists."""
-        assert hasattr(app, '_on_show_update')
+        assert hasattr(app, "_on_show_update")
         assert callable(app._on_show_update)
 
     def test_on_show_logs_handler_exists(self, app):
         """Test that the _on_show_logs handler method exists."""
-        assert hasattr(app, '_on_show_logs')
+        assert hasattr(app, "_on_show_logs")
         assert callable(app._on_show_logs)
 
     def test_on_show_components_handler_exists(self, app):
         """Test that the _on_show_components handler method exists."""
-        assert hasattr(app, '_on_show_components')
+        assert hasattr(app, "_on_show_components")
         assert callable(app._on_show_components)
 
 
@@ -273,22 +272,22 @@ class TestClamUIAppLifecycle:
 
     def test_do_activate_method_exists(self, app):
         """Test that do_activate method exists."""
-        assert hasattr(app, 'do_activate')
+        assert hasattr(app, "do_activate")
         assert callable(app.do_activate)
 
     def test_do_startup_method_exists(self, app):
         """Test that do_startup method exists."""
-        assert hasattr(app, 'do_startup')
+        assert hasattr(app, "do_startup")
         assert callable(app.do_startup)
 
     def test_on_quit_handler_exists(self, app):
         """Test that the _on_quit handler method exists."""
-        assert hasattr(app, '_on_quit')
+        assert hasattr(app, "_on_quit")
         assert callable(app._on_quit)
 
     def test_on_about_handler_exists(self, app):
         """Test that the _on_about handler method exists."""
-        assert hasattr(app, '_on_about')
+        assert hasattr(app, "_on_about")
         assert callable(app._on_about)
 
 
@@ -297,7 +296,7 @@ class TestClamUIAppQuickScanProfile:
 
     def test_get_quick_scan_profile_method_exists(self, app):
         """Test that the _get_quick_scan_profile helper method exists."""
-        assert hasattr(app, '_get_quick_scan_profile')
+        assert hasattr(app, "_get_quick_scan_profile")
         assert callable(app._get_quick_scan_profile)
 
     def test_get_quick_scan_profile_calls_profile_manager(self, app):
@@ -325,7 +324,7 @@ class TestClamUIAppQuickScanProfile:
 
     def test_on_statistics_quick_scan_handler_exists(self, app):
         """Test that the _on_statistics_quick_scan handler method exists."""
-        assert hasattr(app, '_on_statistics_quick_scan')
+        assert hasattr(app, "_on_statistics_quick_scan")
         assert callable(app._on_statistics_quick_scan)
 
     def test_on_statistics_quick_scan_switches_to_scan_view(self, app, mock_gtk_modules):
@@ -394,7 +393,7 @@ class TestClamUIAppQuickScanProfile:
         app._profile_manager.get_profile_by_name.return_value = None
 
         # Call the handler
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/testuser"
             app._on_statistics_quick_scan()
 
@@ -464,12 +463,12 @@ class TestClamUIAppTrayQuickScan:
 
     def test_on_tray_quick_scan_handler_exists(self, app):
         """Test that the _on_tray_quick_scan handler method exists."""
-        assert hasattr(app, '_on_tray_quick_scan')
+        assert hasattr(app, "_on_tray_quick_scan")
         assert callable(app._on_tray_quick_scan)
 
     def test_do_tray_quick_scan_handler_exists(self, app):
         """Test that the _do_tray_quick_scan handler method exists."""
-        assert hasattr(app, '_do_tray_quick_scan')
+        assert hasattr(app, "_do_tray_quick_scan")
         assert callable(app._do_tray_quick_scan)
 
     def test_do_tray_quick_scan_switches_to_scan_view(self, app, mock_gtk_modules):
@@ -574,7 +573,7 @@ class TestClamUIAppTrayQuickScan:
         app.activate = mock.MagicMock()
 
         # Call the handler
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/testuser"
             app._do_tray_quick_scan()
 
@@ -723,7 +722,7 @@ class TestClamUIAppQuickScanFallback:
         app._profile_manager.get_profile_by_name.return_value = None
 
         # Call the handler and verify expanduser is called with "~"
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/testuser"
             app._on_statistics_quick_scan()
 
@@ -749,7 +748,7 @@ class TestClamUIAppQuickScanFallback:
         app.activate = mock.MagicMock()
 
         # Call the handler and verify expanduser is called with "~"
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/testuser"
             app._do_tray_quick_scan()
 
@@ -817,7 +816,7 @@ class TestClamUIAppQuickScanFallback:
         app._profile_manager.get_profile_by_name.return_value = None
 
         # Call the handler and verify logging
-        with mock.patch('src.app.logger') as mock_logger:
+        with mock.patch("src.app.logger") as mock_logger:
             app._on_statistics_quick_scan()
 
             # Verify warning was logged about fallback
@@ -845,7 +844,7 @@ class TestClamUIAppQuickScanFallback:
         app.activate = mock.MagicMock()
 
         # Call the handler and verify logging
-        with mock.patch('src.app.logger') as mock_logger:
+        with mock.patch("src.app.logger") as mock_logger:
             app._do_tray_quick_scan()
 
             # Verify warning was logged about fallback
@@ -919,7 +918,7 @@ class TestClamUIAppQuickScanFallback:
         app._profile_manager.get_profile_by_name.return_value = None
 
         # Call the handler with a specific home directory
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/specific_user"
             app._on_statistics_quick_scan()
 
@@ -945,7 +944,7 @@ class TestClamUIAppQuickScanFallback:
         app.activate = mock.MagicMock()
 
         # Call the handler with a specific home directory
-        with mock.patch('src.app.os.path.expanduser') as mock_expanduser:
+        with mock.patch("src.app.os.path.expanduser") as mock_expanduser:
             mock_expanduser.return_value = "/home/specific_user"
             app._do_tray_quick_scan()
 

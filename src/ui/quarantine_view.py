@@ -13,13 +13,14 @@ import time
 from datetime import datetime
 
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, GLib, Gtk
 
 from ..core.quarantine import (
-    QuarantineManager,
     QuarantineEntry,
+    QuarantineManager,
     QuarantineResult,
     QuarantineStatus,
 )
@@ -453,453 +454,260 @@ class QuarantineView(Gtk.Box):
         if scroll_pos is not None:
             GLib.idle_add(lambda: vadj.set_value(scroll_pos))
 
-    def _create_entry_row(self, entry: QuarantineEntry) -> Adw.ExpanderRow:
-        """
-        Create a list row for a quarantine entry.
-
-        Args:
-            entry: The QuarantineEntry to create a row for
-
-        Returns:
-            Adw.ExpanderRow widget
-        """
-        row = Adw.ExpanderRow()
-
-        # Set title as threat name
-        row.set_title(entry.threat_name)
-
-        # Format and set subtitle with original path
-        original_path = entry.original_path
-        if len(original_path) > 50:
-            display_path = "..." + original_path[-47:]
-        else:
-            display_path = original_path
-        row.set_subtitle(display_path)
-
-        # Set icon
-        add_row_icon(row, "dialog-warning-symbolic")
-
-        # Create info label with date and size
-        try:
-            detection_date = datetime.fromisoformat(entry.detection_date)
-            date_str = detection_date.strftime("%Y-%m-%d %H:%M")
-        except (ValueError, TypeError):
-            date_str = entry.detection_date
-
-        size_str = format_file_size(entry.file_size)
-
-        info_label = Gtk.Label()
-        info_label.set_text(f"{date_str} • {size_str}")
-        info_label.add_css_class("dim-label")
-        info_label.add_css_class("caption")
-        info_label.set_valign(Gtk.Align.CENTER)
-        row.add_suffix(info_label)
-
-        # Create expanded content with details and action buttons
-        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        content_box.set_margin_start(12)
-        content_box.set_margin_end(12)
-        content_box.set_margin_top(8)
-        content_box.set_margin_bottom(8)
-
-        # File details section
-        details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-
-        # Original path row
-        path_row = Adw.ActionRow()
-        path_row.set_title("Original Path")
-        path_row.set_subtitle(entry.original_path)
-        path_row.set_subtitle_selectable(True)
-        add_row_icon(path_row, "folder-symbolic")
-        details_box.append(path_row)
-
-        # Detection date row
-        date_row = Adw.ActionRow()
-        date_row.set_title("Detection Date")
-        date_row.set_subtitle(date_str)
-        add_row_icon(date_row, "x-office-calendar-symbolic")
-        details_box.append(date_row)
-
-        # File size row
-        size_row = Adw.ActionRow()
-        size_row.set_title("File Size")
-        size_row.set_subtitle(f"{size_str} ({entry.file_size:,} bytes)")
-        add_row_icon(size_row, "drive-harddisk-symbolic")
-        details_box.append(size_row)
-
-        content_box.append(details_box)
-
-        # Action buttons section
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        button_box.set_halign(Gtk.Align.END)
-        button_box.set_margin_top(8)
-
-        # Restore button
-        restore_button = Gtk.Button()
-        restore_button.set_label("Restore")
-        restore_button.set_icon_name("document-revert-symbolic")
-        restore_button.set_tooltip_text("Restore file to original location")
-        restore_button.add_css_class("suggested-action")
-        restore_button.connect("clicked", self._on_restore_clicked, entry)
-        button_box.append(restore_button)
-
-        # Delete button
-        delete_button = Gtk.Button()
-        delete_button.set_label("Delete")
-        delete_button.set_icon_name("user-trash-symbolic")
-        delete_button.set_tooltip_text("Permanently delete this file")
-        delete_button.add_css_class("destructive-action")
-        delete_button.connect("clicked", self._on_delete_clicked, entry)
-        button_box.append(delete_button)
-
-        content_box.append(button_box)
-
-        row.add_row(content_box)
-
-        # Store entry ID for later use
-        row.set_name(str(entry.id))
-
-        return row
-
-    def _update_storage_info(self, entries: list[QuarantineEntry] = None):
-        """
-        Update the storage information display.
-
-        Args:
-            entries: Optional list of QuarantineEntry objects to calculate stats from.
-                    If provided, avoids synchronous database calls on the main thread.
-                    If None, falls back to database queries (not recommended on main thread).
-        """
-        if entries is not None:
-            # Calculate from provided entries (avoids blocking database calls)
-            total_size = sum(entry.file_size for entry in entries)
-            entry_count = len(entries)
-        else:
-            # Fallback to database queries (may block main thread)
-            total_size = self._manager.get_total_size()
-            entry_count = self._manager.get_entry_count()
-
-        self._storage_row.set_subtitle(format_file_size(total_size))
-
-        if entry_count == 1:
-            self._count_label.set_text("1 item")
-        else:
-            self._count_label.set_text(f"{entry_count} items")
-
-    def _set_loading_state(self, is_loading: bool):
-        """
-        Update UI to reflect loading state.
-
-        Args:
-            is_loading: Whether entries are currently being loaded
-        """
-        self._is_loading = is_loading
-
-        try:
-            if is_loading:
-                self._spinner.set_visible(True)
-                self._spinner.start()
-                self._refresh_button.set_sensitive(False)
-                self._clear_old_button.set_sensitive(False)
-
-                # Clear existing rows and show loading placeholder
-                self._listbox.remove_all()
-                loading_row = self._create_loading_state()
-                self._listbox.append(loading_row)
-            else:
-                self._spinner.stop()
-                self._spinner.set_visible(False)
-                self._refresh_button.set_sensitive(True)
-        except Exception:
-            self._is_loading = False
-
     def _on_refresh_clicked(self, button):
         """Handle refresh button click."""
+        # Debounce: don't refresh if last refresh was less than 1 second ago
+        current_time = time.time()
+        if current_time - self._last_refresh_time < 1.0:
+            return
+
         self._load_entries_async()
-
-    def _on_restore_clicked(self, button, entry: QuarantineEntry):
-        """
-        Handle restore button click.
-
-        Shows a confirmation dialog before restoring.
-
-        Args:
-            button: The clicked button
-            entry: The QuarantineEntry to restore
-        """
-        dialog = Adw.MessageDialog()
-        dialog.set_heading("Restore File?")
-        dialog.set_body(
-            f"This will restore the file to its original location:\n\n"
-            f"{entry.original_path}\n\n"
-            f"Warning: This file was detected as a threat ({entry.threat_name}). "
-            f"Only restore if you are certain it is a false positive."
-        )
-        dialog.set_transient_for(self.get_root())
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("restore", "Restore")
-        dialog.set_response_appearance("restore", Adw.ResponseAppearance.SUGGESTED)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
-        dialog.connect("response", self._on_restore_dialog_response, entry)
-        dialog.present()
-
-    def _on_restore_dialog_response(
-        self, dialog: Adw.MessageDialog, response: str, entry: QuarantineEntry
-    ):
-        """Handle restore confirmation dialog response."""
-        if response == "restore":
-            self._perform_restore(entry)
-
-    def _perform_restore(self, entry: QuarantineEntry):
-        """
-        Perform the restore operation.
-
-        Args:
-            entry: The QuarantineEntry to restore
-        """
-        # Show operation in progress
-        self._status_banner.set_title(f"Restoring {entry.threat_name}...")
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("error")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-        # Perform restore asynchronously
-        self._manager.restore_file_async(entry.id, self._on_restore_complete)
-
-    def _on_restore_complete(self, result: QuarantineResult):
-        """
-        Handle restore operation completion.
-
-        Args:
-            result: The QuarantineResult from the restore operation
-        """
-        if result.is_success:
-            self._status_banner.set_title("File restored successfully")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            # Refresh the list
-            self._load_entries_async()
-        else:
-            error_msg = result.error_message or "Unknown error"
-            if result.status == QuarantineStatus.RESTORE_DESTINATION_EXISTS:
-                error_msg = "Cannot restore: A file already exists at the original location"
-            self._status_banner.set_title(f"Restore failed: {error_msg}")
-            self._status_banner.add_css_class("error")
-            self._status_banner.remove_css_class("success")
-
-        self._status_banner.set_button_label("Dismiss")
-        self._status_banner.set_revealed(True)
-
-    def _on_delete_clicked(self, button, entry: QuarantineEntry):
-        """
-        Handle delete button click.
-
-        Shows a confirmation dialog before deleting.
-
-        Args:
-            button: The clicked button
-            entry: The QuarantineEntry to delete
-        """
-        dialog = Adw.MessageDialog()
-        dialog.set_heading("Permanently Delete File?")
-        dialog.set_body(
-            f"This will permanently delete the quarantined file:\n\n"
-            f"Threat: {entry.threat_name}\n"
-            f"Size: {format_file_size(entry.file_size)}\n\n"
-            f"This action cannot be undone."
-        )
-        dialog.set_transient_for(self.get_root())
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
-        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
-        dialog.connect("response", self._on_delete_dialog_response, entry)
-        dialog.present()
-
-    def _on_delete_dialog_response(
-        self, dialog: Adw.MessageDialog, response: str, entry: QuarantineEntry
-    ):
-        """Handle delete confirmation dialog response."""
-        if response == "delete":
-            self._perform_delete(entry)
-
-    def _perform_delete(self, entry: QuarantineEntry):
-        """
-        Perform the delete operation.
-
-        Args:
-            entry: The QuarantineEntry to delete
-        """
-        # Show operation in progress
-        self._status_banner.set_title(f"Deleting {entry.threat_name}...")
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("error")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-        # Perform delete asynchronously
-        self._manager.delete_file_async(entry.id, self._on_delete_complete)
-
-    def _on_delete_complete(self, result: QuarantineResult):
-        """
-        Handle delete operation completion.
-
-        Args:
-            result: The QuarantineResult from the delete operation
-        """
-        if result.is_success:
-            self._status_banner.set_title("File deleted permanently")
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
-            # Refresh the list
-            self._load_entries_async()
-        else:
-            error_msg = result.error_message or "Unknown error"
-            self._status_banner.set_title(f"Delete failed: {error_msg}")
-            self._status_banner.add_css_class("error")
-            self._status_banner.remove_css_class("success")
-
-        self._status_banner.set_button_label("Dismiss")
-        self._status_banner.set_revealed(True)
 
     def _on_clear_old_clicked(self, button):
         """Handle clear old items button click."""
-        # Get count of old entries first
-        old_entries = self._manager.get_old_entries(days=30)
-        if not old_entries:
-            self._status_banner.set_title("No items older than 30 days")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
-            self._status_banner.set_button_label("Dismiss")
-            self._status_banner.set_revealed(True)
-            return
+        self._manager.cleanup_old_entries_async(callback=self._on_cleanup_completed)
 
-        # Show confirmation dialog
-        dialog = Adw.MessageDialog()
-        dialog.set_heading("Clear Old Items?")
-        dialog.set_body(
-            f"This will permanently delete {len(old_entries)} quarantined file(s) "
-            f"that are older than 30 days.\n\n"
-            f"This action cannot be undone."
-        )
-        dialog.set_transient_for(self.get_root())
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("clear", "Clear Old Items")
-        dialog.set_response_appearance("clear", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
-        dialog.connect("response", self._on_clear_old_dialog_response)
-        dialog.present()
-
-    def _on_clear_old_dialog_response(self, dialog: Adw.MessageDialog, response: str):
-        """Handle clear old items confirmation dialog response."""
-        if response == "clear":
-            self._perform_clear_old()
-
-    def _perform_clear_old(self):
-        """Perform the clear old entries operation."""
-        # Show operation in progress
-        self._status_banner.set_title("Clearing old items...")
-        self._status_banner.remove_css_class("success")
-        self._status_banner.remove_css_class("error")
-        self._status_banner.set_button_label(None)
-        self._status_banner.set_revealed(True)
-
-        # Perform cleanup asynchronously
-        self._manager.cleanup_old_entries_async(days=30, callback=self._on_clear_old_complete)
-
-    def _on_clear_old_complete(self, removed_count: int):
+    def _on_cleanup_completed(self, removed_count: int) -> bool:
         """
-        Handle clear old entries operation completion.
+        Handle completion of cleanup operation.
 
         Args:
             removed_count: Number of entries removed
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
         """
+        # Show status message
         if removed_count > 0:
-            self._status_banner.set_title(
-                f"Removed {removed_count} old item(s)"
-            )
-            self._status_banner.add_css_class("success")
-            self._status_banner.remove_css_class("error")
+            msg = f"Removed {removed_count} old quarantine entries"
+            self._status_banner.set_title(msg)
+            self._status_banner.set_revealed(True)
+
             # Refresh the list
             self._load_entries_async()
         else:
-            self._status_banner.set_title("No items were removed")
-            self._status_banner.remove_css_class("success")
-            self._status_banner.remove_css_class("error")
+            msg = "No old entries found to remove"
+            self._status_banner.set_title(msg)
+            self._status_banner.set_revealed(True)
 
-        self._status_banner.set_button_label("Dismiss")
-        self._status_banner.set_revealed(True)
-
-    def refresh(self):
-        """
-        Public method to refresh the quarantine list.
-
-        Can be called externally when files are added to quarantine.
-        """
-        GLib.idle_add(self._load_entries_async)
-
-    @property
-    def manager(self) -> QuarantineManager:
-        """
-        Get the quarantine manager instance.
-
-        Returns:
-            The QuarantineManager instance used by this view
-        """
-        return self._manager
+        return False
 
     def _on_view_mapped(self, widget):
         """
-        Handle view becoming visible (mapped).
+        Handle view being mapped (shown on screen).
 
-        Refreshes the quarantine list when the view becomes visible to ensure
-        newly quarantined files appear immediately without manual refresh.
-        Uses a debounce mechanism to prevent excessive refreshes.
+        Refreshes the quarantine list when the view becomes visible.
 
         Args:
-            widget: The widget that was mapped (self)
+            widget: The widget that was mapped
         """
-        # Debounce: only refresh if more than 0.5 seconds since last refresh
-        # This prevents excessive refreshes when rapidly switching tabs
-        current_time = time.time()
-        if current_time - self._last_refresh_time < 0.5:
-            return
-
-        self._last_refresh_time = current_time
-
-        # Trigger async refresh
         self._load_entries_async()
 
-    def set_quarantine_changed_callback(self, callback):
+    def _set_loading_state(self, is_loading: bool):
         """
-        Set callback for quarantine content changes.
-
-        The callback is invoked when quarantine operations complete
-        (file added, restored, or deleted). This allows external code
-        to react to quarantine changes.
-
-        Signature: callback(entry_count: int)
-        - entry_count: Current number of entries in quarantine
+        Set the loading state and update UI accordingly.
 
         Args:
-            callback: Callable to invoke on quarantine changes
+            is_loading: True if loading, False otherwise
+        """
+        self._is_loading = is_loading
+        if is_loading:
+            self._spinner.set_visible(True)
+            self._spinner.start()
+            self._refresh_button.set_sensitive(False)
+        else:
+            self._spinner.set_visible(False)
+            self._spinner.stop()
+            self._refresh_button.set_sensitive(True)
+
+    def _update_storage_info(self, entries: list[QuarantineEntry]):
+        """
+        Update the storage info display with total size and item count.
+
+        Args:
+            entries: List of quarantine entries to calculate size from
+        """
+        total_size = sum(entry.file_size for entry in entries if entry.file_size)
+        item_count = len(entries)
+
+        # Update count label
+        item_text = f"{item_count} item" if item_count == 1 else f"{item_count} items"
+        self._count_label.set_text(item_text)
+
+        # Update size display
+        size_str = format_file_size(total_size)
+        self._storage_row.set_subtitle(size_str)
+
+    def _create_entry_row(self, entry: QuarantineEntry) -> Gtk.ListBoxRow:
+        """
+        Create a list row widget for a quarantine entry.
+
+        Args:
+            entry: QuarantineEntry object to display
+
+        Returns:
+            Gtk.ListBoxRow containing the entry information
+        """
+        row = Gtk.ListBoxRow()
+
+        # Main container
+        container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        container.set_margin_top(12)
+        container.set_margin_bottom(12)
+        container.set_margin_start(12)
+        container.set_margin_end(12)
+        container.set_spacing(6)
+
+        # Header: threat name
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        header_box.set_spacing(12)
+
+        # Threat icon
+        icon = Gtk.Image()
+        icon.set_from_icon_name("dialog-warning-symbolic")
+        icon.set_pixel_size(20)
+        icon.add_css_class("dim-label")
+        header_box.append(icon)
+
+        # Threat name
+        threat_label = Gtk.Label()
+        threat_label.set_text(entry.threat_name or "Unknown Threat")
+        threat_label.set_halign(Gtk.Align.START)
+        threat_label.add_css_class("heading")
+        header_box.append(threat_label)
+
+        container.append(header_box)
+
+        # Original path
+        path_label = Gtk.Label()
+        path_label.set_text(f"Path: {entry.original_path}")
+        path_label.set_halign(Gtk.Align.START)
+        path_label.add_css_class("monospace")
+        path_label.add_css_class("dim-label")
+        path_label.set_wrap(True)
+        path_label.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        container.append(path_label)
+
+        # Metadata row: date and size
+        metadata_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        metadata_box.set_spacing(24)
+
+        # Quarantine date
+        date_label = Gtk.Label()
+        if entry.quarantine_date:
+            try:
+                quarantine_dt = datetime.fromisoformat(entry.quarantine_date)
+                date_str = quarantine_dt.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                date_str = entry.quarantine_date
+        else:
+            date_str = "Unknown"
+        date_label.set_text(f"Quarantined: {date_str}")
+        date_label.add_css_class("dim-label")
+        date_label.add_css_class("caption")
+        metadata_box.append(date_label)
+
+        # File size
+        size_label = Gtk.Label()
+        size_label.set_text(f"Size: {format_file_size(entry.file_size)}")
+        size_label.add_css_class("dim-label")
+        size_label.add_css_class("caption")
+        metadata_box.append(size_label)
+
+        container.append(metadata_box)
+
+        # Actions row
+        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        actions_box.set_spacing(6)
+        actions_box.set_halign(Gtk.Align.END)
+
+        # Restore button
+        restore_btn = Gtk.Button()
+        restore_btn.set_label("Restore")
+        restore_btn.add_css_class("pill")
+        restore_btn.connect("clicked", self._on_restore_clicked, entry)
+        actions_box.append(restore_btn)
+
+        # Delete button
+        delete_btn = Gtk.Button()
+        delete_btn.set_label("Delete")
+        delete_btn.add_css_class("pill")
+        delete_btn.add_css_class("destructive-action")
+        delete_btn.connect("clicked", self._on_delete_clicked, entry)
+        actions_box.append(delete_btn)
+
+        container.append(actions_box)
+
+        row.set_child(container)
+        return row
+
+    def _on_restore_clicked(self, button, entry: QuarantineEntry):
+        """
+        Handle restore button click for a quarantine entry.
+
+        Args:
+            button: The button that was clicked
+            entry: The QuarantineEntry to restore
+        """
+        self._manager.restore_entry_async(entry.id, callback=self._on_restore_completed)
+
+    def _on_restore_completed(self, result: QuarantineResult) -> bool:
+        """
+        Handle completion of restore operation.
+
+        Args:
+            result: QuarantineResult object with operation status
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
+        """
+        if result.status == QuarantineStatus.SUCCESS:
+            self._status_banner.set_title(result.message or "File restored successfully")
+            self._status_banner.set_revealed(True)
+            # Refresh the list after successful restore
+            GLib.timeout_add(500, self._load_entries_async)
+        else:
+            self._status_banner.set_title(result.message or "Failed to restore file")
+            self._status_banner.set_revealed(True)
+
+        return False
+
+    def _on_delete_clicked(self, button, entry: QuarantineEntry):
+        """
+        Handle delete button click for a quarantine entry.
+
+        Args:
+            button: The button that was clicked
+            entry: The QuarantineEntry to delete
+        """
+        self._manager.delete_entry_async(entry.id, callback=self._on_delete_completed)
+
+    def _on_delete_completed(self, result: QuarantineResult) -> bool:
+        """
+        Handle completion of delete operation.
+
+        Args:
+            result: QuarantineResult object with operation status
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
+        """
+        if result.status == QuarantineStatus.SUCCESS:
+            self._status_banner.set_title(result.message or "File deleted successfully")
+            self._status_banner.set_revealed(True)
+            # Refresh the list after successful delete
+            GLib.timeout_add(500, self._load_entries_async)
+        else:
+            self._status_banner.set_title(result.message or "Failed to delete file")
+            self._status_banner.set_revealed(True)
+
+        return False
+
+    def register_quarantine_changed_callback(self, callback):
+        """
+        Register a callback to be invoked when quarantine content changes.
+
+        Args:
+            callback: Callable that receives entry_count as parameter
         """
         self._on_quarantine_changed = callback
-
-    def notify_quarantine_changed(self):
-        """
-        Notify that quarantine content has changed.
-
-        Call this method when files are added to quarantine from external
-        code (e.g., scan view) to trigger a refresh of the quarantine list.
-        """
-        self.refresh()
-
-        # Invoke callback if registered
-        if self._on_quarantine_changed:
-            entry_count = self._manager.get_entry_count()
-            self._on_quarantine_changed(entry_count)

@@ -11,17 +11,15 @@ import stat
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
 # Import directly - quarantine modules use GLib only for async callbacks,
 # which are mocked in tests via GLib.idle_add patching
-from src.core.quarantine.database import QuarantineDatabase, QuarantineEntry
+from src.core.quarantine.database import QuarantineDatabase
 from src.core.quarantine.file_handler import SecureFileHandler
 from src.core.quarantine.manager import (
     QuarantineManager,
-    QuarantineResult,
     QuarantineStatus,
 )
 from src.core.settings_manager import SettingsManager
@@ -58,7 +56,9 @@ class TestQuarantineWorkflow:
         # Explicitly close the database to prevent resource warnings
         mgr._database.close()
 
-    def create_test_file(self, source_dir: Path, name: str = "test_threat.exe", content: bytes = b"malware content"):
+    def create_test_file(
+        self, source_dir: Path, name: str = "test_threat.exe", content: bytes = b"malware content"
+    ):
         """Helper to create a test file for quarantine testing."""
         file_path = source_dir / name
         file_path.write_bytes(content)
@@ -68,9 +68,7 @@ class TestQuarantineWorkflow:
         """Test complete quarantine workflow: file → quarantine → database entry."""
         # Create a test file simulating a threat
         test_file = self.create_test_file(
-            temp_environment["source_dir"],
-            "infected.exe",
-            b"Simulated malware content for testing"
+            temp_environment["source_dir"], "infected.exe", b"Simulated malware content for testing"
         )
         original_path = str(test_file)
         original_size = test_file.stat().st_size
@@ -118,7 +116,9 @@ class TestQuarantineWorkflow:
         assert manager.get_total_size() == 0
 
         # Quarantine first file
-        file1 = self.create_test_file(temp_environment["source_dir"], "file1.exe", b"content1" * 100)
+        file1 = self.create_test_file(
+            temp_environment["source_dir"], "file1.exe", b"content1" * 100
+        )
         file1_size = file1.stat().st_size
         result1 = manager.quarantine_file(str(file1), "Threat1")
         assert result1.is_success
@@ -127,7 +127,9 @@ class TestQuarantineWorkflow:
         assert manager.get_total_size() == file1_size
 
         # Quarantine second file
-        file2 = self.create_test_file(temp_environment["source_dir"], "file2.exe", b"content2" * 200)
+        file2 = self.create_test_file(
+            temp_environment["source_dir"], "file2.exe", b"content2" * 200
+        )
         file2_size = file2.stat().st_size
         result2 = manager.quarantine_file(str(file2), "Threat2")
         assert result2.is_success
@@ -139,7 +141,7 @@ class TestQuarantineWorkflow:
         """Test that quarantining the same file twice is prevented."""
         # Create and quarantine a file
         test_file = self.create_test_file(temp_environment["source_dir"], "duplicate.exe")
-        original_path = str(test_file.resolve())
+        str(test_file.resolve())
         result1 = manager.quarantine_file(str(test_file), "FirstThreat")
         assert result1.is_success
 
@@ -196,7 +198,9 @@ class TestRestoreWorkflow:
     def test_restore_workflow_complete(self, temp_environment, manager):
         """Test complete restore workflow: quarantine → restore → database entry removed."""
         # Quarantine a file
-        entry, original_content = self.create_and_quarantine_file(temp_environment, manager, "restore_test.exe")
+        entry, original_content = self.create_and_quarantine_file(
+            temp_environment, manager, "restore_test.exe"
+        )
         original_path = Path(entry.original_path)
 
         # Verify file is in quarantine
@@ -296,7 +300,9 @@ class TestDeleteWorkflow:
         # Explicitly close the database to prevent resource warnings
         mgr._database.close()
 
-    def create_and_quarantine_file(self, temp_environment, manager, name: str = "test.exe", size: int = 1000):
+    def create_and_quarantine_file(
+        self, temp_environment, manager, name: str = "test.exe", size: int = 1000
+    ):
         """Helper to create and quarantine a test file."""
         file_path = temp_environment["source_dir"] / name
         content = b"x" * size
@@ -342,7 +348,7 @@ class TestDeleteWorkflow:
         # Quarantine multiple files
         entry1 = self.create_and_quarantine_file(temp_environment, manager, "file1.exe", 1000)
         entry2 = self.create_and_quarantine_file(temp_environment, manager, "file2.exe", 2000)
-        entry3 = self.create_and_quarantine_file(temp_environment, manager, "file3.exe", 3000)
+        self.create_and_quarantine_file(temp_environment, manager, "file3.exe", 3000)
 
         total_size = manager.get_total_size()
         assert total_size == 1000 + 2000 + 3000
@@ -420,18 +426,17 @@ class TestCleanupOldItemsWorkflow:
         # Manually update detection dates to simulate old entries
         # We need to access the database directly for this test
         import sqlite3
+
         db_path = str(temp_environment["db_path"])
         old_date = (datetime.now() - timedelta(days=45)).isoformat()
 
         conn = sqlite3.connect(db_path)
         try:
             conn.execute(
-                "UPDATE quarantine SET detection_date = ? WHERE id = ?",
-                (old_date, entry2.id)
+                "UPDATE quarantine SET detection_date = ? WHERE id = ?", (old_date, entry2.id)
             )
             conn.execute(
-                "UPDATE quarantine SET detection_date = ? WHERE id = ?",
-                (old_date, entry3.id)
+                "UPDATE quarantine SET detection_date = ? WHERE id = ?", (old_date, entry3.id)
             )
             conn.commit()
         finally:
@@ -503,7 +508,9 @@ class TestConfigChange:
         )
         result1 = manager1.quarantine_file(str(file1), "Threat1")
         assert result1.is_success
-        assert str(temp_environment["quarantine_dir1"]) in str(Path(result1.entry.quarantine_path).parent)
+        assert str(temp_environment["quarantine_dir1"]) in str(
+            Path(result1.entry.quarantine_path).parent
+        )
 
         # Create another file
         file2 = source_dir / "test2.exe"
@@ -516,7 +523,9 @@ class TestConfigChange:
         )
         result2 = manager2.quarantine_file(str(file2), "Threat2")
         assert result2.is_success
-        assert str(temp_environment["quarantine_dir2"]) in str(Path(result2.entry.quarantine_path).parent)
+        assert str(temp_environment["quarantine_dir2"]) in str(
+            Path(result2.entry.quarantine_path).parent
+        )
 
         # Verify files are in their respective directories
         assert Path(result1.entry.quarantine_path).parent == temp_environment["quarantine_dir1"]
@@ -780,10 +789,7 @@ class TestDatabaseAndFileHandlerIntegration:
             entry = db.get_entry(entry_id)
 
             # Verify integrity
-            is_valid, error = fh.verify_file_integrity(
-                entry.quarantine_path,
-                entry.file_hash
-            )
+            is_valid, error = fh.verify_file_integrity(entry.quarantine_path, entry.file_hash)
             assert is_valid is True
             assert error is None
 
@@ -794,10 +800,7 @@ class TestDatabaseAndFileHandlerIntegration:
             os.chmod(quarantine_path, 0o400)
 
             # Verify should now fail
-            is_valid, error = fh.verify_file_integrity(
-                entry.quarantine_path,
-                entry.file_hash
-            )
+            is_valid, error = fh.verify_file_integrity(entry.quarantine_path, entry.file_hash)
             assert is_valid is False
             assert "mismatch" in error.lower()
         finally:

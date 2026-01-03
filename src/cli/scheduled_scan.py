@@ -37,7 +37,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from src.core.battery_manager import BatteryManager
 from src.core.log_manager import LogEntry, LogManager
@@ -61,21 +60,21 @@ Examples:
   %(prog)s                                    # Use settings from config
   %(prog)s --target /home/user/Documents      # Scan specific directory
   %(prog)s --skip-on-battery --auto-quarantine # Skip on battery, quarantine threats
-        """
+        """,
     )
 
     parser.add_argument(
         "--skip-on-battery",
         action="store_true",
         default=None,
-        help="Skip scan if running on battery power"
+        help="Skip scan if running on battery power",
     )
 
     parser.add_argument(
         "--auto-quarantine",
         action="store_true",
         default=None,
-        help="Automatically quarantine detected threats"
+        help="Automatically quarantine detected threats",
     )
 
     parser.add_argument(
@@ -83,20 +82,14 @@ Examples:
         action="append",
         dest="targets",
         metavar="PATH",
-        help="Path to scan (can be specified multiple times)"
+        help="Path to scan (can be specified multiple times)",
     )
 
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without executing"
+        "--dry-run", action="store_true", help="Show what would be done without executing"
     )
 
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
 
     return parser.parse_args()
 
@@ -116,11 +109,7 @@ def log_message(message: str, verbose: bool = False, is_verbose: bool = False) -
     print(f"[{timestamp}] {message}", file=sys.stderr)
 
 
-def send_notification(
-    title: str,
-    body: str,
-    urgency: str = "normal"
-) -> bool:
+def send_notification(title: str, body: str, urgency: str = "normal") -> bool:
     """
     Send a desktop notification using notify-send.
 
@@ -150,25 +139,20 @@ def send_notification(
         icon_paths = [
             "/app/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.png",  # Flatpak
             "/usr/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.png",  # System
-            os.path.expanduser("~/.local/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.png"),  # User
+            os.path.expanduser(
+                "~/.local/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.png"
+            ),  # User
             "dialog-warning",  # Fallback system icon
         ]
         for icon in icon_paths:
-            if icon.startswith("/") and os.path.exists(icon):
-                cmd.extend(["--icon", icon])
-                break
-            elif not icon.startswith("/"):
+            if icon.startswith("/") and os.path.exists(icon) or not icon.startswith("/"):
                 cmd.extend(["--icon", icon])
                 break
 
         # Add title and body
         cmd.extend([title, body])
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=5
-        )
+        result = subprocess.run(cmd, capture_output=True, timeout=5)
         return result.returncode == 0
 
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -177,11 +161,11 @@ def send_notification(
 
 
 def run_scheduled_scan(
-    targets: List[str],
+    targets: list[str],
     skip_on_battery: bool,
     auto_quarantine: bool,
     dry_run: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> int:
     """
     Execute a scheduled scan.
@@ -210,10 +194,7 @@ def run_scheduled_scan(
         if battery_manager.should_skip_scan(skip_on_battery=True):
             battery_status = battery_manager.get_status()
             percent = battery_status.percent or 0
-            log_message(
-                f"Skipping scan: running on battery power ({percent:.0f}%)",
-                verbose
-            )
+            log_message(f"Skipping scan: running on battery power ({percent:.0f}%)", verbose)
 
             # Log the skip event
             log_entry = LogEntry.create(
@@ -222,7 +203,7 @@ def run_scheduled_scan(
                 summary="Scheduled scan skipped (on battery power)",
                 details=f"Battery level: {percent:.0f}%\nScan skipped due to battery-aware settings.",
                 path=", ".join(targets) if targets else "N/A",
-                scheduled=True
+                scheduled=True,
             )
             log_manager.save_log(log_entry)
 
@@ -267,14 +248,14 @@ def run_scheduled_scan(
             summary="Scheduled scan failed: ClamAV not available",
             details=version_or_error or "ClamAV is not installed or not accessible",
             path=", ".join(valid_targets),
-            scheduled=True
+            scheduled=True,
         )
         log_manager.save_log(log_entry)
 
         send_notification(
             "Scheduled Scan Failed",
             "ClamAV is not available. Please install ClamAV.",
-            urgency="critical"
+            urgency="critical",
         )
         return 2
 
@@ -284,8 +265,8 @@ def run_scheduled_scan(
     start_time = time.monotonic()
     total_scanned = 0
     total_infected = 0
-    all_infected_files: List[str] = []
-    all_results: List[ScanResult] = []
+    all_infected_files: list[str] = []
+    all_results: list[ScanResult] = []
     has_errors = False
 
     for target in valid_targets:
@@ -309,7 +290,7 @@ def run_scheduled_scan(
 
     # Handle quarantine if threats found and auto_quarantine enabled
     quarantined_count = 0
-    quarantine_failed: List[Tuple[str, str]] = []
+    quarantine_failed: list[tuple[str, str]] = []
 
     if all_infected_files and auto_quarantine:
         log_message(f"Quarantining {len(all_infected_files)} infected file(s)...", verbose)
@@ -325,8 +306,7 @@ def run_scheduled_scan(
         # Quarantine each infected file with its threat name
         for threat in all_threat_details:
             quarantine_result = quarantine_manager.quarantine_file(
-                threat.file_path,
-                threat.threat_name
+                threat.file_path, threat.threat_name
             )
             if quarantine_result.is_success:
                 quarantined_count += 1
@@ -345,8 +325,7 @@ def run_scheduled_scan(
     if total_infected > 0:
         if auto_quarantine and quarantined_count > 0:
             summary = (
-                f"Scheduled scan found {total_infected} threat(s), "
-                f"{quarantined_count} quarantined"
+                f"Scheduled scan found {total_infected} threat(s), {quarantined_count} quarantined"
             )
         else:
             summary = f"Scheduled scan found {total_infected} threat(s)"
@@ -399,7 +378,7 @@ def run_scheduled_scan(
         details=details,
         path=", ".join(valid_targets),
         duration=duration,
-        scheduled=True
+        scheduled=True,
     )
     log_manager.save_log(log_entry)
 
@@ -407,28 +386,21 @@ def run_scheduled_scan(
     if settings.get("notifications_enabled", True):
         if total_infected > 0:
             if quarantined_count > 0:
-                body = (
-                    f"{total_infected} infected file(s) found, "
-                    f"{quarantined_count} quarantined"
-                )
+                body = f"{total_infected} infected file(s) found, {quarantined_count} quarantined"
             else:
                 body = f"{total_infected} infected file(s) found"
-            send_notification(
-                "Scheduled Scan: Threats Detected!",
-                body,
-                urgency="critical"
-            )
+            send_notification("Scheduled Scan: Threats Detected!", body, urgency="critical")
         elif has_errors:
             send_notification(
                 "Scheduled Scan Completed",
                 "Scan completed with some errors. Check logs for details.",
-                urgency="normal"
+                urgency="normal",
             )
         else:
             send_notification(
                 "Scheduled Scan Complete",
                 f"No threats found ({total_scanned} files scanned)",
-                urgency="low"
+                urgency="low",
             )
 
     log_message(f"Scan completed in {duration:.1f} seconds", verbose)
@@ -481,7 +453,7 @@ def main() -> int:
         skip_on_battery=skip_on_battery,
         auto_quarantine=auto_quarantine,
         dry_run=args.dry_run,
-        verbose=args.verbose
+        verbose=args.verbose,
     )
 
 

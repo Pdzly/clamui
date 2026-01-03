@@ -3,12 +3,13 @@
 Updater module for ClamUI providing freshclam subprocess execution and async database updates.
 """
 
+import contextlib
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional
 
 from gi.repository import GLib
 
@@ -16,7 +17,7 @@ from .log_manager import LogEntry, LogManager
 from .utils import check_freshclam_installed, get_freshclam_path, wrap_host_command
 
 
-def get_pkexec_path() -> Optional[str]:
+def get_pkexec_path() -> str | None:
     """
     Get the full path to the pkexec executable for privilege elevation.
 
@@ -24,26 +25,29 @@ def get_pkexec_path() -> Optional[str]:
         The full path to pkexec if found, None otherwise
     """
     import shutil
+
     return shutil.which("pkexec")
 
 
 class UpdateStatus(Enum):
     """Status of a database update operation."""
-    SUCCESS = "success"       # Database updated successfully (exit code 0)
-    UP_TO_DATE = "up_to_date" # Database already current (exit code 0, no updates)
-    ERROR = "error"           # Error occurred (exit code 1 or exception)
-    CANCELLED = "cancelled"   # Update was cancelled
+
+    SUCCESS = "success"  # Database updated successfully (exit code 0)
+    UP_TO_DATE = "up_to_date"  # Database already current (exit code 0, no updates)
+    ERROR = "error"  # Error occurred (exit code 1 or exception)
+    CANCELLED = "cancelled"  # Update was cancelled
 
 
 @dataclass
 class UpdateResult:
     """Result of a database update operation."""
+
     status: UpdateStatus
     stdout: str
     stderr: str
     exit_code: int
     databases_updated: int
-    error_message: Optional[str]
+    error_message: str | None
 
     @property
     def is_success(self) -> bool:
@@ -64,7 +68,7 @@ class FreshclamUpdater:
     while safely updating the UI via GLib.idle_add.
     """
 
-    def __init__(self, log_manager: Optional[LogManager] = None):
+    def __init__(self, log_manager: LogManager | None = None):
         """
         Initialize the updater.
 
@@ -72,11 +76,11 @@ class FreshclamUpdater:
             log_manager: Optional LogManager instance for saving update logs.
                          If not provided, a default instance is created.
         """
-        self._current_process: Optional[subprocess.Popen] = None
+        self._current_process: subprocess.Popen | None = None
         self._update_cancelled = False
         self._log_manager = log_manager if log_manager else LogManager()
 
-    def check_available(self) -> tuple[bool, Optional[str]]:
+    def check_available(self) -> tuple[bool, str | None]:
         """
         Check if freshclam is available for database updates.
 
@@ -106,7 +110,7 @@ class FreshclamUpdater:
                 stderr=version_or_error or "freshclam not installed",
                 exit_code=-1,
                 databases_updated=0,
-                error_message=version_or_error
+                error_message=version_or_error,
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
@@ -118,10 +122,7 @@ class FreshclamUpdater:
         try:
             self._update_cancelled = False
             self._current_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
 
             try:
@@ -145,7 +146,7 @@ class FreshclamUpdater:
                     stderr=stderr,
                     exit_code=exit_code,
                     databases_updated=0,
-                    error_message="Update cancelled by user"
+                    error_message="Update cancelled by user",
                 )
                 duration = time.monotonic() - start_time
                 self._save_update_log(result, duration)
@@ -164,7 +165,7 @@ class FreshclamUpdater:
                 stderr="freshclam executable not found",
                 exit_code=-1,
                 databases_updated=0,
-                error_message="freshclam executable not found"
+                error_message="freshclam executable not found",
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
@@ -176,7 +177,7 @@ class FreshclamUpdater:
                 stderr=str(e),
                 exit_code=-1,
                 databases_updated=0,
-                error_message=f"Permission denied: {e}"
+                error_message=f"Permission denied: {e}",
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
@@ -188,16 +189,13 @@ class FreshclamUpdater:
                 stderr=str(e),
                 exit_code=-1,
                 databases_updated=0,
-                error_message=f"Update failed: {e}"
+                error_message=f"Update failed: {e}",
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
             return result
 
-    def update_async(
-        self,
-        callback: Callable[[UpdateResult], None]
-    ) -> None:
+    def update_async(self, callback: Callable[[UpdateResult], None]) -> None:
         """
         Execute an asynchronous database update.
 
@@ -207,6 +205,7 @@ class FreshclamUpdater:
         Args:
             callback: Function to call with UpdateResult when update completes
         """
+
         def update_thread():
             result = self.update_sync()
             # Schedule callback on main thread
@@ -224,10 +223,8 @@ class FreshclamUpdater:
         """
         self._update_cancelled = True
         if self._current_process is not None:
-            try:
+            with contextlib.suppress(OSError, ProcessLookupError):
                 self._current_process.terminate()
-            except (OSError, ProcessLookupError):
-                pass
 
     def _build_command(self) -> list[str]:
         """
@@ -258,12 +255,7 @@ class FreshclamUpdater:
         # Wrap with flatpak-spawn if running inside Flatpak sandbox
         return wrap_host_command(cmd)
 
-    def _parse_results(
-        self,
-        stdout: str,
-        stderr: str,
-        exit_code: int
-    ) -> UpdateResult:
+    def _parse_results(self, stdout: str, stderr: str, exit_code: int) -> UpdateResult:
         """
         Parse freshclam output into an UpdateResult.
 
@@ -280,7 +272,6 @@ class FreshclamUpdater:
             Parsed UpdateResult
         """
         databases_updated = 0
-        is_up_to_date = False
 
         # Combine stdout and stderr for parsing (freshclam uses both)
         output = stdout + stderr
@@ -298,7 +289,7 @@ class FreshclamUpdater:
             # Check if already up to date
             # Format: "daily.cvd database is up-to-date"
             if "is up-to-date" in line.lower() or "is up to date" in line.lower():
-                is_up_to_date = True
+                pass
 
         # Determine status from exit code and parsed info
         if exit_code == 0:
@@ -318,7 +309,7 @@ class FreshclamUpdater:
             stderr=stderr,
             exit_code=exit_code,
             databases_updated=databases_updated,
-            error_message=error_message
+            error_message=error_message,
         )
 
     def _extract_error_message(self, stdout: str, stderr: str, exit_code: int = 1) -> str:
@@ -403,7 +394,7 @@ class FreshclamUpdater:
             summary=summary,
             details=details,
             path=None,  # Updates don't have a path
-            duration=duration
+            duration=duration,
         )
 
         self._log_manager.save_log(log_entry)

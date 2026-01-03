@@ -4,8 +4,6 @@
 import sys
 from unittest import mock
 
-import pytest
-
 # Store original gi modules to restore later (if they exist)
 _original_gi = sys.modules.get("gi")
 _original_gi_repository = sys.modules.get("gi.repository")
@@ -14,13 +12,12 @@ _original_gi_repository = sys.modules.get("gi.repository")
 sys.modules["gi"] = mock.MagicMock()
 sys.modules["gi.repository"] = mock.MagicMock()
 
+from src.core.scanner import ScanResult, ScanStatus, ThreatDetail
+from src.core.threat_classifier import ThreatSeverity, categorize_threat, classify_threat_severity
 from src.core.utils import (
-    ThreatSeverity,
-    categorize_threat,
     check_clamav_installed,
     check_clamdscan_installed,
     check_freshclam_installed,
-    classify_threat_severity,
     format_results_as_csv,
     format_results_as_text,
     format_scan_path,
@@ -30,7 +27,6 @@ from src.core.utils import (
     validate_dropped_files,
     validate_path,
 )
-from src.core.scanner import ScanResult, ScanStatus, ThreatDetail
 
 # Restore original gi modules after imports are done
 if _original_gi is not None:
@@ -72,9 +68,7 @@ class TestCheckClamdscanInstalled:
 
         with mock.patch("shutil.which", return_value="/usr/bin/clamdscan"):
             with mock.patch("subprocess.run") as mock_run:
-                mock_run.side_effect = subprocess.TimeoutExpired(
-                    cmd="clamdscan", timeout=10
-                )
+                mock_run.side_effect = subprocess.TimeoutExpired(cmd="clamdscan", timeout=10)
                 installed, message = check_clamdscan_installed()
                 assert installed is False
                 assert "timed out" in message.lower()
@@ -362,17 +356,12 @@ class TestValidateDroppedFiles:
         """Test validate_dropped_files handles mix of valid and invalid paths."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
-        valid_paths, errors = validate_dropped_files([
-            str(test_file),
-            "/nonexistent/path",
-            None
-        ])
+        valid_paths, errors = validate_dropped_files([str(test_file), "/nonexistent/path", None])
         assert len(valid_paths) == 1
         assert len(errors) == 2
 
     def test_validate_dropped_files_permission_denied(self, tmp_path):
         """Test validate_dropped_files handles permission errors."""
-        import os
         import stat
 
         # Create a file and remove read permissions
@@ -394,7 +383,6 @@ class TestValidateDroppedFiles:
 
     def test_validate_dropped_files_unreadable_directory(self, tmp_path):
         """Test validate_dropped_files handles unreadable directories."""
-        import os
         import stat
 
         # Create a directory and remove read permissions
@@ -547,7 +535,9 @@ class TestClassifyThreatSeverity:
     def test_classify_threat_severity_real_world_threats(self):
         """Test with real-world threat names from ClamAV."""
         # Critical
-        assert classify_threat_severity("Win.Ransomware.WannaCry-9952423-0") == ThreatSeverity.CRITICAL
+        assert (
+            classify_threat_severity("Win.Ransomware.WannaCry-9952423-0") == ThreatSeverity.CRITICAL
+        )
 
         # High
         assert classify_threat_severity("Win.Trojan.Emotet-9953123-0") == ThreatSeverity.HIGH
@@ -1102,6 +1092,7 @@ class TestFormatResultsAsCsv:
         # Parse using csv module to verify proper escaping
         import csv
         import io
+
         reader = csv.reader(io.StringIO(csv_output))
         rows = list(reader)
 
@@ -1132,6 +1123,7 @@ class TestFormatResultsAsCsv:
         # Parse and verify unicode is preserved
         import csv
         import io
+
         reader = csv.reader(io.StringIO(csv_output))
         rows = list(reader)
 
@@ -1226,6 +1218,7 @@ class TestFormatResultsAsCsv:
         # Verify it can be parsed back with csv module
         import csv
         import io
+
         reader = csv.reader(io.StringIO(csv_output))
         rows = list(reader)
 
@@ -1289,6 +1282,7 @@ class TestFormatResultsAsCsv:
         # Parse to verify long name is preserved
         import csv
         import io
+
         reader = csv.reader(io.StringIO(csv_output))
         rows = list(reader)
 
@@ -1316,6 +1310,7 @@ class TestFormatResultsAsCsv:
         # Parse to verify newline is properly escaped in CSV
         import csv
         import io
+
         reader = csv.reader(io.StringIO(csv_output))
         rows = list(reader)
 

@@ -2,7 +2,6 @@
 """Unit tests for the ProfileStorage class."""
 
 import json
-import os
 import tempfile
 import threading
 from pathlib import Path
@@ -232,10 +231,9 @@ class TestProfileStorageLoadProfiles:
         storage_path = Path(temp_dir) / "profiles.json"
         storage = ProfileStorage(storage_path)
 
-        with mock.patch.object(
-            Path, "exists", return_value=True
-        ), mock.patch(
-            "builtins.open", side_effect=PermissionError("Access denied")
+        with (
+            mock.patch.object(Path, "exists", return_value=True),
+            mock.patch("builtins.open", side_effect=PermissionError("Access denied")),
         ):
             profiles = storage.load_profiles()
 
@@ -246,10 +244,9 @@ class TestProfileStorageLoadProfiles:
         storage_path = Path(temp_dir) / "profiles.json"
         storage = ProfileStorage(storage_path)
 
-        with mock.patch.object(
-            Path, "exists", return_value=True
-        ), mock.patch(
-            "builtins.open", side_effect=OSError("Disk error")
+        with (
+            mock.patch.object(Path, "exists", return_value=True),
+            mock.patch("builtins.open", side_effect=OSError("Disk error")),
         ):
             profiles = storage.load_profiles()
 
@@ -295,7 +292,7 @@ class TestProfileStorageSaveProfiles:
         profiles = [create_test_profile(name="JSON Test")]
         storage.save_profiles(profiles)
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert "version" in data
@@ -309,7 +306,7 @@ class TestProfileStorageSaveProfiles:
         profiles = [create_test_profile()]
         storage.save_profiles(profiles)
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert data["version"] == ProfileStorage.SCHEMA_VERSION
@@ -317,14 +314,13 @@ class TestProfileStorageSaveProfiles:
     def test_save_multiple_profiles(self, storage):
         """Test saving multiple profiles."""
         profiles = [
-            create_test_profile(profile_id=f"id-{i}", name=f"Profile {i}")
-            for i in range(3)
+            create_test_profile(profile_id=f"id-{i}", name=f"Profile {i}") for i in range(3)
         ]
         result = storage.save_profiles(profiles)
 
         assert result is True
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert len(data["profiles"]) == 3
@@ -335,7 +331,7 @@ class TestProfileStorageSaveProfiles:
 
         assert result is True
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert data["profiles"] == []
@@ -350,7 +346,7 @@ class TestProfileStorageSaveProfiles:
         profiles2 = [create_test_profile(name="Second")]
         storage.save_profiles(profiles2)
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert len(data["profiles"]) == 1
@@ -380,11 +376,12 @@ class TestProfileStorageSaveProfiles:
         """Test that save uses atomic write pattern (temp file + rename)."""
         profiles = [create_test_profile()]
 
-        with mock.patch("tempfile.mkstemp") as mock_mkstemp, \
-             mock.patch("os.fdopen") as mock_fdopen, \
-             mock.patch.object(Path, "replace") as mock_replace, \
-             mock.patch.object(Path, "mkdir"):
-
+        with (
+            mock.patch("tempfile.mkstemp") as mock_mkstemp,
+            mock.patch("os.fdopen") as mock_fdopen,
+            mock.patch.object(Path, "replace"),
+            mock.patch.object(Path, "mkdir"),
+        ):
             mock_mkstemp.return_value = (1, "/tmp/profiles_test.json")
             mock_file = mock.MagicMock()
             mock_file.__enter__ = mock.MagicMock(return_value=mock_file)
@@ -425,7 +422,7 @@ class TestProfileStorageSaveProfiles:
         )
         storage.save_profiles([profile])
 
-        with open(storage.storage_path, "r", encoding="utf-8") as f:
+        with open(storage.storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         saved = data["profiles"][0]
@@ -695,9 +692,7 @@ class TestProfileStoragePersistence:
 
         # Save with first instance
         storage1 = ProfileStorage(storage_path)
-        profiles = [
-            create_test_profile(profile_id="persist-1", name="Persistent Profile")
-        ]
+        profiles = [create_test_profile(profile_id="persist-1", name="Persistent Profile")]
         storage1.save_profiles(profiles)
 
         # Load with new instance
@@ -714,9 +709,11 @@ class TestProfileStoragePersistence:
 
         # Create initial profiles
         storage1 = ProfileStorage(storage_path)
-        storage1.save_profiles([
-            create_test_profile(profile_id="mod-1", name="Original"),
-        ])
+        storage1.save_profiles(
+            [
+                create_test_profile(profile_id="mod-1", name="Original"),
+            ]
+        )
 
         # Modify with second instance
         storage2 = ProfileStorage(storage_path)
@@ -749,8 +746,7 @@ class TestProfileStorageThreadSafety:
 
         # Save some profiles first
         profiles = [
-            create_test_profile(profile_id=f"read-{i}", name=f"Profile {i}")
-            for i in range(5)
+            create_test_profile(profile_id=f"read-{i}", name=f"Profile {i}") for i in range(5)
         ]
         storage.save_profiles(profiles)
 
@@ -789,20 +785,14 @@ class TestProfileStorageThreadSafety:
         def write_profiles(index):
             try:
                 profiles = [
-                    create_test_profile(
-                        profile_id=f"write-{index}",
-                        name=f"Thread Profile {index}"
-                    )
+                    create_test_profile(profile_id=f"write-{index}", name=f"Thread Profile {index}")
                 ]
                 storage.save_profiles(profiles)
             except Exception as e:
                 with lock:
                     errors.append(e)
 
-        threads = [
-            threading.Thread(target=write_profiles, args=(i,))
-            for i in range(5)
-        ]
+        threads = [threading.Thread(target=write_profiles, args=(i,)) for i in range(5)]
 
         for t in threads:
             t.start()
@@ -837,9 +827,7 @@ class TestProfileStorageThreadSafety:
         def writer():
             try:
                 for i in range(5):
-                    storage.save_profiles([
-                        create_test_profile(name=f"Updated {i}")
-                    ])
+                    storage.save_profiles([create_test_profile(name=f"Updated {i}")])
             except Exception as e:
                 with lock:
                     errors.append(e)
@@ -879,7 +867,7 @@ class TestProfileStorageSchemaVersion:
 
         storage.save_profiles([create_test_profile()])
 
-        with open(storage_path, "r", encoding="utf-8") as f:
+        with open(storage_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert "version" in data
@@ -925,10 +913,7 @@ class TestProfileStorageEdgeCases:
         storage_path = Path(temp_dir) / "profiles.json"
         storage = ProfileStorage(storage_path)
 
-        profile = create_test_profile(
-            name="プロファイル 日本語 🔍",
-            description="Описание профиля"
-        )
+        profile = create_test_profile(name="プロファイル 日本語 🔍", description="Описание профиля")
         storage.save_profiles([profile])
 
         loaded = storage.load_profiles()
@@ -942,9 +927,7 @@ class TestProfileStorageEdgeCases:
         storage_path = Path(temp_dir) / "profiles.json"
         storage = ProfileStorage(storage_path)
 
-        profile = create_test_profile(
-            targets=["/path with spaces/dir", "/path'with'quotes"]
-        )
+        profile = create_test_profile(targets=["/path with spaces/dir", "/path'with'quotes"])
         storage.save_profiles([profile])
 
         loaded = storage.load_profiles()

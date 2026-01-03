@@ -1,7 +1,19 @@
 # ClamUI Quarantine Database Module
 """
 Quarantine database module for ClamUI providing metadata persistence.
+
 Stores information about quarantined files including original path, threat info, and file hash.
+
+Security Considerations:
+    The quarantine database contains sensitive information that could be valuable to
+    attackers on multi-user systems:
+    - Original file paths revealing system structure and user activity
+    - Threat names indicating which malware was detected
+    - SHA-256 file hashes that could be used to identify/recover malware samples
+
+    To protect this metadata, the database file and associated WAL/SHM files are
+    created with restrictive 0o600 permissions (owner read/write only), preventing
+    other users from accessing quarantine information.
 """
 
 import os
@@ -62,6 +74,13 @@ class QuarantineDatabase:
     Provides methods for adding, retrieving, updating, and removing
     quarantine entries with thread-safe operations.
     """
+
+    # Database file permissions: 0o600 (owner read/write only)
+    # Protects sensitive quarantine metadata from unauthorized access:
+    # - Original file paths (reveals system structure and user activity)
+    # - Threat names (indicates which malware was detected)
+    # - SHA-256 hashes (could be used to identify/recover malware samples)
+    DB_FILE_PERMISSIONS = 0o600
 
     def __init__(self, db_path: Optional[str] = None, pool_size: int = 3):
         """
@@ -132,6 +151,51 @@ class QuarantineDatabase:
             finally:
                 conn.close()
 
+    def _secure_db_file_permissions(self) -> None:
+        """
+        Set restrictive permissions on database files to prevent unauthorized access.
+
+        Secures the main database file and associated WAL/SHM files created by
+        SQLite's Write-Ahead Logging mode. All files are set to 0o600 (owner read/write only)
+        to prevent other users from reading sensitive quarantine metadata.
+
+        Security Rationale:
+            On multi-user systems, the quarantine database is a valuable information source
+            for attackers. It reveals:
+            - Which files were detected as threats (threat intelligence)
+            - Original file locations (system reconnaissance)
+            - File hashes for potential malware recovery
+
+        SQLite WAL Mode Files:
+            - .db: Main database file containing all quarantine metadata
+            - .db-wal: Write-Ahead Log file with uncommitted transactions
+            - .db-shm: Shared Memory file for WAL mode coordination
+
+            All three files can contain sensitive data and must be secured.
+
+        Error Handling:
+            Permission errors are handled gracefully without raising exceptions.
+            This prevents database functionality from breaking on systems with:
+            - Restrictive security policies (SELinux, AppArmor)
+            - Immutable file attributes
+            - Unusual filesystem configurations
+        """
+        # Database files to secure (main db + WAL mode files)
+        db_files = [
+            self._db_path,  # Main database file
+            Path(str(self._db_path) + '-wal'),  # Write-Ahead Log file
+            Path(str(self._db_path) + '-shm'),  # Shared Memory file
+        ]
+
+        for db_file in db_files:
+            if db_file.exists():
+                try:
+                    os.chmod(db_file, self.DB_FILE_PERMISSIONS)
+                except (OSError, PermissionError):
+                    # Silently handle permission errors to avoid breaking database functionality
+                    # on systems with restrictive security policies or immutable files
+                    pass
+
     def _init_database(self) -> None:
         """Initialize the database schema if it doesn't exist."""
         with self._lock:
@@ -164,6 +228,14 @@ class QuarantineDatabase:
                         """
                     )
                     conn.commit()
+
+                    # SECURITY: Secure database file permissions after schema creation
+                    # Applies 0o600 permissions to prevent unauthorized access to sensitive metadata
+                    # (file paths, threat names, SHA-256 hashes) by other users on the system.
+                    # This runs for both new and existing databases to ensure the main database file
+                    # and WAL/SHM files (created by SQLite's Write-Ahead Logging mode) have
+                    # restrictive permissions. See _secure_db_file_permissions() for details.
+                    self._secure_db_file_permissions()
             except sqlite3.Error:
                 # Database initialization failed - will be handled on operations
                 pass

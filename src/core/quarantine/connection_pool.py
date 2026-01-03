@@ -4,8 +4,15 @@ SQLite connection pool for the quarantine database.
 
 Manages a pool of SQLite connections to reduce connection overhead for
 batch operations and UI updates that make multiple quick queries.
+
+Security Considerations:
+    This module applies the same security hardening as QuarantineDatabase, setting
+    restrictive 0o600 permissions on database files to prevent unauthorized access
+    to sensitive quarantine metadata (file paths, threat names, SHA-256 hashes) by
+    other users on multi-user systems.
 """
 
+import os
 import queue
 import sqlite3
 import threading
@@ -30,6 +37,13 @@ class ConnectionPool:
         _total_connections: Total number of connections created
         _closed: Flag indicating if the pool has been closed
     """
+
+    # Database file permissions: 0o600 (owner read/write only)
+    # Protects sensitive quarantine metadata from unauthorized access:
+    # - Original file paths (reveals system structure and user activity)
+    # - Threat names (indicates which malware was detected)
+    # - SHA-256 hashes (could be used to identify/recover malware samples)
+    DB_FILE_PERMISSIONS = 0o600
 
     def __init__(self, db_path: str, pool_size: int = 5):
         """
@@ -71,11 +85,65 @@ class ConnectionPool:
             conn.execute("PRAGMA journal_mode=WAL")
             # Enable foreign key constraints
             conn.execute("PRAGMA foreign_keys=ON")
+
+            # SECURITY: Secure database file permissions after WAL mode is enabled
+            # Applies 0o600 permissions to prevent unauthorized access to sensitive metadata
+            # (file paths, threat names, SHA-256 hashes) by other users on the system.
+            # This runs when the database file is first created to ensure the main database
+            # file and WAL/SHM files (created by SQLite's Write-Ahead Logging mode) have
+            # restrictive permissions. See _secure_db_file_permissions() for details.
+            self._secure_db_file_permissions()
+
             return conn
         except sqlite3.Error:
             # Close connection on configuration failure
             conn.close()
             raise
+
+    def _secure_db_file_permissions(self) -> None:
+        """
+        Set restrictive permissions on database files to prevent unauthorized access.
+
+        Secures the main database file and associated WAL/SHM files created by
+        SQLite's Write-Ahead Logging mode. All files are set to 0o600 (owner read/write only)
+        to prevent other users from reading sensitive quarantine metadata.
+
+        Security Rationale:
+            On multi-user systems, the quarantine database is a valuable information source
+            for attackers. It reveals:
+            - Which files were detected as threats (threat intelligence)
+            - Original file locations (system reconnaissance)
+            - File hashes for potential malware recovery
+
+        SQLite WAL Mode Files:
+            - .db: Main database file containing all quarantine metadata
+            - .db-wal: Write-Ahead Log file with uncommitted transactions
+            - .db-shm: Shared Memory file for WAL mode coordination
+
+            All three files can contain sensitive data and must be secured.
+
+        Error Handling:
+            Permission errors are handled gracefully without raising exceptions.
+            This prevents database functionality from breaking on systems with:
+            - Restrictive security policies (SELinux, AppArmor)
+            - Immutable file attributes
+            - Unusual filesystem configurations
+        """
+        # Database files to secure (main db + WAL mode files)
+        db_files = [
+            self._db_path,  # Main database file
+            Path(str(self._db_path) + '-wal'),  # Write-Ahead Log file
+            Path(str(self._db_path) + '-shm'),  # Shared Memory file
+        ]
+
+        for db_file in db_files:
+            if db_file.exists():
+                try:
+                    os.chmod(db_file, self.DB_FILE_PERMISSIONS)
+                except (OSError, PermissionError):
+                    # Silently handle permission errors to avoid breaking database functionality
+                    # on systems with restrictive security policies or immutable files
+                    pass
 
     def acquire(self, timeout: Optional[float] = None) -> sqlite3.Connection:
         """

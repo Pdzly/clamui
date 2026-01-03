@@ -309,8 +309,8 @@ class QuarantineView(Gtk.Box):
             self._displayed_count = 0
             self._load_more_row = None
 
-            # Update storage info
-            self._update_storage_info()
+            # Update storage info (pass entries to avoid synchronous DB calls on main thread)
+            self._update_storage_info(entries)
 
             # Update last refresh time to prevent duplicate refreshes
             self._last_refresh_time = time.time()
@@ -561,10 +561,23 @@ class QuarantineView(Gtk.Box):
 
         return row
 
-    def _update_storage_info(self):
-        """Update the storage information display."""
-        total_size = self._manager.get_total_size()
-        entry_count = self._manager.get_entry_count()
+    def _update_storage_info(self, entries: list[QuarantineEntry] = None):
+        """
+        Update the storage information display.
+
+        Args:
+            entries: Optional list of QuarantineEntry objects to calculate stats from.
+                    If provided, avoids synchronous database calls on the main thread.
+                    If None, falls back to database queries (not recommended on main thread).
+        """
+        if entries is not None:
+            # Calculate from provided entries (avoids blocking database calls)
+            total_size = sum(entry.file_size for entry in entries)
+            entry_count = len(entries)
+        else:
+            # Fallback to database queries (may block main thread)
+            total_size = self._manager.get_total_size()
+            entry_count = self._manager.get_entry_count()
 
         self._storage_row.set_subtitle(format_file_size(total_size))
 

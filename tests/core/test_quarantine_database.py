@@ -1171,3 +1171,250 @@ class TestQuarantineDatabaseConnectionPooling:
 
         db_no_pool.close()
         db_with_pool.close()
+
+
+class TestQuarantineDatabasePermissions:
+    """Tests for database file permission hardening."""
+
+    @pytest.fixture
+    def temp_db_dir(self):
+        """Create a temporary directory for database storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    def test_new_database_has_secure_permissions(self, temp_db_dir):
+        """Test that new database file has 0o600 permissions."""
+        db_path = os.path.join(temp_db_dir, "secure_new.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Verify database file has 0o600 permissions
+        db_file = Path(db_path)
+        assert db_file.exists()
+
+        # Get file permissions (stat.st_mode & 0o777 to get just the permission bits)
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_existing_database_gets_secure_permissions(self, temp_db_dir):
+        """Test that permissions are set on existing database."""
+        db_path = os.path.join(temp_db_dir, "existing.db")
+
+        # Create database with insecure permissions
+        db = QuarantineDatabase(db_path=db_path)
+        db.close()
+
+        # Manually set insecure permissions (simulate old database)
+        db_file = Path(db_path)
+        os.chmod(db_file, 0o644)
+
+        # Verify insecure permissions were set
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o644
+
+        # Reopen database - should secure permissions
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Verify permissions are now secure
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_wal_file_gets_secure_permissions(self, temp_db_dir):
+        """Test that WAL file gets correct permissions."""
+        db_path = os.path.join(temp_db_dir, "wal_test.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Add entry to trigger WAL file creation
+        db.add_entry(
+            original_path="/test/file.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="TestThreat",
+            file_size=1024,
+            file_hash="testhash",
+        )
+
+        # Check WAL file permissions if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_shm_file_gets_secure_permissions(self, temp_db_dir):
+        """Test that SHM file gets correct permissions."""
+        db_path = os.path.join(temp_db_dir, "shm_test.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Add entry to trigger SHM file creation
+        db.add_entry(
+            original_path="/test/file.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="TestThreat",
+            file_size=2048,
+            file_hash="testhash123",
+        )
+
+        # Check SHM file permissions if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_all_wal_files_get_secure_permissions(self, temp_db_dir):
+        """Test that main database file, WAL, and SHM all get secure permissions."""
+        db_path = os.path.join(temp_db_dir, "all_files_test.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Add multiple entries to ensure WAL/SHM files are created
+        for i in range(10):
+            db.add_entry(
+                original_path=f"/test/file{i}.exe",
+                quarantine_path=f"/quarantine/test{i}.quar",
+                threat_name=f"TestThreat{i}",
+                file_size=1024 * i,
+                file_hash=f"testhash{i}",
+            )
+
+        # Check main database file
+        db_file = Path(db_path)
+        assert db_file.exists()
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o600, f"Main DB: Expected 0o600, got {oct(perms)}"
+
+        # Check WAL file if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        # Check SHM file if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_permission_setting_handles_errors_gracefully(self, temp_db_dir):
+        """Test permission setting handles errors gracefully."""
+        db_path = os.path.join(temp_db_dir, "error_test.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Mock os.chmod to raise an error
+        with mock.patch('os.chmod', side_effect=PermissionError("Permission denied")):
+            # This should not raise an exception - errors are handled gracefully
+            db._secure_db_file_permissions()
+
+        # Database should still be functional despite permission error
+        entry_id = db.add_entry(
+            original_path="/test/file.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="TestThreat",
+            file_size=1024,
+            file_hash="testhash",
+        )
+        assert entry_id is not None
+
+        db.close()
+
+    def test_permission_setting_handles_os_errors_gracefully(self, temp_db_dir):
+        """Test permission setting handles OSError gracefully."""
+        db_path = os.path.join(temp_db_dir, "oserror_test.db")
+        db = QuarantineDatabase(db_path=db_path)
+
+        # Mock os.chmod to raise OSError
+        with mock.patch('os.chmod', side_effect=OSError("Operation not permitted")):
+            # This should not raise an exception - errors are handled gracefully
+            db._secure_db_file_permissions()
+
+        # Database should still be functional despite OS error
+        entry_id = db.add_entry(
+            original_path="/test/file.exe",
+            quarantine_path="/quarantine/test.quar",
+            threat_name="TestThreat",
+            file_size=2048,
+            file_hash="testhash456",
+        )
+        assert entry_id is not None
+
+        db.close()
+
+    def test_db_file_permissions_constant_value(self):
+        """Test that DB_FILE_PERMISSIONS constant has correct value."""
+        assert QuarantineDatabase.DB_FILE_PERMISSIONS == 0o600
+
+    def test_permissions_with_connection_pool(self, temp_db_dir):
+        """Test that permissions are set correctly when using connection pool."""
+        db_path = os.path.join(temp_db_dir, "pool_permissions.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=3)
+
+        # Verify database file has secure permissions
+        db_file = Path(db_path)
+        assert db_file.exists()
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        # Add entries to trigger WAL/SHM creation
+        for i in range(5):
+            db.add_entry(
+                original_path=f"/pooled/file{i}.exe",
+                quarantine_path=f"/quarantine/pooled{i}.quar",
+                threat_name=f"PooledThreat{i}",
+                file_size=1024,
+                file_hash=f"poolhash{i}",
+            )
+
+        # Check WAL file if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        # Check SHM file if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        db.close()
+
+    def test_permissions_without_connection_pool(self, temp_db_dir):
+        """Test that permissions are set correctly without connection pool."""
+        db_path = os.path.join(temp_db_dir, "no_pool_permissions.db")
+        db = QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        # Verify database file has secure permissions
+        db_file = Path(db_path)
+        assert db_file.exists()
+        perms = db_file.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        # Add entries to trigger WAL/SHM creation
+        for i in range(5):
+            db.add_entry(
+                original_path=f"/nopool/file{i}.exe",
+                quarantine_path=f"/quarantine/nopool{i}.quar",
+                threat_name=f"NoPoolThreat{i}",
+                file_size=1024,
+                file_hash=f"nopoolhash{i}",
+            )
+
+        # Check WAL file if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        # Check SHM file if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        db.close()

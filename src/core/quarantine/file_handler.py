@@ -29,6 +29,7 @@ class FileOperationStatus(Enum):
     PERMISSION_DENIED = "permission_denied"
     ALREADY_EXISTS = "already_exists"
     DISK_FULL = "disk_full"
+    INVALID_RESTORE_PATH = "invalid_restore_path"
 
 
 @dataclass

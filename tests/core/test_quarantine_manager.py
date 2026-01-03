@@ -436,7 +436,11 @@ class TestQuarantineManagerRestore:
         assert "/usr" in result.error_message
 
     def test_restore_to_bin_directory_rejected(self, manager, temp_dir):
-        """Test restore to /bin directory is rejected."""
+        """Test restore to /bin directory is rejected.
+
+        Note: On modern Linux systems, /bin is a symlink to /usr/bin,
+        so the error message may reference /usr instead of /bin.
+        """
         # Create and quarantine a file
         file_path = os.path.join(temp_dir, "test.exe")
         with open(file_path, "wb") as f:
@@ -460,7 +464,8 @@ class TestQuarantineManagerRestore:
 
         assert result.is_success is False
         assert result.status == QuarantineStatus.INVALID_RESTORE_PATH
-        assert "/bin" in result.error_message
+        # Error message may reference /usr/bin (symlink target) or /bin
+        assert "protected" in result.error_message.lower()
 
     def test_restore_to_root_directory_rejected(self, manager, temp_dir):
         """Test restore to /root directory is rejected."""

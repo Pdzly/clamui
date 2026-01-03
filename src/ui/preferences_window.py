@@ -1060,6 +1060,73 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         page.add(group)
 
+    def _create_onaccess_exclusions_group(self, page: Adw.PreferencesPage):
+        """
+        Create the On-Access Exclusions preferences group.
+
+        Contains settings for:
+        - OnAccessExcludeUname: Username to exclude from On-Access scanning
+        - OnAccessExcludeUID: User ID to exclude from On-Access scanning
+        - OnAccessExcludeRootUID: Exclude root user from On-Access scanning
+
+        CRITICAL: At least one of these must be set to prevent infinite scan loops
+        when the scanner process accesses files during scanning.
+
+        Args:
+            page: The preferences page to add the group to
+        """
+        group = Adw.PreferencesGroup()
+        group.set_title("Scan Loop Prevention")
+        group.set_description(
+            "CRITICAL: At least one exclusion must be set to prevent infinite scan loops. "
+            "The scanner process must be excluded from triggering scans on its own file access."
+        )
+        group.set_header_suffix(self._create_permission_indicator())
+
+        # Warning banner row
+        warning_row = Adw.ActionRow()
+        warning_row.set_title("⚠ Required Configuration")
+        warning_row.set_subtitle(
+            "Without exclusions, clamonacc will trigger scans on files it accesses, "
+            "causing an infinite loop. Set the clamav user or its UID."
+        )
+        warning_row.add_css_class("warning")
+        # Add warning icon as prefix
+        warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+        warning_icon.set_margin_start(6)
+        warning_row.add_prefix(warning_icon)
+        group.add(warning_row)
+
+        # OnAccessExcludeUname entry row
+        exclude_uname_row = Adw.EntryRow()
+        exclude_uname_row.set_title("Exclude Username")
+        exclude_uname_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
+        exclude_uname_row.set_show_apply_button(False)
+        # Add user icon as prefix
+        user_icon = Gtk.Image.new_from_icon_name("avatar-default-symbolic")
+        user_icon.set_margin_start(6)
+        exclude_uname_row.add_prefix(user_icon)
+        self._onaccess_widgets['OnAccessExcludeUname'] = exclude_uname_row
+        group.add(exclude_uname_row)
+
+        # OnAccessExcludeUID spin row (0-65534)
+        exclude_uid_row = Adw.SpinRow.new_with_range(0, 65534, 1)
+        exclude_uid_row.set_title("Exclude User ID")
+        exclude_uid_row.set_subtitle("User ID to exclude from On-Access scanning")
+        exclude_uid_row.set_numeric(True)
+        exclude_uid_row.set_snap_to_ticks(True)
+        self._onaccess_widgets['OnAccessExcludeUID'] = exclude_uid_row
+        group.add(exclude_uid_row)
+
+        # OnAccessExcludeRootUID switch
+        exclude_root_row = Adw.SwitchRow()
+        exclude_root_row.set_title("Exclude Root User")
+        exclude_root_row.set_subtitle("Exclude root (UID 0) from On-Access scanning")
+        self._onaccess_widgets['OnAccessExcludeRootUID'] = exclude_root_row
+        group.add(exclude_root_row)
+
+        page.add(group)
+
     def _create_scheduled_scans_page(self):
         """
         Create the Scheduled Scans configuration page.

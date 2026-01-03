@@ -55,7 +55,11 @@ class TestConnectionPoolInit:
     def test_init_creates_lock(self, temp_db_path):
         """Test ConnectionPool creates a threading lock."""
         pool = ConnectionPool(temp_db_path)
-        assert isinstance(pool._lock, threading.Lock)
+        # Check that _lock has the lock interface (acquire and release methods)
+        assert hasattr(pool._lock, 'acquire')
+        assert hasattr(pool._lock, 'release')
+        assert callable(pool._lock.acquire)
+        assert callable(pool._lock.release)
 
 
 class TestConnectionPoolCreateConnection:

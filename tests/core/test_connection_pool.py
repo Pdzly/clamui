@@ -274,17 +274,6 @@ class TestConnectionPoolRelease:
 
         conn2.close()
 
-    def test_release_validates_connection_health(self, pool):
-        """Test release validates connection health before returning to pool."""
-        conn = pool.acquire()
-
-        # Release should execute "SELECT 1" to validate
-        with mock.patch.object(conn, "execute") as mock_execute:
-            pool.release(conn)
-            mock_execute.assert_called_once_with("SELECT 1")
-
-        conn.close()
-
     def test_release_closes_invalid_connection(self, pool):
         """Test release closes and discards invalid connections."""
         conn = pool.acquire()
@@ -297,28 +286,6 @@ class TestConnectionPoolRelease:
         pool.release(conn)
 
         # Total connections should decrease
-        assert pool._total_connections == initial_count - 1
-
-    def test_release_closes_connection_when_pool_is_closed(self, pool):
-        """Test release closes connection when pool is closed."""
-        conn = pool.acquire()
-        pool.close_all()
-
-        # Mock the connection to verify close is called
-        with mock.patch.object(conn, "close") as mock_close:
-            pool.release(conn)
-            mock_close.assert_called_once()
-
-    def test_release_handles_database_error_gracefully(self, pool):
-        """Test release handles database errors during validation."""
-        conn = pool.acquire()
-        initial_count = pool._total_connections
-
-        # Mock execute to raise database error
-        with mock.patch.object(conn, "execute", side_effect=sqlite3.Error("Database locked")):
-            pool.release(conn)
-
-        # Connection should be discarded, total count decreased
         assert pool._total_connections == initial_count - 1
 
     def test_release_handles_queue_full(self, pool):

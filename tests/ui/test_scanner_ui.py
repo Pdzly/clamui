@@ -127,13 +127,17 @@ def mock_scan_view(scan_view_class, mock_gi_modules):
 
     # Results display UI elements
     view._status_banner = mock.MagicMock()
-    view._threats_listbox = mock.MagicMock()
+    view._threats_list = mock.MagicMock()
     view._results_placeholder = mock.MagicMock()
     view._copy_button = mock.MagicMock()
     view._export_text_button = mock.MagicMock()
     view._export_csv_button = mock.MagicMock()
     view._raw_output = ""
     view._current_result = None
+
+    # Backend status UI elements
+    view._backend_status_icon = mock.MagicMock()
+    view._backend_status_label = mock.MagicMock()
 
     # Mock internal methods commonly used
     view._setup_ui = mock.MagicMock()
@@ -145,6 +149,7 @@ def mock_scan_view(scan_view_class, mock_gi_modules):
     view._create_results_section = mock.MagicMock()
     view._create_status_bar = mock.MagicMock()
     view._check_clamav_status = mock.MagicMock()
+    view._update_backend_status = mock.MagicMock()
     view._update_scan_button_state = mock.MagicMock()
     view._display_scan_results = mock.MagicMock()
     view._set_selected_path = mock.MagicMock()
@@ -291,7 +296,7 @@ class TestFileSelectionUI:
             mock_scan_view, mock_scan_view.__class__
         )
         # Prevent infinite loop in _clear_results by making get_row_at_index return None
-        mock_scan_view._threats_listbox.get_row_at_index.return_value = None
+        mock_scan_view._threats_list.get_row_at_index.return_value = None
 
         test_path = "/home/user/test_folder"
         mock_scan_view._set_selected_path(test_path)
@@ -529,9 +534,9 @@ class TestResultsDisplayUI:
         """Test that the status banner attribute exists."""
         assert hasattr(mock_scan_view, '_status_banner')
 
-    def test_threats_listbox_attribute_exists(self, mock_scan_view):
-        """Test that the threats listbox attribute exists."""
-        assert hasattr(mock_scan_view, '_threats_listbox')
+    def test_threats_list_attribute_exists(self, mock_scan_view):
+        """Test that the threats list attribute exists."""
+        assert hasattr(mock_scan_view, '_threats_list')
 
     def test_results_placeholder_exists(self, mock_scan_view):
         """Test that the results placeholder attribute exists."""
@@ -574,3 +579,76 @@ def test_results_display_ui(scan_view_class):
     assert hasattr(scan_view_class, '_on_scan_complete')
     assert hasattr(scan_view_class, '_create_results_section')
     assert hasattr(scan_view_class, 'get_scan_results_text')
+
+
+@pytest.mark.ui
+class TestBackendStatusUI:
+    """Tests for scan backend status display."""
+
+    def test_backend_status_icon_exists(self, mock_scan_view):
+        """Test that the backend status icon attribute exists."""
+        assert hasattr(mock_scan_view, '_backend_status_icon')
+        assert mock_scan_view._backend_status_icon is not None
+
+    def test_backend_status_label_exists(self, mock_scan_view):
+        """Test that the backend status label attribute exists."""
+        assert hasattr(mock_scan_view, '_backend_status_label')
+        assert mock_scan_view._backend_status_label is not None
+
+    def test_update_backend_status_method_exists(self, scan_view_class):
+        """Test that _update_backend_status method exists on ScanView."""
+        assert hasattr(scan_view_class, '_update_backend_status')
+        assert callable(getattr(scan_view_class, '_update_backend_status'))
+
+    def test_set_backend_status_method_exists(self, scan_view_class):
+        """Test that _set_backend_status method exists on ScanView."""
+        assert hasattr(scan_view_class, '_set_backend_status')
+        assert callable(getattr(scan_view_class, '_set_backend_status'))
+
+    def test_set_backend_status_daemon(self, mock_scan_view):
+        """Test _set_backend_status displays correct info for daemon backend."""
+        # Reset to real method
+        mock_scan_view._set_backend_status = mock_scan_view.__class__._set_backend_status.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        mock_scan_view._set_backend_status("daemon")
+
+        mock_scan_view._backend_status_icon.set_from_icon_name.assert_called_with(
+            "emblem-ok-symbolic"
+        )
+        mock_scan_view._backend_status_label.set_text.assert_called_with(
+            "Daemon (clamd)"
+        )
+
+    def test_set_backend_status_clamscan(self, mock_scan_view):
+        """Test _set_backend_status displays correct info for clamscan backend."""
+        # Reset to real method
+        mock_scan_view._set_backend_status = mock_scan_view.__class__._set_backend_status.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        mock_scan_view._set_backend_status("clamscan")
+
+        mock_scan_view._backend_status_icon.set_from_icon_name.assert_called_with(
+            "emblem-ok-symbolic"
+        )
+        mock_scan_view._backend_status_label.set_text.assert_called_with(
+            "Scanner (clamscan)"
+        )
+
+    def test_set_backend_status_unavailable(self, mock_scan_view):
+        """Test _set_backend_status displays warning for unavailable backend."""
+        # Reset to real method
+        mock_scan_view._set_backend_status = mock_scan_view.__class__._set_backend_status.__get__(
+            mock_scan_view, mock_scan_view.__class__
+        )
+
+        mock_scan_view._set_backend_status("unavailable")
+
+        mock_scan_view._backend_status_icon.set_from_icon_name.assert_called_with(
+            "dialog-warning-symbolic"
+        )
+        mock_scan_view._backend_status_label.set_text.assert_called_with(
+            "Daemon Unavailable"
+        )

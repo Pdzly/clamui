@@ -72,6 +72,8 @@ For detailed installation options including .deb packages and system-wide instal
 3. Click "Scan" to start the antivirus scan
 4. View results and take action on any threats detected
 
+For detailed usage instructions, see the [User Guide](./docs/USER_GUIDE.md).
+
 ### Command Line
 
 ```bash

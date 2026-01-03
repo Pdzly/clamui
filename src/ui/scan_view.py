@@ -97,6 +97,9 @@ class ScanView(Gtk.Box):
         # Check ClamAV availability on load
         GLib.idle_add(self._check_clamav_status)
 
+        # Check backend status on load
+        GLib.idle_add(self._update_backend_status)
+
     def _setup_ui(self):
         """Set up the scan view UI layout."""
         self.set_margin_top(24)
@@ -333,6 +336,23 @@ class ScanView(Gtk.Box):
         profile_group.set_title("Scan Profile")
         profile_group.set_description("Select a predefined scan configuration")
         self._profile_group = profile_group
+
+        # Backend status row
+        backend_row = Adw.ActionRow()
+        backend_row.set_title("Scan Backend")
+        backend_row.set_activatable(False)
+        add_row_icon(backend_row, "system-run-symbolic")
+
+        # Status suffix with icon + label
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        status_box.set_valign(Gtk.Align.CENTER)
+        self._backend_status_icon = Gtk.Image.new_from_icon_name("content-loading-symbolic")
+        self._backend_status_label = Gtk.Label(label="Checking...")
+        self._backend_status_label.add_css_class("dim-label")
+        status_box.append(self._backend_status_icon)
+        status_box.append(self._backend_status_label)
+        backend_row.add_suffix(status_box)
+        profile_group.add(backend_row)
 
         # Profile selection row
         profile_row = Adw.ActionRow()
@@ -1041,6 +1061,43 @@ class ScanView(Gtk.Box):
             self._scan_button.set_sensitive(False)
             self._eicar_button.set_sensitive(False)
 
+        return False
+
+    def _update_backend_status(self):
+        """
+        Update the backend status display.
+
+        Checks which backend will be used and updates the status row.
+
+        Returns:
+            False to prevent GLib.idle_add from repeating
+        """
+        import threading
+
+        def check_backend():
+            backend = self._scanner.get_active_backend()
+            GLib.idle_add(self._set_backend_status, backend)
+
+        thread = threading.Thread(target=check_backend, daemon=True)
+        thread.start()
+        return False
+
+    def _set_backend_status(self, backend: str):
+        """
+        Set the backend status display on the main thread.
+
+        Args:
+            backend: The active backend ("daemon", "clamscan", or "unavailable")
+        """
+        if backend == "daemon":
+            self._backend_status_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._backend_status_label.set_text("Daemon (clamd)")
+        elif backend == "clamscan":
+            self._backend_status_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._backend_status_label.set_text("Scanner (clamscan)")
+        else:  # unavailable
+            self._backend_status_icon.set_from_icon_name("dialog-warning-symbolic")
+            self._backend_status_label.set_text("Daemon Unavailable")
         return False
 
     def set_scan_state_changed_callback(self, callback):

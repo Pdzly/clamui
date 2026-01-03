@@ -586,6 +586,7 @@ class QuarantineManager:
             FileOperationStatus.PERMISSION_DENIED: QuarantineStatus.PERMISSION_DENIED,
             FileOperationStatus.DISK_FULL: QuarantineStatus.DISK_FULL,
             FileOperationStatus.ALREADY_EXISTS: QuarantineStatus.ALREADY_QUARANTINED,
+            FileOperationStatus.INVALID_RESTORE_PATH: QuarantineStatus.INVALID_RESTORE_PATH,
             FileOperationStatus.ERROR: QuarantineStatus.ERROR,
         }
         return status_map.get(file_status, QuarantineStatus.ERROR)

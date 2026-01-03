@@ -1640,6 +1640,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Collect form data
         freshclam_updates = self._collect_freshclam_data()
         clamd_updates = self._collect_clamd_data()
+        onaccess_updates = self._collect_onaccess_data()
         scheduled_updates = self._collect_scheduled_data()
 
         # Validate configurations
@@ -1662,7 +1663,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Run save in background thread
         save_thread = threading.Thread(
             target=self._save_configs_thread,
-            args=(freshclam_updates, clamd_updates, scheduled_updates, button)
+            args=(freshclam_updates, clamd_updates, onaccess_updates, scheduled_updates, button)
         )
         save_thread.daemon = True
         save_thread.start()
@@ -1906,6 +1907,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self,
         freshclam_updates: dict,
         clamd_updates: dict,
+        onaccess_updates: dict,
         scheduled_updates: dict,
         button: Gtk.Button
     ):
@@ -1918,6 +1920,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         Args:
             freshclam_updates: Dictionary of freshclam.conf updates
             clamd_updates: Dictionary of clamd.conf updates
+            onaccess_updates: Dictionary of On-Access scanning settings (clamd.conf)
             scheduled_updates: Dictionary of scheduled scan settings
             button: The save button to re-enable after completion
         """
@@ -1936,10 +1939,13 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 if not success:
                     raise Exception(f"Failed to save freshclam.conf: {error}")
 
-            # Save clamd.conf
-            if clamd_updates and self._clamd_config:
-                # Apply updates to config using set_value
+            # Save clamd.conf (includes both scanner settings and On-Access settings)
+            if (clamd_updates or onaccess_updates) and self._clamd_config:
+                # Apply scanner updates to config using set_value
                 for key, value in clamd_updates.items():
+                    self._clamd_config.set_value(key, value)
+                # Apply On-Access updates to config using set_value
+                for key, value in onaccess_updates.items():
                     self._clamd_config.set_value(key, value)
                 success, error = write_config_with_elevation(self._clamd_config)
                 if not success:

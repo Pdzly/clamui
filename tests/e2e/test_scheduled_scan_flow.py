@@ -360,10 +360,12 @@ class TestE2EQuarantine:
     @pytest.fixture
     def manager(self, quarantine_test_env):
         """Create a QuarantineManager for testing."""
-        return QuarantineManager(
+        mgr = QuarantineManager(
             quarantine_directory=str(quarantine_test_env["quarantine_dir"]),
             database_path=str(quarantine_test_env["db_path"]),
         )
+        yield mgr
+        mgr._database.close()
 
     def test_e2e_quarantine_infected_files(self, quarantine_test_env, manager):
         """
@@ -668,3 +670,6 @@ class TestE2EFullWorkflow:
         for entry in quarantined:
             assert Path(entry.quarantine_path).exists()
             assert entry.quarantine_path.startswith(str(quarantine_dir))
+
+        # Cleanup
+        quarantine_manager._database.close()

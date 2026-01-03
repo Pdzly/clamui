@@ -526,6 +526,10 @@ class TestConfigChange:
         assert Path(result1.entry.quarantine_path).parent == temp_environment["quarantine_dir1"]
         assert Path(result2.entry.quarantine_path).parent == temp_environment["quarantine_dir2"]
 
+        # Cleanup
+        manager1._database.close()
+        manager2._database.close()
+
 
 
 class TestEdgeCases:

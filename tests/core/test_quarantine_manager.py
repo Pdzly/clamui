@@ -125,11 +125,12 @@ class TestQuarantineManager:
         """Test that QuarantineManager creates the quarantine directory on init."""
         quarantine_dir = os.path.join(temp_dir, "subdir", "quarantine")
         db_path = os.path.join(temp_dir, "subdir", "db.db")
-        QuarantineManager(
+        mgr = QuarantineManager(
             quarantine_directory=quarantine_dir,
             database_path=db_path,
         )
         assert Path(quarantine_dir).exists()
+        mgr._database.close()
 
     def test_quarantine_directory_property(self, manager, temp_dir):
         """Test quarantine_directory property returns correct path."""

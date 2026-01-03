@@ -378,6 +378,9 @@ class TestQuarantineFunctionality:
         assert result.is_success is True
         assert new_quarantine.exists()
 
+        # Cleanup
+        manager._database.close()
+
     def test_quarantine_directory_permissions(self, temp_environment):
         """Test quarantine directory has restricted permissions."""
         # Use non-existent quarantine directory
@@ -399,6 +402,9 @@ class TestQuarantineFunctionality:
         # Check directory permissions (0700)
         mode = new_quarantine.stat().st_mode & 0o777
         assert mode == 0o700
+
+        # Cleanup
+        manager._database.close()
 
     def test_quarantine_file_permissions(self, temp_environment, manager):
         """Test quarantined files have restricted permissions."""

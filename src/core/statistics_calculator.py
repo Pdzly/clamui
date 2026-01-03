@@ -486,6 +486,17 @@ class StatisticsCalculator:
             is_protected=is_protected,
         )
 
+    def has_scan_history(self) -> bool:
+        """
+        Check if there is any scan history available.
+
+        Returns:
+            True if there are scan logs, False otherwise
+        """
+        # Check if any scan logs exist
+        logs = self._get_cached_logs(limit=1, log_type="scan")
+        return len(logs) > 0
+
     def get_scan_trend_data(
         self,
         timeframe: str = "weekly",
@@ -506,12 +517,33 @@ class StatisticsCalculator:
         all_entries = self._get_cached_logs(limit=10000, log_type="scan")
         entries = self._filter_entries_by_timeframe(all_entries, timeframe)
 
-        if not entries:
-            return []
-
         # Group by time intervals
         now = datetime.now()
         trend_data: dict[str, dict] = {}
+
+        # If no entries, return empty data points with zeros
+        if not entries:
+            result = []
+            for i in range(data_points):
+                if timeframe == Timeframe.DAILY.value:
+                    point_date = now - timedelta(hours=i)
+                    date_str = point_date.strftime("%Y-%m-%d")
+                elif timeframe == Timeframe.WEEKLY.value:
+                    point_date = now - timedelta(weeks=i)
+                    date_str = point_date.strftime("%Y-W%U")
+                elif timeframe == Timeframe.MONTHLY.value:
+                    point_date = now - timedelta(days=30 * i)
+                    date_str = point_date.strftime("%Y-%m")
+                else:
+                    point_date = now - timedelta(days=i)
+                    date_str = point_date.strftime("%Y-%m-%d")
+
+                result.append({
+                    "date": date_str,
+                    "scans": 0,
+                    "threats": 0,
+                })
+            return list(reversed(result))
 
         for entry in entries:
             entry_time = self._parse_timestamp(entry.timestamp)

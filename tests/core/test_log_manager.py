@@ -361,15 +361,15 @@ class TestLogManager:
             )
             log_manager.save_log(entry)
 
-        # Verify they exist
-        assert len(list(Path(temp_log_dir).glob("*.json"))) == 5
+        # Verify they exist (5 log files + 1 log_index.json)
+        assert len(list(Path(temp_log_dir).glob("*.json"))) == 6
 
         # Clear all
         result = log_manager.clear_logs()
         assert result is True
 
-        # Verify they're gone
-        assert len(list(Path(temp_log_dir).glob("*.json"))) == 0
+        # Verify they're gone (index file remains but is reset to empty)
+        assert len(list(Path(temp_log_dir).glob("*.json"))) == 1  # Only log_index.json remains
         assert log_manager.get_logs() == []
 
     def test_clear_logs_empty_directory(self, log_manager):

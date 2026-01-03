@@ -533,12 +533,22 @@ class LogManager:
                         pass
 
             # Try optimized index-based approach first
-            index_data = self._load_index()
+            try:
+                index_data = self._load_index()
+            except Exception:
+                # Index loading failed - treat as if index doesn't exist
+                index_data = {"version": 1, "entries": []}
 
             # Check if index has entries (not empty/corrupted)
             if index_data.get("entries"):
                 # Validate index before using it
-                if not self._validate_index(index_data):
+                try:
+                    valid = self._validate_index(index_data)
+                except Exception:
+                    # Validation failed with exception - treat as invalid
+                    valid = False
+
+                if not valid:
                     # Index is stale/invalid - trigger automatic rebuild
                     # Note: rebuild_index() already holds the lock, but we're already inside _lock
                     # so we need to release and reacquire, or call the underlying logic

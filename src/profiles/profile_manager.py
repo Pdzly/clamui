@@ -175,6 +175,9 @@ class ProfileManager:
             Expanded Path object, or None if expansion fails
         """
         try:
+            # Validate for null bytes (security/injection prevention)
+            if "\x00" in path_str:
+                return None
             return Path(path_str).expanduser()
         except (OSError, RuntimeError, ValueError):
             return None

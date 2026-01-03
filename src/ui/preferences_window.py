@@ -870,6 +870,90 @@ class PreferencesWindow(Adw.PreferencesWindow):
             dialog.set_default_response("ok")
             dialog.present(self)
 
+    def _create_onaccess_page(self):
+        """
+        Create the On Access configuration page for clamd.conf settings.
+
+        Allows users to configure ClamAV's real-time file monitoring (clamonacc)
+        including:
+        - Include/exclude paths for monitoring
+        - Prevention mode to block access to infected files
+        - Performance settings (max threads, file size, timeouts)
+        - Exclusions to prevent scan loops
+        """
+        page = Adw.PreferencesPage()
+        page.set_title("On Access")
+        page.set_icon_name("security-high-symbolic")
+
+        if self._clamd_available:
+            # Create On-Access paths group
+            self._create_onaccess_paths_group(page)
+
+            # Create behavior settings group
+            self._create_onaccess_behavior_group(page)
+
+            # Create performance settings group
+            self._create_onaccess_performance_group(page)
+
+            # Create exclusions group (required to prevent scan loops)
+            self._create_onaccess_exclusions_group(page)
+        else:
+            # Show message that clamd.conf is not available
+            group = Adw.PreferencesGroup()
+            group.set_title("Configuration Status")
+            row = Adw.ActionRow()
+            row.set_title("On Access Configuration")
+            row.set_subtitle("clamd.conf not found - On Access settings unavailable")
+            group.add(row)
+            page.add(group)
+
+        self.add(page)
+
+    def _create_onaccess_paths_group(self, page: Adw.PreferencesPage):
+        """
+        Create the On-Access Paths preferences group.
+
+        Contains settings for:
+        - OnAccessIncludePath: Directories to monitor for file access
+        - OnAccessExcludePath: Directories to exclude from monitoring
+
+        Args:
+            page: The preferences page to add the group to
+        """
+        group = Adw.PreferencesGroup()
+        group.set_title("Monitored Paths")
+        group.set_description(
+            "Configure which directories to monitor for real-time scanning. "
+            "Use comma-separated paths for multiple entries."
+        )
+        group.set_header_suffix(self._create_permission_indicator())
+
+        # OnAccessIncludePath row
+        include_path_row = Adw.EntryRow()
+        include_path_row.set_title("Include Paths")
+        include_path_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
+        include_path_row.set_show_apply_button(False)
+        # Add folder icon as prefix
+        include_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
+        include_icon.set_margin_start(6)
+        include_path_row.add_prefix(include_icon)
+        self._onaccess_widgets['OnAccessIncludePath'] = include_path_row
+        group.add(include_path_row)
+
+        # OnAccessExcludePath row
+        exclude_path_row = Adw.EntryRow()
+        exclude_path_row.set_title("Exclude Paths")
+        exclude_path_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
+        exclude_path_row.set_show_apply_button(False)
+        # Add folder icon as prefix with different style
+        exclude_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
+        exclude_icon.set_margin_start(6)
+        exclude_path_row.add_prefix(exclude_icon)
+        self._onaccess_widgets['OnAccessExcludePath'] = exclude_path_row
+        group.add(exclude_path_row)
+
+        page.add(group)
+
     def _create_scheduled_scans_page(self):
         """
         Create the Scheduled Scans configuration page.

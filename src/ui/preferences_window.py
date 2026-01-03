@@ -145,6 +145,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Create Scheduled Scans page
         self._create_scheduled_scans_page()
 
+        # Create On-Access Scanning page (clamd.conf on-access settings)
+        self._create_onaccess_page()
+
         # Create Exclusions page (scan exclusion patterns)
         self._create_exclusions_page()
 

@@ -1212,3 +1212,249 @@ class TestConnectionPoolGetStats:
         assert stats["total_created"] == 1
         assert stats["available_count"] == 1
         assert stats["active_count"] == 0
+
+
+class TestConnectionPoolPermissions:
+    """Tests for database file permission hardening in ConnectionPool."""
+
+    @pytest.fixture
+    def temp_db_dir(self):
+        """Create a temporary directory for database storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    def test_pool_created_database_has_secure_permissions(self, temp_db_dir):
+        """Test that pool-created database has 0o600 permissions."""
+        db_path = Path(temp_db_dir) / "pool_secure.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire a connection to trigger database creation
+        conn = pool.acquire()
+
+        # Verify database file has 0o600 permissions
+        assert db_path.exists()
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        pool.release(conn)
+        pool.close_all()
+
+    def test_pool_wal_file_gets_secure_permissions(self, temp_db_dir):
+        """Test that WAL file gets correct permissions when created by pool."""
+        db_path = Path(temp_db_dir) / "pool_wal_test.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire connection and perform operation to trigger WAL file creation
+        conn = pool.acquire()
+        # Create a test table to ensure WAL mode is active
+        conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)")
+        conn.commit()
+        pool.release(conn)
+
+        # Check WAL file permissions if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()
+
+    def test_pool_shm_file_gets_secure_permissions(self, temp_db_dir):
+        """Test that SHM file gets correct permissions when created by pool."""
+        db_path = Path(temp_db_dir) / "pool_shm_test.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire connection and perform operations to trigger SHM file creation
+        conn = pool.acquire()
+        conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO test (value) VALUES (?)", ("test_value",))
+        conn.commit()
+        pool.release(conn)
+
+        # Check SHM file permissions if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()
+
+    def test_pool_all_database_files_get_secure_permissions(self, temp_db_dir):
+        """Test that main database file, WAL, and SHM all get secure permissions."""
+        db_path = Path(temp_db_dir) / "pool_all_files.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Perform multiple operations to ensure WAL/SHM files are created
+        with pool.get_connection() as conn:
+            conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)")
+            for i in range(10):
+                conn.execute("INSERT INTO test (value) VALUES (?)", (f"value_{i}",))
+
+        # Check main database file
+        assert db_path.exists()
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Main DB: Expected 0o600, got {oct(perms)}"
+
+        # Check WAL file if it exists
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        # Check SHM file if it exists
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()
+
+    def test_pool_permission_setting_handles_errors_gracefully(self, temp_db_dir):
+        """Test that pool permission setting handles errors gracefully."""
+        db_path = Path(temp_db_dir) / "pool_error_test.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire a connection first to create the database
+        conn = pool.acquire()
+        pool.release(conn)
+
+        # Mock os.chmod to raise an error
+        import os
+        with mock.patch('os.chmod', side_effect=PermissionError("Permission denied")):
+            # This should not raise an exception - errors are handled gracefully
+            pool._secure_db_file_permissions()
+
+        # Pool should still be functional despite permission error
+        conn = pool.acquire()
+        assert isinstance(conn, sqlite3.Connection)
+        pool.release(conn)
+        pool.close_all()
+
+    def test_pool_permission_setting_handles_os_errors_gracefully(self, temp_db_dir):
+        """Test that pool permission setting handles OSError gracefully."""
+        db_path = Path(temp_db_dir) / "pool_oserror_test.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire a connection first to create the database
+        conn = pool.acquire()
+        pool.release(conn)
+
+        # Mock os.chmod to raise OSError
+        import os
+        with mock.patch('os.chmod', side_effect=OSError("Operation not permitted")):
+            # This should not raise an exception - errors are handled gracefully
+            pool._secure_db_file_permissions()
+
+        # Pool should still be functional despite OS error
+        conn = pool.acquire()
+        assert isinstance(conn, sqlite3.Connection)
+        pool.release(conn)
+        pool.close_all()
+
+    def test_pool_db_file_permissions_constant_value(self):
+        """Test that DB_FILE_PERMISSIONS constant has correct value."""
+        assert ConnectionPool.DB_FILE_PERMISSIONS == 0o600
+
+    def test_pool_permissions_set_on_first_connection(self, temp_db_dir):
+        """Test that permissions are set when the first connection is created."""
+        db_path = Path(temp_db_dir) / "pool_first_conn.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Database shouldn't exist yet
+        assert not db_path.exists()
+
+        # Acquire first connection - should create database and set permissions
+        conn = pool.acquire()
+
+        # Database should now exist with secure permissions
+        assert db_path.exists()
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        pool.release(conn)
+        pool.close_all()
+
+    def test_pool_permissions_consistent_across_multiple_connections(self, temp_db_dir):
+        """Test that permissions remain secure across multiple connection acquisitions."""
+        db_path = Path(temp_db_dir) / "pool_multi_conn.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        # Acquire and release multiple connections
+        for i in range(10):
+            conn = pool.acquire()
+            conn.execute("SELECT 1")
+            pool.release(conn)
+
+        # Verify permissions are still secure
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()
+
+    def test_pool_existing_database_gets_secure_permissions(self, temp_db_dir):
+        """Test that permissions are set on existing database files."""
+        db_path = Path(temp_db_dir) / "pool_existing.db"
+
+        # Create database with insecure permissions
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)")
+        conn.close()
+
+        # Set insecure permissions
+        import os
+        os.chmod(db_path, 0o644)
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o644  # Verify insecure permissions were set
+
+        # Create pool - should secure permissions
+        pool = ConnectionPool(str(db_path), pool_size=3)
+        conn = pool.acquire()
+        pool.release(conn)
+
+        # Verify permissions are now secure
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()
+
+    def test_pool_concurrent_connections_maintain_secure_permissions(self, temp_db_dir):
+        """Test that concurrent connections don't compromise file permissions."""
+        db_path = Path(temp_db_dir) / "pool_concurrent_perms.db"
+        pool = ConnectionPool(str(db_path), pool_size=3)
+
+        errors = []
+
+        def worker(worker_id):
+            try:
+                with pool.get_connection() as conn:
+                    conn.execute("CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, value TEXT)")
+                    conn.execute("INSERT INTO test (value) VALUES (?)", (f"worker_{worker_id}",))
+            except Exception as e:
+                errors.append(str(e))
+
+        # Run multiple threads concurrently
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Verify no errors occurred
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+
+        # Verify permissions are still secure after concurrent operations
+        perms = db_path.stat().st_mode & 0o777
+        assert perms == 0o600, f"Expected 0o600, got {oct(perms)}"
+
+        # Check WAL/SHM files if they exist
+        wal_file = Path(str(db_path) + '-wal')
+        if wal_file.exists():
+            perms = wal_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"WAL file: Expected 0o600, got {oct(perms)}"
+
+        shm_file = Path(str(db_path) + '-shm')
+        if shm_file.exists():
+            perms = shm_file.stat().st_mode & 0o777
+            assert perms == 0o600, f"SHM file: Expected 0o600, got {oct(perms)}"
+
+        pool.close_all()

@@ -556,9 +556,22 @@ class SecureFileHandler:
             ...     print(f"Restored to: {result.destination_path}")
         """
         source = Path(quarantine_path).resolve()
-        destination = Path(original_path).resolve()
 
         with self._lock:
+            # Validate restore destination path for security
+            is_valid, validation_error = self.validate_restore_path(original_path)
+            if not is_valid:
+                return FileOperationResult(
+                    status=FileOperationStatus.INVALID_RESTORE_PATH,
+                    source_path=str(source),
+                    destination_path=original_path,
+                    file_size=0,
+                    file_hash="",
+                    error_message=validation_error
+                )
+
+            destination = Path(original_path).resolve()
+
             # Validate quarantine file exists
             if not source.exists():
                 return FileOperationResult(

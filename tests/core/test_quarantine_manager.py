@@ -186,23 +186,26 @@ class TestQuarantineManager:
         assert result.entry is None
         assert result.error_message is not None
 
-    def test_quarantine_file_already_quarantined(self, manager, test_file):
-        """Test quarantining a file that's already quarantined."""
+    def test_quarantine_file_duplicate_path_allowed(self, manager, test_file):
+        """Test quarantining a file at the same path multiple times (allowed)."""
         # First quarantine
         result1 = manager.quarantine_file(test_file, "TestThreat")
         assert result1.is_success is True
+        entry1_id = result1.entry.id
 
         # Create a new file at the same path
         with open(test_file, "wb") as f:
             f.write(b"New content")
 
-        # Try to quarantine again (same original path)
+        # Quarantine again (same original path) - should succeed with new entry
         result2 = manager.quarantine_file(test_file, "TestThreat2")
 
-        assert result2.is_success is False
-        assert result2.status == QuarantineStatus.ALREADY_QUARANTINED
-        assert result2.entry is None
-        assert result2.error_message is not None
+        assert result2.is_success is True
+        assert result2.entry is not None
+        # Should have different entry IDs (unique entries)
+        assert result2.entry.id != entry1_id
+        # Both entries can have the same original_path
+        assert result2.entry.original_path == result1.entry.original_path
 
     def test_quarantine_file_hash_calculation(self, manager, temp_dir):
         """Test that file hash is correctly calculated before quarantine."""

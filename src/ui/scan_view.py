@@ -1093,9 +1093,16 @@ class ScanView(Gtk.Box):
                 if qresult.status == QuarantineStatus.SUCCESS:
                     quarantined.append(threat.threat_name)
                 else:
-                    failed.append((threat.threat_name, str(qresult.status)))
+                    # Capture both status and error message for better diagnostics
+                    error_info = qresult.error_message or str(qresult.status.value)
+                    failed.append((threat.threat_name, error_info))
+                    logger.warning(
+                        f"Failed to quarantine {threat.file_path}: "
+                        f"status={qresult.status.value}, error={qresult.error_message}"
+                    )
             except Exception as e:
                 failed.append((threat.threat_name, str(e)))
+                logger.error(f"Exception quarantining {threat.file_path}: {e}")
 
         # Show result message
         if quarantined and not failed:
@@ -1104,7 +1111,9 @@ class ScanView(Gtk.Box):
             self._status_banner.remove_css_class("warning")
             self._status_banner.remove_css_class("error")
         elif failed and not quarantined:
-            msg = f"✗ Failed to quarantine threats. Check permissions."
+            # Show more specific error information
+            first_error = failed[0][1] if failed else "Unknown error"
+            msg = f"✗ Failed to quarantine: {first_error}"
             self._status_banner.add_css_class("error")
             self._status_banner.remove_css_class("warning")
             self._status_banner.remove_css_class("success")

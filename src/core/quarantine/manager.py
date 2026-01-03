@@ -125,15 +125,7 @@ class QuarantineManager:
             source = Path(file_path).resolve()
             source_str = str(source)
 
-            # Check if file is already quarantined
-            if self._database.entry_exists(source_str):
-                return QuarantineResult(
-                    status=QuarantineStatus.ALREADY_QUARANTINED,
-                    entry=None,
-                    error_message=f"File already quarantined: {source_str}",
-                )
-
-            # Move file to quarantine
+            # Move file to quarantine (duplicate paths allowed - each gets unique ID)
             file_result = self._file_handler.move_to_quarantine(source_str, threat_name)
 
             if not file_result.is_success:

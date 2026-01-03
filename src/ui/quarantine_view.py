@@ -9,14 +9,17 @@ Provides the quarantine management interface with:
 - Cleanup for old entries
 """
 
+import logging
 import time
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, GLib, Gtk, Pango
 
 from ..core.quarantine import (
     QuarantineEntry,
@@ -299,11 +302,12 @@ class QuarantineView(Gtk.Box):
             False to prevent GLib.idle_add from repeating
         """
         try:
-            # Clear existing rows
-            try:
-                self._listbox.remove_all()
-            except Exception:
-                return False
+            # Clear existing rows (compatible with all GTK4 versions)
+            while True:
+                child = self._listbox.get_first_child()
+                if child is None:
+                    break
+                self._listbox.remove(child)
 
             # Reset pagination state
             self._all_entries = entries
@@ -362,8 +366,9 @@ class QuarantineView(Gtk.Box):
                 else:
                     self._listbox.append(row)
                 self._displayed_count += 1
-            except Exception:
-                # Skip entries that fail to render
+            except Exception as e:
+                # Log and skip entries that fail to render
+                logger.warning(f"Failed to create row for entry {entry.id}: {e}")
                 continue
 
     def _add_load_more_button(self):
@@ -585,7 +590,7 @@ class QuarantineView(Gtk.Box):
         path_label.add_css_class("monospace")
         path_label.add_css_class("dim-label")
         path_label.set_wrap(True)
-        path_label.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        path_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         container.append(path_label)
 
         # Metadata row: date and size
@@ -594,12 +599,12 @@ class QuarantineView(Gtk.Box):
 
         # Quarantine date
         date_label = Gtk.Label()
-        if entry.quarantine_date:
+        if entry.detection_date:
             try:
-                quarantine_dt = datetime.fromisoformat(entry.quarantine_date)
+                quarantine_dt = datetime.fromisoformat(entry.detection_date)
                 date_str = quarantine_dt.strftime("%Y-%m-%d %H:%M")
             except (ValueError, TypeError):
-                date_str = entry.quarantine_date
+                date_str = entry.detection_date
         else:
             date_str = "Unknown"
         date_label.set_text(f"Quarantined: {date_str}")
@@ -649,7 +654,7 @@ class QuarantineView(Gtk.Box):
             button: The button that was clicked
             entry: The QuarantineEntry to restore
         """
-        self._manager.restore_entry_async(entry.id, callback=self._on_restore_completed)
+        self._manager.restore_file_async(entry.id, callback=self._on_restore_completed)
 
     def _on_restore_completed(self, result: QuarantineResult) -> bool:
         """
@@ -662,12 +667,12 @@ class QuarantineView(Gtk.Box):
             False to prevent GLib.idle_add from repeating
         """
         if result.status == QuarantineStatus.SUCCESS:
-            self._status_banner.set_title(result.message or "File restored successfully")
+            self._status_banner.set_title("File restored successfully")
             self._status_banner.set_revealed(True)
             # Refresh the list after successful restore
             GLib.timeout_add(500, self._load_entries_async)
         else:
-            self._status_banner.set_title(result.message or "Failed to restore file")
+            self._status_banner.set_title(result.error_message or "Failed to restore file")
             self._status_banner.set_revealed(True)
 
         return False
@@ -680,7 +685,7 @@ class QuarantineView(Gtk.Box):
             button: The button that was clicked
             entry: The QuarantineEntry to delete
         """
-        self._manager.delete_entry_async(entry.id, callback=self._on_delete_completed)
+        self._manager.delete_file_async(entry.id, callback=self._on_delete_completed)
 
     def _on_delete_completed(self, result: QuarantineResult) -> bool:
         """
@@ -693,12 +698,12 @@ class QuarantineView(Gtk.Box):
             False to prevent GLib.idle_add from repeating
         """
         if result.status == QuarantineStatus.SUCCESS:
-            self._status_banner.set_title(result.message or "File deleted successfully")
+            self._status_banner.set_title("File deleted successfully")
             self._status_banner.set_revealed(True)
             # Refresh the list after successful delete
             GLib.timeout_add(500, self._load_entries_async)
         else:
-            self._status_banner.set_title(result.message or "Failed to delete file")
+            self._status_banner.set_title(result.error_message or "Failed to delete file")
             self._status_banner.set_revealed(True)
 
         return False

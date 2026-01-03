@@ -232,6 +232,120 @@ class SecureFileHandler:
         except OSError as e:
             return (False, f"Error checking disk space: {e}")
 
+    def validate_restore_path(self, restore_path: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate a restore destination path for security.
+
+        Checks that the restore path:
+        1. Doesn't contain injection characters (newlines, null bytes)
+        2. Doesn't point to protected system directories
+        3. Resolves to a safe user-accessible location
+        4. Symlinks in the path don't escape to protected directories
+
+        This validation prevents attacks where a malicious actor could
+        modify the quarantine database to restore files to system locations.
+
+        Args:
+            restore_path: The destination path to validate
+
+        Returns:
+            Tuple of (is_valid, error_message):
+            - (True, None) if path is safe for restore
+            - (False, error_message) if path is unsafe
+
+        Example:
+            >>> handler = SecureFileHandler()
+            >>> is_valid, error = handler.validate_restore_path("/home/user/file.txt")
+            >>> if is_valid:
+            ...     print("Path is safe for restore")
+
+            >>> is_valid, error = handler.validate_restore_path("/etc/passwd")
+            >>> print(error)  # "Restore to protected system directory not allowed: /etc"
+        """
+        # Check for empty path
+        if not restore_path or not restore_path.strip():
+            return (False, "Restore path cannot be empty")
+
+        # Security check: Reject paths with injection characters
+        # These could be used to bypass validation or manipulate the filesystem
+        if '\n' in restore_path or '\r' in restore_path:
+            return (False, "Restore path contains illegal newline characters")
+
+        if '\0' in restore_path:
+            return (False, "Restore path contains illegal null bytes")
+
+        # Convert to Path object for validation
+        try:
+            path_obj = Path(restore_path)
+        except (ValueError, TypeError) as e:
+            return (False, f"Invalid path format: {e}")
+
+        # Define protected system directories that should never be restore targets
+        # These directories contain critical system files and configuration
+        protected_dirs = [
+            Path("/etc"),      # System configuration
+            Path("/var"),      # Variable data (includes system databases)
+            Path("/usr"),      # System binaries and libraries
+            Path("/bin"),      # Essential binaries
+            Path("/sbin"),     # System binaries
+            Path("/lib"),      # System libraries
+            Path("/lib64"),    # 64-bit system libraries
+            Path("/boot"),     # Boot files
+            Path("/root"),     # Root user's home
+            Path("/sys"),      # System virtual filesystem
+            Path("/proc"),     # Process information virtual filesystem
+        ]
+
+        # Resolve the path to handle .. and symlinks
+        try:
+            resolved_path = path_obj.resolve()
+        except (OSError, RuntimeError) as e:
+            return (False, f"Cannot resolve restore path: {e}")
+
+        # Check if the resolved path is under any protected directory
+        for protected_dir in protected_dirs:
+            try:
+                # Check if resolved path is relative to (inside) the protected directory
+                resolved_path.relative_to(protected_dir)
+                # If we get here, the path IS inside the protected directory
+                return (
+                    False,
+                    f"Restore to protected system directory not allowed: {protected_dir}"
+                )
+            except ValueError:
+                # Path is not relative to this protected directory, continue checking
+                pass
+
+        # Check each component of the path for symlinks that might escape
+        # to protected directories
+        current_path = Path("/")
+        for part in path_obj.parts[1:]:  # Skip the root "/"
+            current_path = current_path / part
+
+            # If this component is a symlink, check where it resolves to
+            if current_path.is_symlink():
+                try:
+                    symlink_target = current_path.resolve()
+
+                    # Check if the symlink target is in a protected directory
+                    for protected_dir in protected_dirs:
+                        try:
+                            symlink_target.relative_to(protected_dir)
+                            return (
+                                False,
+                                f"Path contains symlink to protected directory: "
+                                f"{current_path} -> {symlink_target}"
+                            )
+                        except ValueError:
+                            # Not in this protected directory, continue
+                            pass
+
+                except (OSError, RuntimeError) as e:
+                    return (False, f"Error resolving symlink in path: {e}")
+
+        # Path passed all security checks
+        return (True, None)
+
     def move_to_quarantine(
         self,
         source_path: str,

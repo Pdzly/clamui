@@ -704,6 +704,233 @@ class TestLogsViewDisplayLogDetails:
         assert "UPDATE LOG" in call_args
 
 
+class TestLogsViewStatisticsSummary:
+    """Tests for statistics summary in log detail display."""
+
+    def test_statistics_summary_shown_for_scan_with_data(self, logs_view_class, mock_log_entry):
+        """Test that statistics summary appears in scan log detail when data is available."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 100,
+            "directories_scanned": 5,
+            "duration": 45.5,
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 45.5
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify buffer.set_text was called with statistics content
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Statistics Summary:" in call_args
+        assert "Files Scanned: 100" in call_args
+        assert "Directories Scanned: 5" in call_args
+        assert "Duration:" in call_args
+        mock_stats_calc.extract_entry_statistics.assert_called_once_with(mock_log_entry)
+
+    def test_statistics_summary_absent_for_update_log(self, logs_view_class, mock_log_entry):
+        """Test that statistics summary does not appear for update logs."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator
+        mock_stats_calc = mock.MagicMock()
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up update log entry
+        mock_log_entry.type = "update"
+        mock_log_entry.duration = 30.0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify statistics summary is NOT in the output
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Statistics Summary:" not in call_args
+        assert "Files Scanned:" not in call_args
+        assert "Directories Scanned:" not in call_args
+        # Statistics calculator should not be called for update logs
+        mock_stats_calc.extract_entry_statistics.assert_not_called()
+
+    def test_statistics_summary_absent_when_no_data(self, logs_view_class, mock_log_entry):
+        """Test that statistics summary is not shown when all values are zero."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator returning all zeros
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 0,
+            "directories_scanned": 0,
+            "duration": 0,
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify statistics summary is NOT in the output
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Statistics Summary:" not in call_args
+
+    def test_statistics_summary_duration_formatting_seconds(
+        self, logs_view_class, mock_log_entry
+    ):
+        """Test that duration under 60 seconds is formatted correctly."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 10,
+            "directories_scanned": 1,
+            "duration": 45.5,
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 45.5
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify duration is formatted as seconds
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Duration: 45.50 seconds" in call_args
+
+    def test_statistics_summary_duration_formatting_minutes(
+        self, logs_view_class, mock_log_entry
+    ):
+        """Test that duration between 60 and 3600 seconds is formatted as minutes."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 100,
+            "directories_scanned": 5,
+            "duration": 125.0,  # 2 minutes 5 seconds
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 125.0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify duration is formatted as minutes and seconds
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Duration: 2m 5s" in call_args
+
+    def test_statistics_summary_duration_formatting_hours(
+        self, logs_view_class, mock_log_entry
+    ):
+        """Test that duration over 3600 seconds is formatted as hours."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 10000,
+            "directories_scanned": 500,
+            "duration": 7200.0,  # 2 hours
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 7200.0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify duration is formatted as hours and minutes
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Duration: 2h 0m" in call_args
+
+    def test_statistics_summary_partial_data(self, logs_view_class, mock_log_entry):
+        """Test that statistics summary shows only when at least one value is non-zero."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator with only files scanned
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 50,
+            "directories_scanned": 0,
+            "duration": 0,
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify statistics summary appears with only files scanned
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Statistics Summary:" in call_args
+        assert "Files Scanned: 50" in call_args
+        # Directories and duration should not appear (zero values)
+        assert "Directories Scanned: 0" not in call_args
+
+    def test_statistics_summary_with_thousands_separator(
+        self, logs_view_class, mock_log_entry
+    ):
+        """Test that large numbers use thousands separator."""
+        view = object.__new__(logs_view_class)
+        view._detail_text = mock.MagicMock()
+        mock_buffer = mock.MagicMock()
+        view._detail_text.get_buffer.return_value = mock_buffer
+
+        # Create a mock statistics calculator with large numbers
+        mock_stats_calc = mock.MagicMock()
+        mock_stats_calc.extract_entry_statistics.return_value = {
+            "files_scanned": 12345,
+            "directories_scanned": 678,
+            "duration": 120.0,
+        }
+        view._statistics_calculator = mock_stats_calc
+
+        # Set up scan log entry
+        mock_log_entry.type = "scan"
+        mock_log_entry.duration = 120.0
+
+        view._display_log_details(mock_log_entry)
+
+        # Verify thousands separator is used
+        call_args = mock_buffer.set_text.call_args[0][0]
+        assert "Files Scanned: 12,345" in call_args
+        assert "Directories Scanned: 678" in call_args
+
+
 class TestLogsViewCopyExport:
     """Tests for copy and export functionality."""
 

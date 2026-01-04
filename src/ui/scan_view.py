@@ -716,6 +716,7 @@ class ScanView(Gtk.Box):
         # Scan button
         self._scan_button = Gtk.Button()
         self._scan_button.set_label("Start Scan")
+        self._scan_button.set_tooltip_text("Start Scan (F5)")
         self._scan_button.add_css_class("suggested-action")
         self._scan_button.set_size_request(150, -1)
         self._scan_button.connect("clicked", self._on_scan_clicked)

@@ -87,6 +87,10 @@ class QuarantineView(Gtk.Box):
         self._load_more_row: Gtk.ListBoxRow | None = None
         self._scrolled: Gtk.ScrolledWindow | None = None
 
+        # Search/filter state
+        self._search_query: str = ""
+        self._filtered_entries: list[QuarantineEntry] = []
+
         # Callback for quarantine content changes (for external notification)
         self._on_quarantine_changed = None
 

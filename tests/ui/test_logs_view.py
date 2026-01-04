@@ -683,6 +683,14 @@ class TestLogsViewDisplayLogDetails:
         view._detail_text.get_buffer.return_value = mock_buffer
         mock_log_entry.type = "scan"
 
+        # Mock the statistics_calculator
+        view._statistics_calculator = mock.MagicMock()
+        view._statistics_calculator.extract_entry_statistics.return_value = {
+            "files_scanned": 0,
+            "directories_scanned": 0,
+            "duration": 0
+        }
+
         view._display_log_details(mock_log_entry)
 
         # Verify buffer.set_text was called with content containing SCAN LOG

@@ -33,6 +33,7 @@ THREATS_FOUND_PATTERNS = [
 # Pre-compiled regex patterns for extracting directory counts
 # These patterns are used to parse scan log entries for directory count information
 DIRS_SCANNED_PATTERNS = [
+    re.compile(r"director(?:y|ies)\s+scanned[:\s]+(\d+)", re.IGNORECASE),
     re.compile(r"(\d+)\s*director(?:y|ies)\s*scanned", re.IGNORECASE),
     re.compile(r"scanned\s*(\d+)\s*director(?:y|ies)", re.IGNORECASE),
     re.compile(r"director(?:y|ies)[:\s]+(\d+)", re.IGNORECASE),

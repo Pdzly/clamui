@@ -434,9 +434,12 @@ class QuarantineView(Gtk.Box):
         # Progress label
         remaining = len(entries) - self._displayed_count
         progress_label = Gtk.Label()
+
+        # Show "filtered entries" when search is active
+        entries_label = "filtered entries" if self._search_query else "entries"
         progress_label.set_markup(
             f"<span size='small'>Showing {self._displayed_count} of "
-            f"{len(entries)} entries</span>"
+            f"{len(entries)} {entries_label}</span>"
         )
         progress_label.add_css_class("dim-label")
         load_more_box.append(progress_label)

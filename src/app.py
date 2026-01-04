@@ -263,6 +263,12 @@ class ClamUIApp(Adw.Application):
         self.add_action(start_scan_action)
         self.set_accels_for_action("app.start-scan", ["F5"])
 
+        # Update action - start database update with F6
+        start_update_action = Gio.SimpleAction.new("start-update", None)
+        start_update_action.connect("activate", self._on_start_update)
+        self.add_action(start_update_action)
+        self.set_accels_for_action("app.start-update", ["F6"])
+
     def _setup_tray_indicator(self):
         """Initialize the system tray indicator subprocess."""
         try:
@@ -424,6 +430,25 @@ class ClamUIApp(Adw.Application):
 
             # Trigger the scan
             self._scan_view._start_scan()
+
+    def _on_start_update(self, action, param):
+        """
+        Handle start-update action - start database update with F6.
+
+        If not on update view, switches to it first, then triggers the update
+        if freshclam is available and not already updating.
+        """
+        win = self.props.active_window
+        if win and self._update_view:
+            # Switch to update view if not already there
+            if self._current_view != "update":
+                win.set_content_view(self._update_view)
+                win.set_active_view("update")
+                self._current_view = "update"
+
+            # Trigger the update if freshclam is available and not already updating
+            if self._update_view._freshclam_available and not self._update_view._is_updating:
+                self._update_view._start_update()
 
     def _on_statistics_quick_scan(self):
         """

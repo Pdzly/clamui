@@ -499,6 +499,33 @@ class QuarantineView(Gtk.Box):
         # Placeholder for search functionality (to be implemented in later subtasks)
         pass
 
+    def _filter_entries(self) -> list[QuarantineEntry]:
+        """
+        Filter quarantine entries based on current search query.
+
+        Performs case-insensitive substring matching against both the threat name
+        and original file path. An empty query returns all entries.
+
+        Returns:
+            List of QuarantineEntry objects matching the search query
+        """
+        # Empty query returns all entries
+        if not self._search_query:
+            return self._all_entries
+
+        # Normalize search query for case-insensitive comparison
+        query_lower = self._search_query.lower()
+
+        # Filter entries matching threat_name or original_path
+        filtered = [
+            entry
+            for entry in self._all_entries
+            if query_lower in (entry.threat_name or "").lower()
+            or query_lower in (entry.original_path or "").lower()
+        ]
+
+        return filtered
+
     def _on_cleanup_completed(self, removed_count: int) -> bool:
         """
         Handle completion of cleanup operation.

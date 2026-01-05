@@ -265,12 +265,13 @@ class TestResolvePortalPathViaGio:
         mock_gio.File.new_for_path.return_value = mock_gfile
         mock_gfile.query_info.return_value = mock_info
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                result = flatpak._resolve_portal_path_via_gio(
-                    "/run/user/1000/doc/abc123/file.txt"
-                )
-                assert result == "/home/user/Documents/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_gio(
+                "/run/user/1000/doc/abc123/file.txt"
+            )
+            assert result == "/home/user/Documents/file.txt"
 
     def test_resolve_portal_path_via_gio_symlink_target(self):
         """Test _resolve_portal_path_via_gio resolves via symlink-target."""
@@ -289,12 +290,13 @@ class TestResolvePortalPathViaGio:
         mock_gio.File.new_for_path.return_value = mock_gfile
         mock_gfile.query_info.return_value = mock_info
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                result = flatpak._resolve_portal_path_via_gio(
-                    "/run/user/1000/doc/abc123/file.txt"
-                )
-                assert result == "/home/user/Documents/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_gio(
+                "/run/user/1000/doc/abc123/file.txt"
+            )
+            assert result == "/home/user/Documents/file.txt"
 
     def test_resolve_portal_path_via_gio_skips_run_symlink(self):
         """Test _resolve_portal_path_via_gio skips symlinks starting with /run/."""
@@ -313,12 +315,13 @@ class TestResolvePortalPathViaGio:
         mock_gio.File.new_for_path.return_value = mock_gfile
         mock_gfile.query_info.return_value = mock_info
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                result = flatpak._resolve_portal_path_via_gio(
-                    "/run/user/1000/doc/abc123/file.txt"
-                )
-                assert result is None
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_gio(
+                "/run/user/1000/doc/abc123/file.txt"
+            )
+            assert result is None
 
     def test_resolve_portal_path_via_gio_exception(self):
         """Test _resolve_portal_path_via_gio handles exceptions gracefully."""
@@ -336,6 +339,7 @@ class TestResolvePortalPathViaDBus:
     def test_resolve_portal_path_via_dbus_success(self):
         """Test _resolve_portal_path_via_dbus resolves path via D-Bus."""
         mock_gio = mock.MagicMock()
+        mock_glib = mock.MagicMock()
         mock_bus = mock.MagicMock()
         mock_result = mock.MagicMock()
         mock_result.unpack.return_value = (b"/home/user/Documents/file.txt\x00", {})
@@ -343,17 +347,19 @@ class TestResolvePortalPathViaDBus:
         mock_gio.bus_get_sync.return_value = mock_bus
         mock_bus.call_sync.return_value = mock_result
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                with mock.patch("src.core.flatpak.GLib", mock.MagicMock()):
-                    result = flatpak._resolve_portal_path_via_dbus(
-                        "/run/user/1000/doc/abc123/file.txt"
-                    )
-                    assert result == "/home/user/Documents/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        mock_gi_repository.GLib = mock_glib
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_dbus(
+                "/run/user/1000/doc/abc123/file.txt"
+            )
+            assert result == "/home/user/Documents/file.txt"
 
     def test_resolve_portal_path_via_dbus_flatpak_doc(self):
         """Test _resolve_portal_path_via_dbus handles /run/flatpak/doc/ paths."""
         mock_gio = mock.MagicMock()
+        mock_glib = mock.MagicMock()
         mock_bus = mock.MagicMock()
         mock_result = mock.MagicMock()
         mock_result.unpack.return_value = (b"/home/user/file.txt\x00", {})
@@ -361,17 +367,19 @@ class TestResolvePortalPathViaDBus:
         mock_gio.bus_get_sync.return_value = mock_bus
         mock_bus.call_sync.return_value = mock_result
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                with mock.patch("src.core.flatpak.GLib", mock.MagicMock()):
-                    result = flatpak._resolve_portal_path_via_dbus(
-                        "/run/flatpak/doc/def456/file.txt"
-                    )
-                    assert result == "/home/user/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        mock_gi_repository.GLib = mock_glib
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_dbus(
+                "/run/flatpak/doc/def456/file.txt"
+            )
+            assert result == "/home/user/file.txt"
 
     def test_resolve_portal_path_via_dbus_list_of_bytes(self):
         """Test _resolve_portal_path_via_dbus handles list of byte values."""
         mock_gio = mock.MagicMock()
+        mock_glib = mock.MagicMock()
         mock_bus = mock.MagicMock()
         mock_result = mock.MagicMock()
         # Return as list of integers (byte values)
@@ -381,13 +389,14 @@ class TestResolvePortalPathViaDBus:
         mock_gio.bus_get_sync.return_value = mock_bus
         mock_bus.call_sync.return_value = mock_result
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                with mock.patch("src.core.flatpak.GLib", mock.MagicMock()):
-                    result = flatpak._resolve_portal_path_via_dbus(
-                        "/run/user/1000/doc/abc123/file.txt"
-                    )
-                    assert result == "/home/user/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        mock_gi_repository.GLib = mock_glib
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            result = flatpak._resolve_portal_path_via_dbus(
+                "/run/user/1000/doc/abc123/file.txt"
+            )
+            assert result == "/home/user/file.txt"
 
     def test_resolve_portal_path_via_dbus_invalid_path(self):
         """Test _resolve_portal_path_via_dbus returns None for invalid paths."""
@@ -447,10 +456,14 @@ class TestFormatFlatpakPortalPath:
 
     def test_format_flatpak_portal_path_flatpak_doc(self):
         """Test format_flatpak_portal_path handles /run/flatpak/doc/ paths."""
-        result = flatpak.format_flatpak_portal_path(
-            "/run/flatpak/doc/xyz789/Downloads/file.txt"
-        )
-        assert result == "~/Downloads/file.txt"
+        # Patch resolution methods to prevent actual resolution attempts
+        with mock.patch.object(flatpak, "_resolve_portal_path_via_xattr", return_value=None):
+            with mock.patch.object(flatpak, "_resolve_portal_path_via_gio", return_value=None):
+                with mock.patch.object(flatpak, "_resolve_portal_path_via_dbus", return_value=None):
+                    result = flatpak.format_flatpak_portal_path(
+                        "/run/flatpak/doc/xyz789/Downloads/file.txt"
+                    )
+                    assert result == "~/Downloads/file.txt"
 
     def test_format_flatpak_portal_path_non_portal_path(self):
         """Test format_flatpak_portal_path returns original path for non-portal paths."""
@@ -461,6 +474,7 @@ class TestFormatFlatpakPortalPath:
     def test_format_flatpak_portal_path_with_dbus_resolution(self):
         """Test format_flatpak_portal_path uses D-Bus resolution as fallback."""
         mock_gio = mock.MagicMock()
+        mock_glib = mock.MagicMock()
         mock_bus = mock.MagicMock()
         mock_result = mock.MagicMock()
         mock_result.unpack.return_value = (b"/home/user/CustomFolder/file.txt\x00", {})
@@ -468,14 +482,15 @@ class TestFormatFlatpakPortalPath:
         mock_gio.bus_get_sync.return_value = mock_bus
         mock_bus.call_sync.return_value = mock_result
 
-        with mock.patch.dict("sys.modules", {"gi.repository": mock.MagicMock()}):
-            with mock.patch("src.core.flatpak.Gio", mock_gio):
-                with mock.patch("src.core.flatpak.GLib", mock.MagicMock()):
-                    with mock.patch("src.core.flatpak.Path.home", return_value=Path("/home/user")):
-                        result = flatpak.format_flatpak_portal_path(
-                            "/run/user/1000/doc/abc123/CustomFolder/file.txt"
-                        )
-                        assert result == "~/CustomFolder/file.txt"
+        mock_gi_repository = mock.MagicMock()
+        mock_gi_repository.Gio = mock_gio
+        mock_gi_repository.GLib = mock_glib
+        with mock.patch.dict("sys.modules", {"gi.repository": mock_gi_repository}):
+            with mock.patch("src.core.flatpak.Path.home", return_value=Path("/home/user")):
+                result = flatpak.format_flatpak_portal_path(
+                    "/run/user/1000/doc/abc123/CustomFolder/file.txt"
+                )
+                assert result == "~/CustomFolder/file.txt"
 
     def test_format_flatpak_portal_path_fallback_to_portal_indicator(self):
         """Test format_flatpak_portal_path shows [Portal] when resolution fails."""
@@ -521,13 +536,15 @@ class TestFormatFlatpakPortalPath:
 
     def test_format_flatpak_portal_path_resolved_absolute_path(self):
         """Test format_flatpak_portal_path handles resolved absolute paths."""
-        with mock.patch.object(
-            flatpak, "_resolve_portal_path_via_dbus", return_value="/opt/app/file.txt"
-        ):
-            result = flatpak.format_flatpak_portal_path(
-                "/run/user/1000/doc/abc123/CustomFolder/file.txt"
-            )
-            assert result == "/opt/app/file.txt"
+        with mock.patch.object(flatpak, "_resolve_portal_path_via_xattr", return_value=None):
+            with mock.patch.object(flatpak, "_resolve_portal_path_via_gio", return_value=None):
+                with mock.patch.object(
+                    flatpak, "_resolve_portal_path_via_dbus", return_value="/opt/app/file.txt"
+                ):
+                    result = flatpak.format_flatpak_portal_path(
+                        "/run/user/1000/doc/abc123/CustomFolder/file.txt"
+                    )
+                    assert result == "/opt/app/file.txt"
 
     def test_format_flatpak_portal_path_complex_nested_path(self):
         """Test format_flatpak_portal_path handles complex nested paths."""

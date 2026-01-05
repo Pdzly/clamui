@@ -598,14 +598,16 @@ class TestCheckPathExists:
 
     def test_returns_true_for_existing_path(self, scheduler):
         """Test _check_path_exists returns True for existing files."""
-        with tempfile.NamedTemporaryFile() as tmp:
-            result = scheduler._check_path_exists(Path(tmp.name))
-            assert result is True
+        with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+            with tempfile.NamedTemporaryFile() as tmp:
+                result = scheduler._check_path_exists(Path(tmp.name))
+                assert result is True
 
     def test_returns_false_for_nonexistent_path(self, scheduler):
         """Test _check_path_exists returns False for non-existent files."""
-        result = scheduler._check_path_exists(Path("/nonexistent/path/to/file"))
-        assert result is False
+        with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+            result = scheduler._check_path_exists(Path("/nonexistent/path/to/file"))
+            assert result is False
 
     def test_flatpak_uses_flatpak_spawn(self, scheduler):
         """Test _check_path_exists uses flatpak-spawn when in Flatpak mode."""
@@ -697,9 +699,10 @@ class TestGetCliCommandPath:
                     "_get_venv_paths",
                     return_value=[Path(tmpdir) / "clamui" / "venv"],
                 ):
-                    result = scheduler._get_cli_command_path()
+                    with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+                        result = scheduler._get_cli_command_path()
 
-                    assert result == str(cli_script)
+                        assert result == str(cli_script)
 
     def test_returns_module_execution_with_venv_python(self, scheduler):
         """Test falls back to module execution when only venv Python exists."""
@@ -717,10 +720,11 @@ class TestGetCliCommandPath:
                     "_get_venv_paths",
                     return_value=[Path(tmpdir) / "clamui" / "venv"],
                 ):
-                    result = scheduler._get_cli_command_path()
+                    with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+                        result = scheduler._get_cli_command_path()
 
-                    assert str(python_bin) in result
-                    assert "-m src.cli.scheduled_scan" in result
+                        assert str(python_bin) in result
+                        assert "-m src.cli.scheduled_scan" in result
 
     def test_correct_module_path_in_fallback(self, scheduler):
         """Test that fallback uses correct module path src.cli.scheduled_scan."""
@@ -757,7 +761,8 @@ class TestGetCliCommandPath:
                     "_get_venv_paths",
                     return_value=[Path(tmpdir) / "clamui" / "venv"],
                 ):
-                    result = scheduler._get_cli_command_path()
+                    with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+                        result = scheduler._get_cli_command_path()
 
                     # Should return entry point, not module execution
                     assert result == str(cli_script)

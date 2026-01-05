@@ -115,7 +115,7 @@ def validate_path(path: str) -> tuple[bool, str | None]:
     try:
         resolved_path = path_obj.resolve()
     except (OSError, RuntimeError) as e:
-        return (False, f"Invalid path format: {str(e)}")
+        return (False, f"Error resolving path: {str(e)}")
 
     # Check if path exists
     if not resolved_path.exists():

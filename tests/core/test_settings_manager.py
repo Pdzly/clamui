@@ -1049,6 +1049,129 @@ class TestSettingsManagerMalformedExclusionEdgeCases:
         assert patterns is None
 
 
+class TestSettingsManagerAtomicWrite:
+    """Tests for atomic write behavior in SettingsManager."""
+
+    @pytest.fixture
+    def temp_config_dir(self):
+        """Create a temporary directory for settings storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def settings_manager(self, temp_config_dir):
+        """Create a SettingsManager with a temporary directory."""
+        return SettingsManager(config_dir=temp_config_dir)
+
+    def test_save_uses_atomic_write(self, settings_manager):
+        """Test that save uses atomic write pattern (temp file + rename)."""
+        with (
+            mock.patch("tempfile.mkstemp") as mock_mkstemp,
+            mock.patch("os.fdopen") as mock_fdopen,
+            mock.patch.object(Path, "replace") as mock_replace,
+            mock.patch.object(Path, "mkdir"),
+        ):
+            # Setup mocks
+            mock_mkstemp.return_value = (1, "/tmp/settings_test.json")
+            mock_file = mock.MagicMock()
+            mock_file.__enter__ = mock.MagicMock(return_value=mock_file)
+            mock_file.__exit__ = mock.MagicMock(return_value=False)
+            mock_fdopen.return_value = mock_file
+
+            # Perform save
+            result = settings_manager.save()
+
+            # Verify atomic write pattern was used
+            assert result is True
+            mock_mkstemp.assert_called_once()
+            mock_fdopen.assert_called_once()
+            mock_replace.assert_called_once()
+
+    def test_save_cleans_up_temp_file_on_failure(self, temp_config_dir):
+        """Test that save cleans up temp file if write fails."""
+        settings_manager = SettingsManager(config_dir=temp_config_dir)
+
+        # Mock json.dump to fail during write
+        with mock.patch("json.dump", side_effect=Exception("Write error")):
+            result = settings_manager.save()
+
+        assert result is False
+        # Verify no temp files are left behind
+        temp_files = list(Path(temp_config_dir).glob("settings_*.json"))
+        assert len(temp_files) == 0
+
+    def test_save_preserves_original_on_failure(self, temp_config_dir):
+        """Test that original file is not corrupted if save fails mid-write."""
+        settings_manager = SettingsManager(config_dir=temp_config_dir)
+
+        # Save initial data
+        settings_manager.set("test_key", "original_value")
+        settings_file = Path(temp_config_dir) / "settings.json"
+        assert settings_file.exists()
+
+        # Read original content
+        original_content = settings_file.read_text()
+
+        # Mock to fail during atomic rename (after temp file is written)
+        with mock.patch.object(Path, "replace", side_effect=OSError("Rename failed")):
+            result = settings_manager.set("test_key", "corrupted_value")
+
+        # Verify save failed
+        assert result is False
+
+        # Verify original file is preserved and not corrupted
+        assert settings_file.exists()
+        current_content = settings_file.read_text()
+        assert current_content == original_content
+
+        # Verify original value is still readable
+        manager2 = SettingsManager(config_dir=temp_config_dir)
+        assert manager2.get("test_key") == "original_value"
+
+    def test_save_creates_temp_file_in_same_directory(self, temp_config_dir):
+        """Test that temp file is created in the same directory as settings file."""
+        settings_manager = SettingsManager(config_dir=temp_config_dir)
+
+        with mock.patch("tempfile.mkstemp") as mock_mkstemp:
+            # Setup mock to return a temp file path
+            mock_mkstemp.return_value = (
+                mock.MagicMock(),
+                str(Path(temp_config_dir) / "settings_temp.json"),
+            )
+            with (
+                mock.patch("os.fdopen"),
+                mock.patch.object(Path, "replace"),
+                mock.patch.object(Path, "unlink"),
+            ):
+                # Trigger exception to test cleanup
+                with mock.patch("json.dump", side_effect=Exception()):
+                    settings_manager.save()
+
+            # Verify mkstemp was called with the correct directory
+            call_kwargs = mock_mkstemp.call_args[1]
+            assert call_kwargs["dir"] == Path(temp_config_dir)
+            assert call_kwargs["prefix"] == "settings_"
+            assert call_kwargs["suffix"] == ".json"
+
+    def test_save_handles_mkdir_failure(self, temp_config_dir):
+        """Test that save handles directory creation failures gracefully."""
+        settings_manager = SettingsManager(config_dir=temp_config_dir)
+
+        with mock.patch.object(Path, "mkdir", side_effect=PermissionError("Cannot create dir")):
+            result = settings_manager.save()
+
+        assert result is False
+
+    def test_save_handles_mkstemp_failure(self, temp_config_dir):
+        """Test that save handles temp file creation failures gracefully."""
+        settings_manager = SettingsManager(config_dir=temp_config_dir)
+
+        with mock.patch("tempfile.mkstemp", side_effect=OSError("Cannot create temp file")):
+            result = settings_manager.save()
+
+        assert result is False
+
+
 class TestSettingsManagerConcurrencyEdgeCases:
     """Edge case tests for concurrent access to SettingsManager."""
 

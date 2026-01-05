@@ -4,8 +4,10 @@ Settings manager module for ClamUI providing user preferences storage.
 Stores user settings in JSON format following XDG conventions.
 """
 
+import contextlib
 import json
 import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any

@@ -69,12 +69,12 @@
   ],
   "qa_signoff": {
     "status": "fixes_applied",
-    "timestamp": "2026-01-03T16:00:00.000Z",
+    "timestamp": "2026-01-05T15:30:00.000Z",
     "fix_session": 0,
     "issues_fixed": [
       {
-        "title": "MaxEmbeddedPE validation error: Invalid integer value for size option",
-        "fix_commit": "f8235e2"
+        "title": "Empty yellow lock field on Save & Apply preference page",
+        "fix_commit": "8f9ba9e"
       }
     ],
     "ready_for_qa_revalidation": true

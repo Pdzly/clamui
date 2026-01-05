@@ -199,10 +199,10 @@ class TestLogEntry:
         entry = LogEntry.create(
             log_type="scan",
             status="clean",
-            summary="File\u202Etxt.evil sanitized",
+            summary="File\u202etxt.evil sanitized",
             details="Details",
         )
-        assert "\u202E" not in entry.summary
+        assert "\u202e" not in entry.summary
         assert entry.summary == "Filetxt.evil sanitized"
 
     def test_create_sanitizes_path_newlines(self):
@@ -282,7 +282,7 @@ class TestLogEntry:
         entry = LogEntry.create(
             log_type="scan",
             status="clean",
-            summary="Clean\x00\nscan\x1b[31m\u202Afile\u202C",
+            summary="Clean\x00\nscan\x1b[31m\u202afile\u202c",
             details="Output\x00\nLine 2\x1b[32mgreen",
             path="/path\ninjection\x1b[0m",
         )
@@ -316,7 +316,7 @@ class TestLogEntry:
                 "threat_name": "Trojan\nFakeLog.Gen",
             },
             {
-                "file_path": "/tmp/\u202Eevil.txt",
+                "file_path": "/tmp/\u202eevil.txt",
                 "threat_name": "Malware\x07.Test",
             },
         ]
@@ -338,7 +338,7 @@ class TestLogEntry:
         # Ensure no ANSI, null bytes, bidi, or control chars in details
         assert "\x1b" not in entry.details
         assert "\x00" not in entry.details
-        assert "\u202E" not in entry.details
+        assert "\u202e" not in entry.details
         assert "\x07" not in entry.details
 
     def test_from_scan_result_data_sanitizes_error_message(self):
@@ -407,7 +407,9 @@ Scanned directories: 10
             threat_details=threat_details,
         )
         # Newlines should be removed from file_path (single-line field)
-        assert "\n" not in entry.details or entry.details.count("\n") == entry.details.count("Threats found")
+        assert "\n" not in entry.details or entry.details.count("\n") == entry.details.count(
+            "Threats found"
+        )
         # The injected content should appear on the same line
         assert "malware.exe [CLEAN]" in entry.details
 
@@ -473,13 +475,13 @@ Scanned directories: 10
             "status": "clean",
             "summary": "Summary",
             "details": "Details",
-            "path": "/home/user\n\x1b[31m/malicious\u202E",
+            "path": "/home/user\n\x1b[31m/malicious\u202e",
         }
         entry = LogEntry.from_dict(data)
         # Path should be sanitized (single-line)
         assert "\n" not in entry.path
         assert "\x1b" not in entry.path
-        assert "\u202E" not in entry.path
+        assert "\u202e" not in entry.path
         assert entry.path == "/home/user /malicious"
 
     def test_from_dict_sanitizes_status(self):
@@ -522,7 +524,7 @@ Scanned directories: 10
             "status": "clean\ninfected",  # Try to inject contradictory status
             "summary": "Clean scan\n[ERROR] System compromised",  # Log injection
             "details": "\x1b[8mHidden malware: /tmp/evil.exe\x1b[0m\nNormal output",
-            "path": "/safe/path\n/tmp/\u202Eevil",
+            "path": "/safe/path\n/tmp/\u202eevil",
         }
         entry = LogEntry.from_dict(malicious_data)
 
@@ -531,7 +533,7 @@ Scanned directories: 10
         assert "\n" not in entry.status
         assert "\n" not in entry.summary  # Log injection prevented
         assert "\x1b" not in entry.details  # ANSI obfuscation removed
-        assert "\u202E" not in entry.path  # Unicode spoofing removed
+        assert "\u202e" not in entry.path  # Unicode spoofing removed
 
         # Verify sanitized values
         assert entry.status == "clean infected"

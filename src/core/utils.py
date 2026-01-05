@@ -619,10 +619,10 @@ def _resolve_portal_path_via_dbus(portal_path: str) -> str | None:
         if path_bytes:
             # Convert byte array to string, strip null terminator
             if isinstance(path_bytes, bytes):
-                host_path = path_bytes.rstrip(b'\x00').decode('utf-8')
+                host_path = path_bytes.rstrip(b"\x00").decode("utf-8")
             else:
                 # It's a list of integers (byte values)
-                host_path = bytes(path_bytes).rstrip(b'\x00').decode('utf-8')
+                host_path = bytes(path_bytes).rstrip(b"\x00").decode("utf-8")
 
             if host_path:
                 return host_path
@@ -668,8 +668,15 @@ def format_flatpak_portal_path(path: str) -> str:
 
         # Known home subdirectories - prefix with ~/
         home_subdirs = (
-            "Downloads", "Documents", "Desktop", "Pictures",
-            "Videos", "Music", ".config", ".local", ".cache",
+            "Downloads",
+            "Documents",
+            "Desktop",
+            "Pictures",
+            "Videos",
+            "Music",
+            ".config",
+            ".local",
+            ".cache",
         )
         if first_component in home_subdirs:
             return f"~/{relative_path}"
@@ -697,7 +704,7 @@ def format_flatpak_portal_path(path: str) -> str:
             try:
                 home = str(Path.home())
                 if resolved.startswith(home):
-                    return "~" + resolved[len(home):]
+                    return "~" + resolved[len(home) :]
             except Exception:
                 pass
             return resolved

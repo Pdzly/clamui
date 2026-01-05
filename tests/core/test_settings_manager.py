@@ -1319,7 +1319,7 @@ class TestSettingsManagerBackupCorruptedFile:
         corrupted_content = "{ invalid: json, content }"
         settings_file.write_text(corrupted_content)
 
-        manager = SettingsManager(config_dir=config_dir)
+        _manager = SettingsManager(config_dir=config_dir)
 
         # Verify backup contains original corrupted content
         backup_path = config_dir / "settings.json.corrupted"

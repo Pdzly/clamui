@@ -1358,9 +1358,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Manual save settings info row
         manual_save_row = Adw.ActionRow()
         manual_save_row.set_title("🔒 Requires Save &amp; Apply")
-        manual_save_row.set_subtitle(
-            "Database Updates, Scanner, On-Access, Scheduled Scans"
-        )
+        manual_save_row.set_subtitle("Database Updates, Scanner, On-Access, Scheduled Scans")
         lock_icon = Gtk.Image.new_from_icon_name("system-lock-screen-symbolic")
         lock_icon.add_css_class("warning")
         manual_save_row.add_prefix(lock_icon)

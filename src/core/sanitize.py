@@ -12,8 +12,6 @@ threat names, ClamAV output) before storing in log entries. It protects against:
 """
 
 import re
-from typing import Optional
-
 
 # ANSI escape sequence pattern (CSI sequences and other escape codes)
 # Matches ESC followed by [ and optional parameters, or other ESC sequences
@@ -38,7 +36,7 @@ ANSI_ESCAPE_PATTERN = re.compile(
 UNICODE_BIDI_PATTERN = re.compile(r"[\u202A-\u202E\u2066-\u2069]")
 
 
-def sanitize_log_line(text: Optional[str]) -> str:
+def sanitize_log_line(text: str | None) -> str:
     """
     Sanitize a string for use in single-line log fields.
 
@@ -94,7 +92,7 @@ def sanitize_log_line(text: Optional[str]) -> str:
     return "".join(result)
 
 
-def sanitize_log_text(text: Optional[str]) -> str:
+def sanitize_log_text(text: str | None) -> str:
     """
     Sanitize a string for use in multi-line log fields.
 

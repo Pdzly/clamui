@@ -1012,7 +1012,9 @@ class ScanView(Gtk.Box):
             self._status_banner.remove_css_class("success")
             self._status_banner.remove_css_class("warning")
             self._status_banner.set_revealed(True)
-            logger.error(f"Scan failed: {error_detail}, stdout={result.stdout!r}, stderr={result.stderr!r}")
+            logger.error(
+                f"Scan failed: {error_detail}, stdout={result.stdout!r}, stderr={result.stderr!r}"
+            )
         else:
             self._show_view_results(0)
             self._status_banner.set_title(f"Scan completed with status: {result.status.value}")

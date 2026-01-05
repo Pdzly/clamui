@@ -69,8 +69,8 @@
   ],
   "qa_signoff": {
     "status": "fixes_applied",
-    "timestamp": "2026-01-05T22:05:00.000Z",
-    "fix_session": 2,
+    "timestamp": "2026-01-05T22:16:56.000Z",
+    "fix_session": 3,
     "issues_fixed": [
       {
         "title": "Empty yellow lock field on Save & Apply preference page",
@@ -91,6 +91,10 @@
       {
         "title": "Test Mismatch for OnAccessPage.create_page() Call",
         "fix_commit": "edb223e"
+      },
+      {
+        "title": "TypeError: ScheduledPage.create_page() takes 1 positional argument but 2 were given",
+        "fix_commit": "c7f00fb"
       }
     ],
     "ready_for_qa_revalidation": true

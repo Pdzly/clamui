@@ -69,7 +69,7 @@
   ],
   "qa_signoff": {
     "status": "fixes_applied",
-    "timestamp": "2026-01-05T21:55:00.000Z",
+    "timestamp": "2026-01-05T22:05:00.000Z",
     "fix_session": 2,
     "issues_fixed": [
       {
@@ -87,6 +87,10 @@
       {
         "title": "TypeError: OnAccessPage.create_page() missing parent_window argument",
         "fix_commit": "f06de79"
+      },
+      {
+        "title": "Test Mismatch for OnAccessPage.create_page() Call",
+        "fix_commit": "edb223e"
       }
     ],
     "ready_for_qa_revalidation": true

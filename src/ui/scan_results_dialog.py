@@ -16,7 +16,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from ..core.quarantine import QuarantineManager, QuarantineStatus
 from ..core.scanner import ScanResult, ScanStatus, ThreatDetail
-from ..core.utils import copy_to_clipboard
+from ..core.utils import copy_to_clipboard, format_flatpak_portal_path
 
 if TYPE_CHECKING:
     from ..core.settings_manager import SettingsManager
@@ -333,9 +333,9 @@ class ScanResultsDialog(Adw.Dialog):
 
         content_box.append(header_box)
 
-        # File path
+        # File path (format Flatpak portal paths for readability)
         path_label = Gtk.Label()
-        path_label.set_label(threat.file_path)
+        path_label.set_label(format_flatpak_portal_path(threat.file_path))
         path_label.set_xalign(0)
         path_label.set_wrap(True)
         path_label.set_selectable(True)

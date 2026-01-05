@@ -13,7 +13,7 @@ jobs:
   build-flatpak:
     runs-on: ubuntu-22.04
     container:
-      image: bilelmoussaoui/flatpak-github-actions:gnome-47
+      image: bilelmoussaoui/flatpak-github-actions:gnome-48
       options: --privileged
     steps:
       - name: Checkout repository

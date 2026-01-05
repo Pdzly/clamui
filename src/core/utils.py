@@ -7,6 +7,7 @@ import contextlib
 import csv
 import io
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -491,11 +492,44 @@ def get_freshclam_path() -> str | None:
     return which_host_command("freshclam")
 
 
+def format_flatpak_portal_path(path: str) -> str:
+    """
+    Convert Flatpak document portal paths to user-friendly display paths.
+
+    In Flatpak, files selected via the file picker are exposed through the
+    document portal at paths like /run/user/1000/doc/<hash>/<path>.
+    This function converts them to readable paths.
+
+    Examples:
+        /run/user/1000/doc/bceb31dc/Downloads/file.txt -> ~/Downloads/file.txt
+        /run/user/1000/doc/abc123/home/user/Docs/f.txt -> ~/Docs/f.txt
+
+    Args:
+        path: The filesystem path to check and potentially convert
+
+    Returns:
+        A user-friendly path if it's a portal path, otherwise the original path
+    """
+    # Match Flatpak document portal path pattern
+    match = re.match(r"/run/user/\d+/doc/[a-f0-9]+/(.+)", path)
+    if match:
+        relative_path = match.group(1)
+        # If it starts with home/username, strip that part
+        home_match = re.match(r"home/[^/]+/(.+)", relative_path)
+        if home_match:
+            return f"~/{home_match.group(1)}"
+        # Otherwise just prefix with ~
+        return f"~/{relative_path}"
+
+    return path
+
+
 def format_scan_path(path: str) -> str:
     """
     Format a path for display in the UI.
 
     Shortens long paths for better readability while keeping them identifiable.
+    Handles Flatpak document portal paths by converting them to user-friendly format.
 
     Args:
         path: The filesystem path to format
@@ -505,6 +539,13 @@ def format_scan_path(path: str) -> str:
     """
     if not path:
         return "No path selected"
+
+    # First, handle Flatpak document portal paths
+    path = format_flatpak_portal_path(path)
+
+    # If already converted to ~ notation, return as-is
+    if path.startswith("~/"):
+        return path
 
     try:
         resolved = Path(path).resolve()

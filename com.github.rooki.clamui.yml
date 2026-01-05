@@ -1,6 +1,6 @@
 app-id: com.github.rooki.clamui
 runtime: org.gnome.Platform
-runtime-version: '47'
+runtime-version: '48'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -23,6 +23,10 @@ finish-args:
   - --share=ipc
   # Network access for virus database updates
   - --share=network
+  # GVFS access for file browser integration
+  - --filesystem=xdg-run/gvfsd
+  # Host /tmp access for EICAR test files (daemon scanner runs on host)
+  - --filesystem=/tmp
 
 modules:
   # System tray indicator support (AyatanaAppIndicator3)

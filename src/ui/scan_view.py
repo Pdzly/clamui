@@ -18,6 +18,7 @@ from ..core.quarantine import QuarantineManager
 from ..core.scanner import Scanner, ScanResult, ScanStatus
 from ..core.utils import (
     format_scan_path,
+    is_flatpak,
     validate_dropped_files,
 )
 from .profile_dialogs import ProfileListDialog
@@ -866,8 +867,10 @@ class ScanView(Gtk.Box):
         """
         try:
             # Create EICAR test file in system temp directory
+            # In Flatpak, use /tmp explicitly so the host's clamdscan can access it
+            temp_dir = "/tmp" if is_flatpak() else None
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".txt", prefix="eicar_test_", delete=False
+                mode="w", suffix=".txt", prefix="eicar_test_", delete=False, dir=temp_dir
             ) as f:
                 f.write(EICAR_TEST_STRING)
                 self._eicar_temp_path = f.name
@@ -898,8 +901,8 @@ class ScanView(Gtk.Box):
 
         # Show progress section with status message
         if self._progress_section is not None:
-            # Format path for display (truncate if too long)
-            display_path = self._selected_path
+            # Format path for display (handles Flatpak portal paths and truncation)
+            display_path = format_scan_path(self._selected_path)
             if len(display_path) > 50:
                 display_path = "..." + display_path[-47:]
             self._progress_label.set_label(f"Scanning {display_path}")
@@ -985,6 +988,15 @@ class ScanView(Gtk.Box):
             self._status_banner.remove_css_class("warning")
             self._status_banner.remove_css_class("error")
             self._status_banner.set_revealed(True)
+        elif result.status == ScanStatus.ERROR:
+            self._show_view_results(0)
+            error_detail = result.error_message or result.stderr or "Unknown error"
+            self._status_banner.set_title(f"Scan error: {error_detail}")
+            self._status_banner.add_css_class("error")
+            self._status_banner.remove_css_class("success")
+            self._status_banner.remove_css_class("warning")
+            self._status_banner.set_revealed(True)
+            logger.error(f"Scan failed: {error_detail}, stdout={result.stdout!r}, stderr={result.stderr!r}")
         else:
             self._show_view_results(0)
             self._status_banner.set_title(f"Scan completed with status: {result.status.value}")

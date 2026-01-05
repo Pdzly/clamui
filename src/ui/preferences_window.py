@@ -1124,7 +1124,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         group.set_title("Scheduled Scans Configuration")
         group.set_description(
             "Configure automatic virus scanning. "
-            "These settings are saved when you click 'Save & Apply' on the last page. "
+            "These settings are saved when you click 'Save &amp; Apply' on the last page. "
             "Note: These are ClamUI settings, not ClamAV system configuration."
         )
 
@@ -1396,10 +1396,10 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # Manual save settings info row
         manual_save_row = Adw.ActionRow()
-        manual_save_row.set_title("🔒 Requires 'Save & Apply' Button")
+        manual_save_row.set_title("🔒 Requires 'Save &amp; Apply' Button")
         manual_save_row.set_subtitle(
             "Database Updates, Scanner Settings, On-Access, and Scheduled Scans — "
-            "Settings with lock icons modify system files and require clicking 'Save & Apply' below"
+            "Settings with lock icons modify system files and require clicking 'Save &amp; Apply' below"
         )
         lock_icon = Gtk.Image.new_from_icon_name("system-lock-screen-symbolic")
         lock_icon.add_css_class("warning")
@@ -1416,7 +1416,10 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Status indicator row
         status_row = Adw.ActionRow()
         status_row.set_title("Current Status")
-        status_row.set_subtitle("Ready")
+        status_row.set_subtitle(
+            "✓ Auto-Saved Settings: Scan Backend and Exclusions save automatically when changed — "
+            "Ready to apply ClamAV configuration changes"
+        )
 
         # Status indicator widget
         status_indicator = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")

@@ -1434,21 +1434,21 @@ class PreferencesWindow(Adw.PreferencesWindow):
             "and On-Access pages (settings marked with lock icons)"
         )
 
-        # Save button
-        save_button_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        save_button_row.set_margin_top(12)
-        save_button_row.set_margin_bottom(12)
-        save_button_row.set_margin_start(12)
-        save_button_row.set_margin_end(12)
+        # Save button row - using ActionRow to properly contain the button
+        save_action_row = Adw.ActionRow()
+        save_action_row.set_title("Save Configuration")
 
+        # Create the save button
         save_button = Gtk.Button()
         save_button.set_label("Save & Apply")
         save_button.add_css_class("suggested-action")
-        save_button.set_hexpand(True)
+        save_button.set_valign(Gtk.Align.CENTER)
         save_button.connect("clicked", self._on_save_clicked)
-        save_button_row.append(save_button)
 
-        button_group.add(save_button_row)
+        # Add button as suffix to the row
+        save_action_row.add_suffix(save_button)
+
+        button_group.add(save_action_row)
         page.add(button_group)
 
         self.add(page)

@@ -803,14 +803,14 @@ class TestLogManagerDaemonStatus:
 
     def test_get_daemon_status_not_installed(self, log_manager):
         """Test daemon status when clamd is not installed."""
-        with mock.patch("shutil.which", return_value=None):
+        with mock.patch("src.core.log_manager.which_host_command", return_value=None):
             status, message = log_manager.get_daemon_status()
             assert status == DaemonStatus.NOT_INSTALLED
             assert "not installed" in message.lower()
 
     def test_get_daemon_status_running(self, log_manager):
         """Test daemon status when clamd is running."""
-        with mock.patch("shutil.which", return_value="/usr/bin/clamd"):
+        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=0)
                 status, message = log_manager.get_daemon_status()
@@ -819,7 +819,7 @@ class TestLogManagerDaemonStatus:
 
     def test_get_daemon_status_stopped(self, log_manager):
         """Test daemon status when clamd is installed but not running."""
-        with mock.patch("shutil.which", return_value="/usr/bin/clamd"):
+        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=1)
                 status, message = log_manager.get_daemon_status()
@@ -828,7 +828,7 @@ class TestLogManagerDaemonStatus:
 
     def test_get_daemon_status_unknown_on_error(self, log_manager):
         """Test daemon status returns UNKNOWN on subprocess error."""
-        with mock.patch("shutil.which", return_value="/usr/bin/clamd"):
+        with mock.patch("src.core.log_manager.which_host_command", return_value="/usr/bin/clamd"):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.side_effect = OSError("Test error")
                 status, message = log_manager.get_daemon_status()
@@ -873,11 +873,12 @@ class TestLogManagerDaemonLogs:
 
         try:
             with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
-                success, content = log_manager.read_daemon_logs(num_lines=10)
-                assert success is True
-                assert "Line 1" in content
-                assert "Line 2" in content
-                assert "Line 3" in content
+                with mock.patch("src.core.log_manager.wrap_host_command", side_effect=lambda cmd: cmd):
+                    success, content = log_manager.read_daemon_logs(num_lines=10)
+                    assert success is True
+                    assert "Line 1" in content
+                    assert "Line 2" in content
+                    assert "Line 3" in content
         finally:
             os.unlink(temp_log_path)
 
@@ -890,11 +891,12 @@ class TestLogManagerDaemonLogs:
 
         try:
             with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
-                success, content = log_manager.read_daemon_logs(num_lines=10)
-                assert success is True
-                # Should only have last 10 lines
-                lines = [line for line in content.strip().split("\n") if line]
-                assert len(lines) <= 10
+                with mock.patch("src.core.log_manager.wrap_host_command", side_effect=lambda cmd: cmd):
+                    success, content = log_manager.read_daemon_logs(num_lines=10)
+                    assert success is True
+                    # Should only have last 10 lines
+                    lines = [line for line in content.strip().split("\n") if line]
+                    assert len(lines) <= 10
         finally:
             os.unlink(temp_log_path)
 
@@ -905,9 +907,10 @@ class TestLogManagerDaemonLogs:
 
         try:
             with mock.patch.object(log_manager, "get_daemon_log_path", return_value=temp_log_path):
-                success, content = log_manager.read_daemon_logs()
-                assert success is True
-                assert "empty" in content.lower()
+                with mock.patch("src.core.log_manager.wrap_host_command", side_effect=lambda cmd: cmd):
+                    success, content = log_manager.read_daemon_logs()
+                    assert success is True
+                    assert "empty" in content.lower()
         finally:
             os.unlink(temp_log_path)
 

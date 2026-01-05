@@ -2,6 +2,133 @@
 """
 Log manager module for ClamUI providing log persistence and retrieval.
 Stores scan/update operation logs and provides daemon log access.
+
+Security: Input Sanitization for Log Injection Prevention
+==========================================================
+
+This module implements comprehensive input sanitization to prevent log injection
+attacks and log obfuscation when storing file paths, threat names, and ClamAV
+output in log entries.
+
+Attack Vectors Mitigated
+------------------------
+
+1. **Control Characters**
+   Threat: Malicious filenames containing control characters (e.g., \\x07 bell,
+   \\x08 backspace, \\x0C form feed) could manipulate terminal output or confuse
+   log viewing tools.
+   Mitigation: All control characters except safe whitespace (space, tab) are
+   removed from single-line fields. Multi-line fields preserve newlines/tabs but
+   remove other control characters.
+
+2. **ANSI Escape Sequences**
+   Threat: ANSI escape codes (e.g., \\x1b[31m for red text, \\x1b[2J to clear
+   screen) embedded in filenames could hide malicious content, modify displayed
+   text, or obscure log entries when viewed in terminals.
+   Mitigation: All ANSI escape sequences are detected and removed using a
+   comprehensive regex pattern that matches CSI sequences (\\x1b[...m) and other
+   escape codes.
+
+3. **Unicode Bidirectional Overrides**
+   Threat: Unicode bidirectional control characters (U+202A-U+202E, U+2066-U+2069)
+   can reverse or modify the displayed order of text, allowing attackers to craft
+   filenames that appear benign but actually reference malicious files. Example:
+   "file\\u202Etxt.exe" displays as "fileexe.txt" but is actually an executable.
+   Mitigation: All Unicode bidirectional override characters are removed from all
+   log fields.
+
+4. **Log Injection via Newlines**
+   Threat: Crafted filenames containing newline characters (\\n or \\r) could
+   inject fake log entries or split a single log entry across multiple lines,
+   potentially forging scan results or hiding malicious activity. Example:
+   "clean.txt\\nINFECTED: virus.exe\\nClean scan" could appear as three separate
+   log lines.
+   Mitigation: Newlines are converted to spaces in single-line fields (summary,
+   path, threat names) to prevent entry injection. Multi-line fields (details,
+   stdout) preserve legitimate newlines from ClamAV output.
+
+5. **Null Byte Injection**
+   Threat: Null bytes (\\x00) can truncate strings in some contexts or confuse
+   parsers, potentially hiding parts of filenames or log content.
+   Mitigation: All null bytes are removed from all fields before storage.
+
+Sanitization Implementation
+---------------------------
+
+The module uses two sanitization functions from src/core/sanitize.py:
+
+- **sanitize_log_line()**: For single-line fields (summary, path, threat names)
+  Removes: control chars, ANSI escapes, Unicode bidi, null bytes, newlines
+  Preserves: printable text, spaces, tabs
+
+- **sanitize_log_text()**: For multi-line fields (details, stdout)
+  Removes: control chars (except newlines/tabs), ANSI escapes, Unicode bidi, null bytes
+  Preserves: printable text, spaces, tabs, newlines, carriage returns
+
+Entry Points Sanitized
+-----------------------
+
+All LogEntry creation methods apply sanitization:
+
+1. **LogEntry.create()** - Direct entry creation
+   - Sanitizes: summary (line), details (text), path (line)
+
+2. **LogEntry.from_scan_result_data()** - Scanner integration
+   - Sanitizes: path, threat_details (file_path, threat_name), error_message,
+     stdout, suffix
+   - Used by: Scanner, DaemonScanner
+
+3. **LogEntry.from_dict()** - JSON deserialization
+   - Sanitizes: type, status, summary, details, path
+   - Protection: Defense against tampering with stored log files
+
+Defense in Depth
+----------------
+
+Sanitization is applied at multiple layers:
+
+1. **Input Layer**: All user-controlled input from scan results is sanitized
+   before building log entry fields (from_scan_result_data).
+
+2. **Creation Layer**: All fields are sanitized again when creating LogEntry
+   instances (create method).
+
+3. **Deserialization Layer**: Fields are sanitized when reading from disk to
+   protect against maliciously crafted or tampered log files (from_dict).
+
+This multi-layer approach ensures that even if log files are manually edited or
+replaced by an attacker, the malicious content cannot affect log viewers or
+exploit downstream systems.
+
+Example Attack Scenarios Prevented
+-----------------------------------
+
+1. **ANSI Obfuscation**:
+   Malicious file: "/tmp/\\x1b[2Kharmless.txt\\x1b[31m[INFECTED]\\x1b[0m"
+   Without sanitization: Clears line and shows fake infection marker in red
+   With sanitization: "/tmp/harmless.txt[INFECTED]" (escape codes removed)
+
+2. **Log Injection**:
+   Malicious file: "safe.txt\\n[2024-01-15] INFECTED: virus.exe\\nClean scan"
+   Without sanitization: Appears as three log entries, forging an infection
+   With sanitization: "safe.txt [2024-01-15] INFECTED: virus.exe Clean scan"
+
+3. **Unicode Direction Spoofing**:
+   Malicious file: "document\\u202Efdp.exe" (displays as "documentexe.pdf")
+   Without sanitization: Appears to be a PDF but is actually an executable
+   With sanitization: "documentfdp.exe" (true extension visible)
+
+Security Testing
+----------------
+
+The sanitization implementation has comprehensive test coverage:
+
+- tests/core/test_sanitize.py: 80+ unit tests for sanitization functions
+- tests/core/test_log_manager.py: Integration tests for LogEntry sanitization
+- Coverage includes: control chars, ANSI escapes, Unicode bidi, null bytes,
+  newlines, edge cases, real-world attack scenarios, ClamAV output formats
+
+For implementation details, see: src/core/sanitize.py
 """
 
 import contextlib

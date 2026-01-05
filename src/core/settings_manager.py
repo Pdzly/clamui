@@ -122,6 +122,25 @@ class SettingsManager:
                 # Catch all exceptions (including OSError, PermissionError)
                 return False
 
+    def _backup_corrupted_file(self) -> None:
+        """
+        Create a backup of a corrupted settings file.
+
+        Renames the corrupted file with a .corrupted suffix
+        to preserve it for debugging purposes.
+        """
+        try:
+            if self._settings_file.exists():
+                backup_path = self._settings_file.with_suffix(
+                    f"{self._settings_file.suffix}.corrupted"
+                )
+                # Don't overwrite existing backups
+                if not backup_path.exists():
+                    self._settings_file.rename(backup_path)
+        except (OSError, PermissionError):
+            # Silently fail - backup is best effort
+            pass
+
     def get(self, key: str, default: Any = None) -> Any:
         """
         Get a setting value.

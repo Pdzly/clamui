@@ -57,7 +57,7 @@ def parse_file_arguments():
         "src.ui.update_view",
         "src.ui.logs_view",
         "src.ui.components_view",
-        "src.ui.preferences_window",
+        "src.ui.preferences",
         "src.ui.fullscreen_dialog",
         "src.app",
     ]

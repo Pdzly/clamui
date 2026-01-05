@@ -69,8 +69,8 @@
   ],
   "qa_signoff": {
     "status": "fixes_applied",
-    "timestamp": "2026-01-05T16:00:00.000Z",
-    "fix_session": 1,
+    "timestamp": "2026-01-05T22:16:56.000Z",
+    "fix_session": 3,
     "issues_fixed": [
       {
         "title": "Empty yellow lock field on Save & Apply preference page",
@@ -83,6 +83,18 @@
       {
         "title": "Move Auto Saved Settings info to Current Status field",
         "fix_commit": "c1427b0"
+      },
+      {
+        "title": "TypeError: OnAccessPage.create_page() missing parent_window argument",
+        "fix_commit": "f06de79"
+      },
+      {
+        "title": "Test Mismatch for OnAccessPage.create_page() Call",
+        "fix_commit": "edb223e"
+      },
+      {
+        "title": "TypeError: ScheduledPage.create_page() takes 1 positional argument but 2 were given",
+        "fix_commit": "c7f00fb"
       }
     ],
     "ready_for_qa_revalidation": true

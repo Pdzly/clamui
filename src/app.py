@@ -43,7 +43,7 @@ from .profiles.models import ScanProfile
 from .profiles.profile_manager import ProfileManager
 from .ui.components_view import ComponentsView
 from .ui.logs_view import LogsView
-from .ui.preferences_window import PreferencesWindow
+from .ui.preferences import PreferencesWindow
 from .ui.quarantine_view import QuarantineView
 from .ui.scan_view import ScanView
 from .ui.statistics_view import StatisticsView

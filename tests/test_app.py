@@ -70,7 +70,7 @@ def mock_gtk_modules():
             "src.ui.update_view": mock.MagicMock(),
             "src.ui.logs_view": mock.MagicMock(),
             "src.ui.components_view": mock.MagicMock(),
-            "src.ui.preferences_window": mock.MagicMock(),
+            "src.ui.preferences": mock.MagicMock(),
             "src.ui.statistics_view": mock.MagicMock(),
         },
     ):

@@ -360,3 +360,262 @@ class TestRestoreFromQuarantineValidation:
         # This proves validation happens before checking if source exists
         assert result.status == FileOperationStatus.INVALID_RESTORE_PATH
         assert "protected" in result.error_message.lower()
+
+
+class TestValidateQuarantinePath:
+    """Tests for SecureFileHandler._validate_quarantine_path() method."""
+
+    def test_valid_quarantine_path(self, tmp_path):
+        """Test that paths inside quarantine directory are accepted."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file inside quarantine
+        quarantine_file = quarantine_dir / "abc123_malware.exe"
+        quarantine_file.write_text("fake quarantined content")
+
+        is_valid, error = handler._validate_quarantine_path(str(quarantine_file))
+
+        assert is_valid is True
+        assert error is None
+
+    def test_path_outside_quarantine_rejected(self, tmp_path):
+        """Test that absolute paths outside quarantine directory are rejected."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine
+        outside_file = tmp_path / "outside" / "secret.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("secret content")
+
+        is_valid, error = handler._validate_quarantine_path(str(outside_file))
+
+        assert is_valid is False
+        assert "not inside quarantine directory" in error
+
+    def test_path_traversal_outside_quarantine_rejected(self, tmp_path):
+        """Test that .. traversal to escape quarantine directory is rejected."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine that we'll try to access via traversal
+        outside_file = tmp_path / "secret.txt"
+        outside_file.write_text("secret content")
+
+        # Try to access via .. traversal
+        traversal_path = str(quarantine_dir / ".." / "secret.txt")
+        is_valid, error = handler._validate_quarantine_path(traversal_path)
+
+        assert is_valid is False
+        assert "not inside quarantine directory" in error
+
+    def test_symlink_quarantine_path_rejected(self, tmp_path):
+        """Test that symlinks inside quarantine directory are rejected."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a real file outside quarantine
+        outside_file = tmp_path / "outside" / "secret.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("secret content")
+
+        # Create a symlink inside quarantine pointing outside
+        symlink_path = quarantine_dir / "symlink_to_secret"
+        try:
+            symlink_path.symlink_to(outside_file)
+
+            is_valid, error = handler._validate_quarantine_path(str(symlink_path))
+
+            assert is_valid is False
+            assert "symlink" in error.lower()
+        finally:
+            if symlink_path.is_symlink():
+                symlink_path.unlink()
+
+    def test_empty_quarantine_path_rejected(self, tmp_path):
+        """Test that empty paths are rejected."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Test empty string
+        is_valid, error = handler._validate_quarantine_path("")
+        assert is_valid is False
+        assert "cannot be empty" in error
+
+        # Test whitespace-only string
+        is_valid, error = handler._validate_quarantine_path("   ")
+        assert is_valid is False
+        assert "cannot be empty" in error
+
+    def test_nonexistent_path_inside_quarantine_accepted(self, tmp_path):
+        """Test that nonexistent paths inside quarantine are accepted.
+
+        This allows validation before file existence check in restore/delete.
+        """
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Path that doesn't exist but is inside quarantine
+        nonexistent_path = str(quarantine_dir / "nonexistent_file.quar")
+        is_valid, error = handler._validate_quarantine_path(nonexistent_path)
+
+        assert is_valid is True
+        assert error is None
+
+
+class TestRestoreFromQuarantinePathValidation:
+    """Tests for quarantine path validation in restore_from_quarantine()."""
+
+    def test_restore_rejects_quarantine_path_outside_dir(self, tmp_path):
+        """Test that restore_from_quarantine rejects source paths outside quarantine."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine
+        outside_file = tmp_path / "outside" / "secret.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("secret content")
+
+        # Try to restore from outside quarantine
+        result = handler.restore_from_quarantine(
+            str(outside_file), str(tmp_path / "restored" / "file.txt")
+        )
+
+        assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+        assert result.error_message is not None
+        assert "not inside quarantine directory" in result.error_message
+
+    def test_restore_rejects_symlink_quarantine_path(self, tmp_path):
+        """Test that restore_from_quarantine rejects symlink source paths."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a real file outside quarantine
+        outside_file = tmp_path / "outside" / "secret.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("secret content")
+
+        # Create a symlink inside quarantine pointing outside
+        symlink_path = quarantine_dir / "symlink_to_secret"
+        try:
+            symlink_path.symlink_to(outside_file)
+
+            result = handler.restore_from_quarantine(
+                str(symlink_path), str(tmp_path / "restored" / "file.txt")
+            )
+
+            assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+            assert "symlink" in result.error_message.lower()
+        finally:
+            if symlink_path.is_symlink():
+                symlink_path.unlink()
+
+    def test_restore_quarantine_path_validation_before_restore_path_validation(self, tmp_path):
+        """Test that quarantine path validation happens before restore path validation."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine
+        outside_file = tmp_path / "outside" / "secret.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("secret content")
+
+        # Try to restore from outside quarantine to a protected directory
+        # Should fail with INVALID_QUARANTINE_PATH, not INVALID_RESTORE_PATH
+        result = handler.restore_from_quarantine(str(outside_file), "/etc/malicious.conf")
+
+        assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+
+
+class TestDeleteFromQuarantinePathValidation:
+    """Tests for quarantine path validation in delete_from_quarantine()."""
+
+    def test_delete_rejects_quarantine_path_outside_dir(self, tmp_path):
+        """Test that delete_from_quarantine rejects paths outside quarantine."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine
+        outside_file = tmp_path / "outside" / "important.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("important content")
+
+        # Try to delete file outside quarantine
+        result = handler.delete_from_quarantine(str(outside_file))
+
+        assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+        assert result.error_message is not None
+        assert "not inside quarantine directory" in result.error_message
+        # Verify file still exists
+        assert outside_file.exists()
+
+    def test_delete_rejects_symlink_quarantine_path(self, tmp_path):
+        """Test that delete_from_quarantine rejects symlink paths."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a real file outside quarantine
+        outside_file = tmp_path / "outside" / "important.txt"
+        outside_file.parent.mkdir()
+        outside_file.write_text("important content")
+
+        # Create a symlink inside quarantine pointing outside
+        symlink_path = quarantine_dir / "symlink_to_important"
+        try:
+            symlink_path.symlink_to(outside_file)
+
+            result = handler.delete_from_quarantine(str(symlink_path))
+
+            assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+            assert "symlink" in result.error_message.lower()
+            # Verify the target file still exists
+            assert outside_file.exists()
+        finally:
+            if symlink_path.is_symlink():
+                symlink_path.unlink()
+
+    def test_delete_rejects_path_traversal(self, tmp_path):
+        """Test that delete_from_quarantine rejects .. traversal paths."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file outside quarantine
+        outside_file = tmp_path / "important.txt"
+        outside_file.write_text("important content")
+
+        # Try to delete via .. traversal
+        traversal_path = str(quarantine_dir / ".." / "important.txt")
+        result = handler.delete_from_quarantine(traversal_path)
+
+        assert result.status == FileOperationStatus.INVALID_QUARANTINE_PATH
+        assert "not inside quarantine directory" in result.error_message
+        # Verify file still exists
+        assert outside_file.exists()
+
+    def test_delete_accepts_valid_quarantine_path(self, tmp_path):
+        """Test that delete_from_quarantine accepts valid paths inside quarantine."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir()
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a file inside quarantine
+        quarantine_file = quarantine_dir / "abc123_malware.exe"
+        quarantine_file.write_text("fake quarantined content")
+
+        result = handler.delete_from_quarantine(str(quarantine_file))
+
+        assert result.status == FileOperationStatus.SUCCESS
+        assert not quarantine_file.exists()

@@ -30,6 +30,7 @@ class FileOperationStatus(Enum):
     ALREADY_EXISTS = "already_exists"
     DISK_FULL = "disk_full"
     INVALID_RESTORE_PATH = "invalid_restore_path"
+    INVALID_QUARANTINE_PATH = "invalid_quarantine_path"
 
 
 @dataclass
@@ -363,6 +364,72 @@ class SecureFileHandler:
         # Path passed all security checks
         return (True, None)
 
+    def _validate_quarantine_path(self, quarantine_path: str) -> tuple[bool, str | None]:
+        """
+        Validate that a path is inside the quarantine directory.
+
+        Ensures the quarantine path:
+        1. Is not empty
+        2. Is not a symlink (prevents symlink attacks)
+        3. Resolves to a location inside self._quarantine_dir
+
+        This validation prevents attacks where a caller could pass an arbitrary
+        filesystem path to restore_from_quarantine or delete_from_quarantine,
+        potentially accessing or deleting files outside the quarantine directory.
+
+        Args:
+            quarantine_path: The quarantine path to validate
+
+        Returns:
+            Tuple of (is_valid, error_message):
+            - (True, None) if path is a valid quarantine path
+            - (False, error_message) if path is invalid
+
+        Example:
+            >>> handler = SecureFileHandler("/home/user/.local/share/clamui/quarantine")
+            >>> is_valid, error = handler._validate_quarantine_path(
+            ...     "/home/user/.local/share/clamui/quarantine/abc123_file.txt"
+            ... )
+            >>> if is_valid:
+            ...     print("Path is valid quarantine path")
+        """
+        # Check for empty path
+        if not quarantine_path or not quarantine_path.strip():
+            return (False, "Quarantine path cannot be empty")
+
+        # Convert to Path object
+        try:
+            path_obj = Path(quarantine_path)
+        except (ValueError, TypeError) as e:
+            return (False, f"Invalid path format: {e}")
+
+        # Security check: Reject symlinks to prevent symlink attacks
+        # A symlink could point outside the quarantine directory
+        if path_obj.is_symlink():
+            return (
+                False,
+                f"Quarantine path cannot be a symlink: {quarantine_path}",
+            )
+
+        # Resolve the path to handle .. and get absolute path
+        try:
+            resolved_path = path_obj.resolve()
+            resolved_quarantine_dir = self._quarantine_dir.resolve()
+        except (OSError, RuntimeError) as e:
+            return (False, f"Cannot resolve quarantine path: {e}")
+
+        # Check if the resolved path is inside the quarantine directory
+        try:
+            resolved_path.relative_to(resolved_quarantine_dir)
+            # If we get here, the path IS inside the quarantine directory
+            return (True, None)
+        except ValueError:
+            # Path is not inside the quarantine directory
+            return (
+                False,
+                f"Path is not inside quarantine directory: {quarantine_path}",
+            )
+
     def move_to_quarantine(
         self, source_path: str, threat_name: str | None = None
     ) -> FileOperationResult:
@@ -572,6 +639,18 @@ class SecureFileHandler:
         quarantine_path_obj = Path(quarantine_path)
 
         with self._lock:
+            # Validate quarantine source path is inside quarantine directory
+            is_valid, validation_error = self._validate_quarantine_path(quarantine_path)
+            if not is_valid:
+                return FileOperationResult(
+                    status=FileOperationStatus.INVALID_QUARANTINE_PATH,
+                    source_path=quarantine_path,
+                    destination_path=original_path,
+                    file_size=0,
+                    file_hash="",
+                    error_message=validation_error,
+                )
+
             # Validate restore destination path
             is_valid, validation_error = self.validate_restore_path(original_path)
             if not is_valid:
@@ -764,6 +843,18 @@ class SecureFileHandler:
         quarantine_path_obj = Path(quarantine_path)
 
         with self._lock:
+            # Validate quarantine path is inside quarantine directory
+            is_valid, validation_error = self._validate_quarantine_path(quarantine_path)
+            if not is_valid:
+                return FileOperationResult(
+                    status=FileOperationStatus.INVALID_QUARANTINE_PATH,
+                    source_path=quarantine_path,
+                    destination_path=None,
+                    file_size=0,
+                    file_hash="",
+                    error_message=validation_error,
+                )
+
             # Check if file exists
             if not quarantine_path_obj.exists():
                 return FileOperationResult(

@@ -4,9 +4,13 @@ Notification manager module for ClamUI providing GNOME desktop notifications.
 Uses Gio.Notification API for native GNOME integration.
 """
 
+import logging
+
 from gi.repository import Gio
 
 from .settings_manager import SettingsManager
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationManager:
@@ -291,9 +295,10 @@ class NotificationManager:
             # Send the notification
             self._app.send_notification(notification_id, notification)
             return True
-        except Exception:
-            # Silent failure if notifications unavailable
+        except Exception as e:
+            # Log failure if notifications unavailable
             # This handles cases where D-Bus notification service isn't running
+            logger.debug("Failed to send notification '%s': %s", notification_id, e)
             return False
 
     def withdraw_notification(self, notification_id: str) -> bool:
@@ -312,7 +317,8 @@ class NotificationManager:
         try:
             self._app.withdraw_notification(notification_id)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to withdraw notification '%s': %s", notification_id, e)
             return False
 
     @property

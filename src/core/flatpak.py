@@ -9,12 +9,15 @@ This module provides functions for:
 - Finding binaries on the host system when running in Flatpak
 """
 
+import logging
 import os
 import re
 import shutil
 import subprocess
 import threading
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Flatpak detection cache (None = not checked, True/False = result)
 _flatpak_detected: bool | None = None
@@ -99,7 +102,8 @@ def which_host_command(binary: str) -> str | None:
             if result.returncode == 0:
                 return result.stdout.strip()
             return None
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to find binary '%s' on host: %s", binary, e)
             return None
     return shutil.which(binary)
 
@@ -134,9 +138,9 @@ def _resolve_portal_path_via_xattr(portal_path: str) -> str | None:
             except (OSError, KeyError):
                 pass
     except ImportError:
-        pass  # xattr module not available
-    except Exception:
-        pass
+        logger.debug("xattr module not available for portal path resolution")
+    except Exception as e:
+        logger.debug("Failed to resolve portal path via xattr: %s", e)
 
     return None
 
@@ -177,11 +181,11 @@ def _resolve_portal_path_via_gio(portal_path: str) -> str | None:
             xattr_path = info.get_attribute_string("xattr::document-portal-path")
             if xattr_path:
                 return xattr_path
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("GIO file info query failed: %s", e)
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to resolve portal path via GIO: %s", e)
 
     return None
 
@@ -238,8 +242,8 @@ def _resolve_portal_path_via_dbus(portal_path: str) -> str | None:
 
             if host_path:
                 return host_path
-    except Exception:
-        pass  # D-Bus query failed silently
+    except Exception as e:
+        logger.debug("D-Bus portal path resolution failed: %s", e)
 
     return None
 
@@ -317,8 +321,8 @@ def format_flatpak_portal_path(path: str) -> str:
                 home = str(Path.home())
                 if resolved.startswith(home):
                     return "~" + resolved[len(home) :]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to get home directory for path formatting: %s", e)
             return resolved
 
         # All resolution methods failed - show just the name with indicator

@@ -7,6 +7,10 @@ This module provides functions for:
 - Supporting both regular desktop and Flatpak environments
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def copy_to_clipboard(text: str) -> bool:
     """
@@ -53,5 +57,6 @@ def copy_to_clipboard(text: str) -> bool:
 
         return True
 
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to copy to clipboard: %s", e)
         return False

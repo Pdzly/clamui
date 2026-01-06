@@ -10,6 +10,7 @@ Orchestrates the QuarantineDatabase and SecureFileHandler to provide:
 - Async operations for UI integration
 """
 
+import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ from .file_handler import (
     FileOperationStatus,
     SecureFileHandler,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class QuarantineStatus(Enum):
@@ -419,7 +422,8 @@ class QuarantineManager:
         def _get_entries_thread():
             try:
                 entries = self.get_all_entries()
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get quarantine entries async: %s", e)
                 entries = []
             GLib.idle_add(callback, entries)
 
@@ -475,9 +479,11 @@ class QuarantineManager:
             for entry in old_entries:
                 try:
                     self._file_handler.delete_from_quarantine(entry.quarantine_path)
-                except Exception:
+                except Exception as e:
                     # Continue even if file deletion fails
-                    pass
+                    logger.warning(
+                        "Failed to delete quarantined file %s: %s", entry.quarantine_path, e
+                    )
 
             # Remove from database
             return self._database.cleanup_old_entries(days)

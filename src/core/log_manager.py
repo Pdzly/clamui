@@ -135,6 +135,7 @@ import contextlib
 import csv
 import io
 import json
+import logging
 import os
 import random
 import subprocess
@@ -151,6 +152,8 @@ from gi.repository import GLib
 
 from .sanitize import sanitize_log_line, sanitize_log_text
 from .utils import is_flatpak, which_host_command, wrap_host_command
+
+logger = logging.getLogger(__name__)
 
 
 class LogType(Enum):
@@ -494,9 +497,8 @@ class LogManager:
         """Ensure the log directory exists."""
         try:
             self._log_dir.mkdir(parents=True, exist_ok=True)
-        except (OSError, PermissionError):
-            # Handle silently - will fail on write operations
-            pass
+        except (OSError, PermissionError) as e:
+            logger.warning("Failed to create log directory %s: %s", self._log_dir, e)
 
     @property
     def _index_path(self) -> Path:
@@ -527,8 +529,8 @@ class LogManager:
                         return data
             # File doesn't exist or invalid structure - return empty index
             return {"version": 1, "entries": []}
-        except (OSError, json.JSONDecodeError, PermissionError):
-            # Handle file read errors and JSON parsing errors gracefully
+        except (OSError, json.JSONDecodeError, PermissionError) as e:
+            logger.debug("Failed to load log index: %s", e)
             return {"version": 1, "entries": []}
 
     def _save_index(self, index_data: dict) -> bool:
@@ -562,14 +564,15 @@ class LogManager:
                 temp_path_obj = Path(temp_path)
                 temp_path_obj.replace(self._index_path)
                 return True
-            except Exception:
+            except Exception as e:
                 # Clean up temp file on failure
+                logger.debug("Failed to save index, cleaning up temp file: %s", e)
                 with contextlib.suppress(OSError):
                     Path(temp_path).unlink(missing_ok=True)
                 raise
 
-        except Exception:
-            # Catch all exceptions (including OSError, PermissionError)
+        except Exception as e:
+            logger.warning("Failed to save log index: %s", e)
             return False
 
     def _validate_index(self, index_data: dict) -> bool:
@@ -628,8 +631,8 @@ class LogManager:
 
             return True
 
-        except Exception:
-            # On any error during validation, consider index invalid
+        except Exception as e:
+            logger.debug("Index validation error, treating as invalid: %s", e)
             return False
 
     def rebuild_index(self) -> bool:
@@ -680,8 +683,8 @@ class LogManager:
 
                 return self._save_index(index_data)
 
-            except Exception:
-                # Catch any unexpected errors
+            except Exception as e:
+                logger.warning("Failed to rebuild log index: %s", e)
                 return False
 
     def save_log(self, entry: LogEntry) -> bool:
@@ -708,13 +711,14 @@ class LogManager:
                         {"id": entry.id, "timestamp": entry.timestamp, "type": entry.type}
                     )
                     self._save_index(index_data)
-                except Exception:
+                except Exception as e:
                     # Index update failed, but log file was saved successfully
                     # Index can be rebuilt later if needed
-                    pass
+                    logger.debug("Index update failed after saving log: %s", e)
 
                 return True
-            except (OSError, PermissionError, json.JSONDecodeError):
+            except (OSError, PermissionError, json.JSONDecodeError) as e:
+                logger.warning("Failed to save log entry %s: %s", entry.id, e)
                 return False
 
     def get_logs(self, limit: int = 100, log_type: str | None = None) -> list[LogEntry]:
@@ -772,15 +776,16 @@ class LogManager:
                                         continue
                                 # Save the rebuilt index
                                 self._save_index({"version": 1, "entries": entries_list})
-                    except Exception:
+                    except Exception as e:
                         # If migration fails, continue normally - will fall back to full scan
-                        pass
+                        logger.debug("Index migration failed: %s", e)
 
             # Try optimized index-based approach first
             try:
                 index_data = self._load_index()
-            except Exception:
+            except Exception as e:
                 # Index loading failed - treat as if index doesn't exist
+                logger.debug("Index loading failed: %s", e)
                 index_data = {"version": 1, "entries": []}
 
             # Check if index has entries (not empty/corrupted)
@@ -788,8 +793,9 @@ class LogManager:
                 # Validate index before using it
                 try:
                     valid = self._validate_index(index_data)
-                except Exception:
+                except Exception as e:
                     # Validation raised exception - treat as invalid
+                    logger.debug("Index validation raised exception: %s", e)
                     valid = False
 
                 if not valid:
@@ -829,9 +835,9 @@ class LogManager:
                             index_data = {"version": 1, "entries": entries_list}
                             # Save the rebuilt index (best-effort)
                             self._save_index(index_data)
-                    except Exception:
+                    except Exception as e:
                         # If rebuild fails, continue with empty index (will fall back to full scan)
-                        pass
+                        logger.debug("Index rebuild in get_logs failed: %s", e)
 
                 # Now proceed with index-based retrieval if we have entries
                 if index_data.get("entries"):
@@ -868,9 +874,9 @@ class LogManager:
 
                         return entries
 
-                    except Exception:
+                    except Exception as e:
                         # Index-based approach failed, fall back to full scan
-                        pass
+                        logger.debug("Index-based retrieval failed, falling back: %s", e)
 
             # Fallback: full directory scan (original implementation)
             entries = []
@@ -923,9 +929,10 @@ class LogManager:
         def _load_logs_thread():
             try:
                 entries = self.get_logs(limit=limit, log_type=log_type)
-            except Exception:
+            except Exception as e:
                 # On any error, return empty list to ensure callback is always called
                 # This prevents loading state from getting stuck forever
+                logger.debug("Async log loading failed: %s", e)
                 entries = []
             # Schedule callback on main thread - always called to reset loading state
             GLib.idle_add(callback, entries)
@@ -951,8 +958,8 @@ class LogManager:
                     with open(log_file, encoding="utf-8") as f:
                         data = json.load(f)
                         return LogEntry.from_dict(data)
-            except (OSError, json.JSONDecodeError):
-                pass
+            except (OSError, json.JSONDecodeError) as e:
+                logger.debug("Failed to load log by id %s: %s", log_id, e)
         return None
 
     def delete_log(self, log_id: str) -> bool:
@@ -978,14 +985,14 @@ class LogManager:
                             entry for entry in index_data["entries"] if entry.get("id") != log_id
                         ]
                         self._save_index(index_data)
-                    except Exception:
+                    except Exception as e:
                         # Index update failed, but log file was deleted successfully
                         # Index can be rebuilt later if needed
-                        pass
+                        logger.debug("Index update failed after deleting log: %s", e)
 
                     return True
-            except OSError:
-                pass
+            except OSError as e:
+                logger.debug("Failed to delete log %s: %s", log_id, e)
         return False
 
     def clear_logs(self) -> bool:
@@ -1008,13 +1015,14 @@ class LogManager:
                 # Reset index to empty state (best-effort)
                 try:
                     self._save_index({"version": 1, "entries": []})
-                except Exception:
+                except Exception as e:
                     # Index reset failed, but log files were cleared successfully
                     # Index can be rebuilt later if needed
-                    pass
+                    logger.debug("Index reset failed after clearing logs: %s", e)
 
                 return True
-            except OSError:
+            except OSError as e:
+                logger.warning("Failed to clear logs: %s", e)
                 return False
 
     def get_log_count(self) -> int:
@@ -1042,7 +1050,8 @@ class LogManager:
                 # Fallback: count log files directly (excluding index file)
                 log_files = [f for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME]
                 return len(log_files)
-            except OSError:
+            except OSError as e:
+                logger.debug("Failed to get log count: %s", e)
                 return 0
 
     def export_logs_to_csv(self, entries: list[LogEntry] | None = None) -> str:
@@ -1282,7 +1291,8 @@ class LogManager:
                     ["flatpak-spawn", "--host", "test", "-f", path], capture_output=True, timeout=5
                 )
                 return result.returncode == 0
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to check host file existence for %s: %s", path, e)
                 return False
         return Path(path).exists()
 

@@ -5,6 +5,7 @@ Supports systemd timers (primary) and cron (fallback) for persistent
 scheduling that runs even when the GUI application is closed.
 """
 
+import logging
 import os
 import shlex
 import subprocess
@@ -14,6 +15,8 @@ from enum import Enum
 from pathlib import Path
 
 from .utils import is_flatpak, which_host_command, wrap_host_command
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_target_paths(targets: list[str]) -> str | None:
@@ -126,9 +129,11 @@ def _check_systemd_available() -> bool:
             # systemctl --user status returns 0 even if no units
             # It returns non-zero if user session isn't available
             _systemd_available = result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError):
+        except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError) as e:
+            logger.debug("Systemd check failed with expected error: %s", e)
             _systemd_available = False
-        except Exception:
+        except Exception as e:
+            logger.debug("Systemd availability check failed: %s", e)
             _systemd_available = False
 
         return _systemd_available
@@ -486,7 +491,11 @@ class Scheduler:
                     timeout=5,
                 )
                 return result.returncode == 0
-            except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                logger.debug("Path existence check failed for %s: %s", path, e)
+                return False
+            except Exception as e:
+                logger.debug("Unexpected error checking path existence for %s: %s", path, e)
                 return False
         return path.exists()
 

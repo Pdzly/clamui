@@ -181,6 +181,27 @@ class TestCheckSymlinkSafety:
         assert message is not None
         assert "symlink" in message.lower()
 
+    def test_check_symlink_safety_symlinked_parent_escapes(self, tmp_path):
+        """Test check_symlink_safety rejects paths with symlinked parent into protected dir."""
+        user_dir = tmp_path / "user"
+        user_dir.mkdir()
+        symlink_dir = user_dir / "etc_link"
+        symlink_dir.symlink_to("/etc")
+
+        escaped_path = symlink_dir / "passwd"
+        is_safe, message = check_symlink_safety(escaped_path)
+        assert is_safe is False
+        assert message is not None
+        assert "protected directory" in message.lower()
+
+    def test_check_symlink_safety_user_dir_traversal_to_protected(self):
+        """Test check_symlink_safety rejects user path resolving into protected dir."""
+        escaped_path = Path("/tmp/../etc/passwd")
+        is_safe, message = check_symlink_safety(escaped_path)
+        assert is_safe is False
+        assert message is not None
+        assert "protected directory" in message.lower()
+
 
 class TestValidatePath:
     """Tests for the validate_path function."""

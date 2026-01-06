@@ -307,8 +307,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_area.set_hexpand(True)
         main_box.append(self._content_area)
 
-        # Set the main box as window content
-        self.set_content(main_box)
+        # Add toast overlay for in-app notifications
+        self._toast_overlay = Adw.ToastOverlay()
+        self._toast_overlay.set_child(main_box)
+        self.set_content(self._toast_overlay)
 
         # Show placeholder content (will be replaced with ScanView in integration)
         self._show_placeholder()
@@ -494,6 +496,15 @@ class MainWindow(Adw.ApplicationWindow):
         view.set_vexpand(True)
         view.set_hexpand(True)
         self._content_area.append(view)
+
+    def add_toast(self, toast: Adw.Toast) -> None:
+        """
+        Add a toast notification to the window.
+
+        Args:
+            toast: The Adw.Toast instance to display
+        """
+        self._toast_overlay.add_toast(toast)
 
     @property
     def content_area(self) -> Gtk.Box:

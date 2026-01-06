@@ -392,6 +392,21 @@ class ScanView(Gtk.Box):
         self._status_banner.set_title(message)
         set_status_class(self._status_banner, StatusLevel.ERROR)
         self._status_banner.set_revealed(True)
+        self._show_toast(message)
+
+    def _show_toast(self, message: str) -> None:
+        """
+        Show a toast notification for user feedback.
+
+        Args:
+            message: The message to display in the toast
+        """
+        root = self.get_root()
+        if root is None:
+            return
+        if hasattr(root, "add_toast"):
+            toast = Adw.Toast.new(message)
+            root.add_toast(toast)
 
     def _create_profile_section(self):
         """Create the scan profile selector section."""

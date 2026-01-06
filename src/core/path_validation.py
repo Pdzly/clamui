@@ -21,8 +21,8 @@ def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
     """
     Check if a path involves symlinks and if they are safe.
 
-    Detects symlinks that could be used for path traversal attacks by
-    checking if the resolved path escapes common protected directories.
+    Detects symlinks or user paths that could be used for path traversal
+    attacks by checking if the resolved path escapes common protected directories.
 
     Args:
         path: Path object to check
@@ -34,17 +34,6 @@ def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
         - (False, error_message) if path is potentially dangerous
     """
     try:
-        # Check if the path itself is a symlink
-        if not path.is_symlink():
-            return (True, None)
-
-        # Get the resolved target
-        resolved = path.resolve()
-
-        # Check if the symlink target exists
-        if not resolved.exists():
-            return (False, f"Symlink target does not exist: {path} -> {resolved}")
-
         # Define protected system directories that symlinks should not escape to
         # when the original path is in a user directory
         protected_dirs = [
@@ -59,23 +48,48 @@ def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
             Path("/root"),
         ]
 
-        # Get the original path's parent directory
-        original_parent = path.parent.resolve()
-
         # If the original path is in a user-writable location (like /home or /tmp),
-        # check if the symlink escapes to a protected system directory
+        # check if the resolved path escapes to a protected system directory
         user_dirs = [Path("/home"), Path("/tmp"), Path("/var/tmp")]
-        is_in_user_dir = any(
-            str(original_parent).startswith(str(user_dir)) for user_dir in user_dirs
-        )
+
+        def is_path_under(candidate: Path, base: Path) -> bool:
+            candidate_parts = candidate.parts
+            base_parts = base.parts
+            if len(candidate_parts) < len(base_parts):
+                return False
+            return candidate_parts[: len(base_parts)] == base_parts
+
+        raw_path = path.expanduser()
+        if not raw_path.is_absolute():
+            raw_path = Path.cwd() / raw_path
+        raw_parent = raw_path.parent
+        is_in_user_dir = any(is_path_under(raw_parent, user_dir) for user_dir in user_dirs)
+
+        # Check if the path itself is a symlink
+        is_symlink = path.is_symlink()
+        if not is_symlink and not is_in_user_dir:
+            return (True, None)
+
+        # Get the resolved target (follows symlinked parents and '..' traversal)
+        resolved = path.resolve()
+
+        # Check if the symlink target exists
+        if is_symlink and not resolved.exists():
+            return (False, f"Symlink target does not exist: {path} -> {resolved}")
 
         if is_in_user_dir:
             for protected in protected_dirs:
-                if str(resolved).startswith(str(protected)):
-                    return (False, f"Symlink escapes to protected directory: {path} -> {resolved}")
+                if is_path_under(resolved, protected):
+                    return (
+                        False,
+                        f"Path resolves to protected directory: {path} -> {resolved}",
+                    )
 
         # Symlink is present but appears safe
-        return (True, f"Path is a symlink: {path} -> {resolved}")
+        if is_symlink:
+            return (True, f"Path is a symlink: {path} -> {resolved}")
+
+        return (True, None)
 
     except (OSError, RuntimeError) as e:
         return (False, f"Error checking symlink: {str(e)}")

@@ -350,3 +350,210 @@ class TestDaemonScannerFilterExcludedThreats:
         # Should still be infected since exclusion is disabled
         assert filtered.status == scan_status_class.INFECTED
         assert filtered.infected_count == 1
+
+    def test_filter_excludes_profile_path_subdirectory(
+        self, daemon_scanner_class, scan_status_class, tmp_path
+    ):
+        """Test that threats under excluded directory paths are filtered."""
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = []  # No global exclusions
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        # Create a real directory structure for path resolution
+        excluded_dir = tmp_path / "excluded"
+        excluded_dir.mkdir()
+        threat_file = excluded_dir / "subdir" / "virus.exe"
+        threat_file.parent.mkdir(parents=True)
+        threat_file.touch()
+
+        from src.core.scanner import ScanResult, ThreatDetail
+
+        threat = ThreatDetail(
+            file_path=str(threat_file),
+            threat_name="Win.Trojan.Test",
+            category="Trojan",
+            severity="high",
+        )
+
+        result = ScanResult(
+            status=scan_status_class.INFECTED,
+            path=str(tmp_path),
+            stdout="",
+            stderr="",
+            exit_code=1,
+            infected_files=[str(threat_file)],
+            scanned_files=1,
+            scanned_dirs=0,
+            infected_count=1,
+            error_message=None,
+            threat_details=[threat],
+        )
+
+        profile_exclusions = {"paths": [str(excluded_dir)], "patterns": []}
+        filtered = scanner._filter_excluded_threats(result, profile_exclusions)
+
+        # Should be clean since threat is under excluded directory
+        assert filtered.status == scan_status_class.CLEAN
+        assert filtered.infected_count == 0
+        assert len(filtered.threat_details) == 0
+
+    def test_filter_excludes_profile_path_with_tilde(
+        self, daemon_scanner_class, scan_status_class, monkeypatch, tmp_path
+    ):
+        """Test that tilde paths are expanded correctly."""
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = []
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        # Create directory structure and mock home expansion
+        fake_home = tmp_path / "fakehome"
+        cache_dir = fake_home / ".cache"
+        cache_dir.mkdir(parents=True)
+        threat_file = cache_dir / "malware.exe"
+        threat_file.touch()
+
+        # Patch Path.home() and expanduser
+        monkeypatch.setenv("HOME", str(fake_home))
+
+        from src.core.scanner import ScanResult, ThreatDetail
+
+        threat = ThreatDetail(
+            file_path=str(threat_file),
+            threat_name="Win.Trojan.Test",
+            category="Trojan",
+            severity="high",
+        )
+
+        result = ScanResult(
+            status=scan_status_class.INFECTED,
+            path=str(fake_home),
+            stdout="",
+            stderr="",
+            exit_code=1,
+            infected_files=[str(threat_file)],
+            scanned_files=1,
+            scanned_dirs=0,
+            infected_count=1,
+            error_message=None,
+            threat_details=[threat],
+        )
+
+        profile_exclusions = {"paths": ["~/.cache"], "patterns": []}
+        filtered = scanner._filter_excluded_threats(result, profile_exclusions)
+
+        assert filtered.status == scan_status_class.CLEAN
+        assert filtered.infected_count == 0
+
+    def test_filter_keeps_threats_outside_excluded_paths(
+        self, daemon_scanner_class, scan_status_class, tmp_path
+    ):
+        """Test that threats outside excluded paths are preserved."""
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = []
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        # Create directories
+        excluded_dir = tmp_path / "excluded"
+        excluded_dir.mkdir()
+        other_dir = tmp_path / "other"
+        other_dir.mkdir()
+        threat_file = other_dir / "virus.exe"
+        threat_file.touch()
+
+        from src.core.scanner import ScanResult, ThreatDetail
+
+        threat = ThreatDetail(
+            file_path=str(threat_file),
+            threat_name="Win.Trojan.Test",
+            category="Trojan",
+            severity="high",
+        )
+
+        result = ScanResult(
+            status=scan_status_class.INFECTED,
+            path=str(tmp_path),
+            stdout="",
+            stderr="",
+            exit_code=1,
+            infected_files=[str(threat_file)],
+            scanned_files=1,
+            scanned_dirs=0,
+            infected_count=1,
+            error_message=None,
+            threat_details=[threat],
+        )
+
+        profile_exclusions = {"paths": [str(excluded_dir)], "patterns": []}
+        filtered = scanner._filter_excluded_threats(result, profile_exclusions)
+
+        # Should still be infected since threat is not under excluded dir
+        assert filtered.status == scan_status_class.INFECTED
+        assert filtered.infected_count == 1
+        assert len(filtered.threat_details) == 1
+
+    def test_filter_combines_global_and_profile_exclusions(
+        self, daemon_scanner_class, scan_status_class, tmp_path
+    ):
+        """Test that both global patterns and profile paths work together."""
+        mock_settings = MagicMock()
+        mock_settings.get.return_value = [
+            {"pattern": "*.tmp", "type": "file", "enabled": True},
+        ]
+        scanner = daemon_scanner_class(settings_manager=mock_settings)
+
+        # Create directories and files
+        excluded_dir = tmp_path / "excluded"
+        excluded_dir.mkdir()
+        threat1 = excluded_dir / "virus.exe"
+        threat1.touch()
+        threat2 = tmp_path / "temp.tmp"
+        threat2.touch()
+        threat3 = tmp_path / "real_virus.exe"
+        threat3.touch()
+
+        from src.core.scanner import ScanResult, ThreatDetail
+
+        threats = [
+            ThreatDetail(
+                file_path=str(threat1),
+                threat_name="Trojan1",
+                category="Trojan",
+                severity="high",
+            ),
+            ThreatDetail(
+                file_path=str(threat2),
+                threat_name="Trojan2",
+                category="Trojan",
+                severity="high",
+            ),
+            ThreatDetail(
+                file_path=str(threat3),
+                threat_name="Trojan3",
+                category="Trojan",
+                severity="high",
+            ),
+        ]
+
+        result = ScanResult(
+            status=scan_status_class.INFECTED,
+            path=str(tmp_path),
+            stdout="",
+            stderr="",
+            exit_code=1,
+            infected_files=[str(threat1), str(threat2), str(threat3)],
+            scanned_files=3,
+            scanned_dirs=0,
+            infected_count=3,
+            error_message=None,
+            threat_details=threats,
+        )
+
+        profile_exclusions = {"paths": [str(excluded_dir)], "patterns": []}
+        filtered = scanner._filter_excluded_threats(result, profile_exclusions)
+
+        # threat1 filtered by profile path, threat2 by global pattern
+        # Only threat3 should remain
+        assert filtered.status == scan_status_class.INFECTED
+        assert filtered.infected_count == 1
+        assert len(filtered.threat_details) == 1
+        assert filtered.threat_details[0].file_path == str(threat3)

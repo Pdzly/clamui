@@ -545,13 +545,21 @@ class DaemonScanner:
                 if pattern:
                     exclude_patterns.append(pattern)
 
-        # Profile exclusions (patterns only, paths are for directories)
+        # Profile exclusions - patterns
         if profile_exclusions:
             for pattern in profile_exclusions.get("patterns", []):
                 if pattern:
                     exclude_patterns.append(pattern)
 
-        if not exclude_patterns:
+        # Profile exclusions - directory paths
+        exclude_paths: list[Path] = []
+        if profile_exclusions:
+            for path_str in profile_exclusions.get("paths", []):
+                if path_str:
+                    path = Path(path_str).expanduser().resolve()
+                    exclude_paths.append(path)
+
+        if not exclude_patterns and not exclude_paths:
             return result
 
         # Filter threats
@@ -571,6 +579,19 @@ class DaemonScanner:
                 if file_path == pattern or fnmatch.fnmatch(file_path, pattern):
                     is_excluded = True
                     break
+
+            # Check against excluded directory paths
+            if not is_excluded and exclude_paths:
+                resolved_file = Path(file_path).resolve()
+                resolved_file_str = str(resolved_file)
+                for excl_path in exclude_paths:
+                    excl_path_str = str(excl_path)
+                    # Match if file is the excluded path or under it
+                    if resolved_file == excl_path or resolved_file_str.startswith(
+                        excl_path_str + "/"
+                    ):
+                        is_excluded = True
+                        break
 
             if not is_excluded:
                 filtered_threats.append(threat)

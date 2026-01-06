@@ -39,6 +39,7 @@ class QuarantineEntry:
     detection_date: str  # ISO format string for portability
     file_size: int
     file_hash: str  # SHA256 hash for integrity verification
+    original_permissions: int  # Original file permissions (st_mode & 0o777)
 
     def to_dict(self) -> dict:
         """Convert QuarantineEntry to dictionary."""
@@ -51,7 +52,8 @@ class QuarantineEntry:
 
         Args:
             row: Database row tuple (id, original_path, quarantine_path,
-                 threat_name, detection_date, file_size, file_hash)
+                 threat_name, detection_date, file_size, file_hash,
+                 original_permissions)
 
         Returns:
             New QuarantineEntry instance
@@ -64,6 +66,7 @@ class QuarantineEntry:
             detection_date=row[4],
             file_size=row[5],
             file_hash=row[6],
+            original_permissions=row[7] if len(row) > 7 else 0o644,
         )
 
 
@@ -210,7 +213,8 @@ class QuarantineDatabase:
                             threat_name TEXT NOT NULL,
                             detection_date TEXT NOT NULL,
                             file_size INTEGER NOT NULL,
-                            file_hash TEXT NOT NULL
+                            file_hash TEXT NOT NULL,
+                            original_permissions INTEGER NOT NULL DEFAULT 420
                         )
                         """
                     )
@@ -227,6 +231,19 @@ class QuarantineDatabase:
                         ON quarantine(original_path)
                         """
                     )
+
+                    # Migration: Add original_permissions column if it doesn't exist
+                    # This handles existing databases that were created before this column
+                    cursor = conn.execute("PRAGMA table_info(quarantine)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    if "original_permissions" not in columns:
+                        conn.execute(
+                            """
+                            ALTER TABLE quarantine
+                            ADD COLUMN original_permissions INTEGER NOT NULL DEFAULT 420
+                            """
+                        )
+
                     conn.commit()
 
                     # SECURITY: Secure database file permissions after schema creation
@@ -247,6 +264,7 @@ class QuarantineDatabase:
         threat_name: str,
         file_size: int,
         file_hash: str,
+        original_permissions: int = 0o644,
     ) -> int | None:
         """
         Add a new quarantine entry to the database.
@@ -257,6 +275,7 @@ class QuarantineDatabase:
             threat_name: Name of the detected threat
             file_size: Size of the file in bytes
             file_hash: SHA256 hash of the file for integrity verification
+            original_permissions: Original file permissions (st_mode & 0o777)
 
         Returns:
             The ID of the newly created entry, or None if failed
@@ -267,8 +286,9 @@ class QuarantineDatabase:
                     cursor = conn.execute(
                         """
                         INSERT INTO quarantine
-                        (original_path, quarantine_path, threat_name, detection_date, file_size, file_hash)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        (original_path, quarantine_path, threat_name, detection_date,
+                         file_size, file_hash, original_permissions)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             original_path,
@@ -277,6 +297,7 @@ class QuarantineDatabase:
                             datetime.now().isoformat(),
                             file_size,
                             file_hash,
+                            original_permissions,
                         ),
                     )
                     conn.commit()
@@ -300,7 +321,7 @@ class QuarantineDatabase:
                     cursor = conn.execute(
                         """
                         SELECT id, original_path, quarantine_path, threat_name,
-                               detection_date, file_size, file_hash
+                               detection_date, file_size, file_hash, original_permissions
                         FROM quarantine WHERE id = ?
                         """,
                         (entry_id,),
@@ -328,7 +349,7 @@ class QuarantineDatabase:
                     cursor = conn.execute(
                         """
                         SELECT id, original_path, quarantine_path, threat_name,
-                               detection_date, file_size, file_hash
+                               detection_date, file_size, file_hash, original_permissions
                         FROM quarantine WHERE original_path = ?
                         """,
                         (original_path,),
@@ -354,7 +375,7 @@ class QuarantineDatabase:
                     cursor = conn.execute(
                         """
                         SELECT id, original_path, quarantine_path, threat_name,
-                               detection_date, file_size, file_hash
+                               detection_date, file_size, file_hash, original_permissions
                         FROM quarantine
                         ORDER BY detection_date DESC
                         """
@@ -442,7 +463,7 @@ class QuarantineDatabase:
                     cursor = conn.execute(
                         """
                         SELECT id, original_path, quarantine_path, threat_name,
-                               detection_date, file_size, file_hash
+                               detection_date, file_size, file_hash, original_permissions
                         FROM quarantine
                         WHERE detection_date < ?
                         ORDER BY detection_date ASC

@@ -43,6 +43,7 @@ class FileOperationResult:
     file_size: int
     file_hash: str
     error_message: str | None
+    original_permissions: int = 0o644  # Original file permissions (st_mode & 0o777)
 
     @property
     def is_success(self) -> bool:
@@ -186,6 +187,27 @@ class SecureFileHandler:
             return (-1, f"Permission denied accessing file: {file_path}")
         except OSError as e:
             return (-1, f"Error accessing file: {e}")
+
+    def get_file_permissions(self, file_path: Path) -> tuple[int, str | None]:
+        """
+        Get the permissions of a file (st_mode & 0o777).
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            Tuple of (permissions, error_message):
+            - (permissions, None) if successful
+            - (0o644, error_message) if failed (returns safe default)
+        """
+        try:
+            return (file_path.stat().st_mode & 0o777, None)
+        except FileNotFoundError:
+            return (0o644, f"File not found: {file_path}")
+        except PermissionError:
+            return (0o644, f"Permission denied accessing file: {file_path}")
+        except OSError as e:
+            return (0o644, f"Error accessing file: {e}")
 
     def verify_file_integrity(self, file_path: str, expected_hash: str) -> tuple[bool, str | None]:
         """
@@ -512,6 +534,9 @@ class SecureFileHandler:
                     error_message=size_error,
                 )
 
+            # Get original file permissions before quarantine
+            original_permissions, _ = self.get_file_permissions(source)
+
             # Calculate hash before moving
             file_hash, hash_error = self.calculate_hash(source)
             if hash_error:
@@ -577,6 +602,7 @@ class SecureFileHandler:
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=None,
+                    original_permissions=original_permissions,
                 )
 
             except PermissionError as e:
@@ -608,7 +634,10 @@ class SecureFileHandler:
                 )
 
     def restore_from_quarantine(
-        self, quarantine_path: str, original_path: str
+        self,
+        quarantine_path: str,
+        original_path: str,
+        original_permissions: int = 0o644,
     ) -> FileOperationResult:
         """
         Restore a file from quarantine to its original or specified location.
@@ -623,6 +652,7 @@ class SecureFileHandler:
         Args:
             quarantine_path: Path to the quarantined file
             original_path: Original or target path for restoration
+            original_permissions: Original file permissions to restore (st_mode & 0o777)
 
         Returns:
             FileOperationResult with operation status and details
@@ -631,7 +661,8 @@ class SecureFileHandler:
             >>> handler = SecureFileHandler()
             >>> result = handler.restore_from_quarantine(
             ...     "/home/user/.local/share/clamui/quarantine/abc123_file.txt",
-            ...     "/home/user/file.txt"
+            ...     "/home/user/file.txt",
+            ...     0o755  # Restore executable permissions
             ... )
             >>> if result.is_success:
             ...     print(f"Restored to: {result.destination_path}")
@@ -747,6 +778,9 @@ class SecureFileHandler:
                 # Atomic move operation
                 shutil.move(quarantine_path, original_path)
 
+                # Restore original file permissions
+                os.chmod(original_path, original_permissions)
+
                 return FileOperationResult(
                     status=FileOperationStatus.SUCCESS,
                     source_path=quarantine_path,
@@ -754,6 +788,7 @@ class SecureFileHandler:
                     file_size=file_size,
                     file_hash=file_hash or "",
                     error_message=None,
+                    original_permissions=original_permissions,
                 )
 
             except PermissionError as e:

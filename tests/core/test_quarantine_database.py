@@ -29,6 +29,7 @@ class TestQuarantineEntry:
             detection_date="2024-01-15T10:30:00",
             file_size=1024,
             file_hash="abc123def456",
+            original_permissions=0o755,
         )
         data = entry.to_dict()
 
@@ -39,6 +40,7 @@ class TestQuarantineEntry:
         assert data["detection_date"] == "2024-01-15T10:30:00"
         assert data["file_size"] == 1024
         assert data["file_hash"] == "abc123def456"
+        assert data["original_permissions"] == 0o755
 
     def test_from_row(self):
         """Test QuarantineEntry.from_row deserialization."""
@@ -50,6 +52,7 @@ class TestQuarantineEntry:
             "2024-02-20T14:00:00",
             2048,
             "sha256hashvalue",
+            0o644,
         )
         entry = QuarantineEntry.from_row(row)
 
@@ -60,6 +63,24 @@ class TestQuarantineEntry:
         assert entry.detection_date == "2024-02-20T14:00:00"
         assert entry.file_size == 2048
         assert entry.file_hash == "sha256hashvalue"
+        assert entry.original_permissions == 0o644
+
+    def test_from_row_without_permissions_uses_default(self):
+        """Test QuarantineEntry.from_row handles missing permissions (migration)."""
+        # Simulate a row from an old database without the permissions column
+        row = (
+            42,
+            "/original/path/file.exe",
+            "/quarantine/path/uuid.quar",
+            "Eicar-Test-Signature",
+            "2024-02-20T14:00:00",
+            2048,
+            "sha256hashvalue",
+        )
+        entry = QuarantineEntry.from_row(row)
+
+        # Should use default permissions of 0o644
+        assert entry.original_permissions == 0o644
 
     def test_roundtrip_serialization(self):
         """Test that to_dict and from_row are consistent."""
@@ -71,6 +92,7 @@ class TestQuarantineEntry:
             detection_date="2024-03-10T08:15:30",
             file_size=4096,
             file_hash="roundtriphash123",
+            original_permissions=0o755,
         )
         data = original.to_dict()
 
@@ -83,6 +105,7 @@ class TestQuarantineEntry:
             data["detection_date"],
             data["file_size"],
             data["file_hash"],
+            data["original_permissions"],
         )
         restored = QuarantineEntry.from_row(row)
 
@@ -93,6 +116,7 @@ class TestQuarantineEntry:
         assert restored.detection_date == original.detection_date
         assert restored.file_size == original.file_size
         assert restored.file_hash == original.file_hash
+        assert restored.original_permissions == original.original_permissions
 
 
 class TestQuarantineDatabase:

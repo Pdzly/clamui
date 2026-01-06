@@ -47,6 +47,7 @@ class TestQuarantineResult:
             detection_date="2024-01-01T10:00:00",
             file_size=1024,
             file_hash="abc123",
+            original_permissions=0o644,
         )
         result = QuarantineResult(
             status=QuarantineStatus.SUCCESS,
@@ -413,6 +414,131 @@ class TestQuarantineManagerRestore:
         assert result.is_success is False
         assert result.status == QuarantineStatus.INVALID_RESTORE_PATH
         assert "/var" in result.error_message
+
+
+class TestQuarantineManagerPermissions:
+    """Tests for quarantine/restore file permissions preservation."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create a temporary directory for quarantine operations."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def manager(self, temp_dir):
+        """Create a QuarantineManager with temporary directories."""
+        quarantine_dir = os.path.join(temp_dir, "quarantine")
+        db_path = os.path.join(temp_dir, "quarantine.db")
+        mgr = QuarantineManager(
+            quarantine_directory=quarantine_dir,
+            database_path=db_path,
+        )
+        yield mgr
+        mgr._database.close()
+
+    def test_quarantine_captures_original_permissions(self, manager, temp_dir):
+        """Test that quarantining a file captures its original permissions."""
+        # Create a file with specific permissions
+        file_path = os.path.join(temp_dir, "executable.sh")
+        with open(file_path, "wb") as f:
+            f.write(b"#!/bin/bash\necho 'test'")
+        os.chmod(file_path, 0o755)
+
+        result = manager.quarantine_file(file_path, "TestThreat")
+
+        assert result.is_success is True
+        assert result.entry.original_permissions == 0o755
+
+    def test_quarantine_captures_readonly_permissions(self, manager, temp_dir):
+        """Test that quarantining a read-only file captures its permissions."""
+        file_path = os.path.join(temp_dir, "readonly.txt")
+        with open(file_path, "wb") as f:
+            f.write(b"Read-only content")
+        os.chmod(file_path, 0o444)
+
+        result = manager.quarantine_file(file_path, "TestThreat")
+
+        assert result.is_success is True
+        assert result.entry.original_permissions == 0o444
+
+    def test_restore_restores_original_permissions(self, manager, temp_dir):
+        """Test that restoring a file restores its original permissions."""
+        # Create a file with executable permissions
+        file_path = os.path.join(temp_dir, "files", "script.sh")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(b"#!/bin/bash\necho 'test'")
+        os.chmod(file_path, 0o755)
+
+        # Quarantine the file
+        qresult = manager.quarantine_file(file_path, "TestThreat")
+        assert qresult.is_success is True
+        assert qresult.entry.original_permissions == 0o755
+
+        # Restore the file
+        restore_result = manager.restore_file(qresult.entry.id)
+        assert restore_result.is_success is True
+
+        # Verify restored file has original permissions
+        restored_mode = os.stat(file_path).st_mode & 0o777
+        assert restored_mode == 0o755
+
+    def test_restore_restores_readonly_permissions(self, manager, temp_dir):
+        """Test that restoring a read-only file restores its permissions."""
+        file_path = os.path.join(temp_dir, "files", "readonly.txt")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(b"Read-only content")
+        os.chmod(file_path, 0o444)
+
+        # Quarantine the file
+        qresult = manager.quarantine_file(file_path, "TestThreat")
+        assert qresult.is_success is True
+
+        # Restore the file
+        restore_result = manager.restore_file(qresult.entry.id)
+        assert restore_result.is_success is True
+
+        # Verify restored file has original read-only permissions
+        restored_mode = os.stat(file_path).st_mode & 0o777
+        assert restored_mode == 0o444
+
+    def test_restore_restores_group_permissions(self, manager, temp_dir):
+        """Test that group permissions are preserved on restore."""
+        file_path = os.path.join(temp_dir, "files", "group_readable.txt")
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(b"Group readable content")
+        os.chmod(file_path, 0o640)
+
+        # Quarantine and restore
+        qresult = manager.quarantine_file(file_path, "TestThreat")
+        assert qresult.is_success is True
+
+        restore_result = manager.restore_file(qresult.entry.id)
+        assert restore_result.is_success is True
+
+        # Verify permissions
+        restored_mode = os.stat(file_path).st_mode & 0o777
+        assert restored_mode == 0o640
+
+    def test_permissions_stored_in_database(self, manager, temp_dir):
+        """Test that permissions are correctly stored and retrieved from database."""
+        file_path = os.path.join(temp_dir, "test.sh")
+        with open(file_path, "wb") as f:
+            f.write(b"#!/bin/bash")
+        os.chmod(file_path, 0o700)
+
+        # Quarantine
+        qresult = manager.quarantine_file(file_path, "TestThreat")
+        assert qresult.is_success is True
+        entry_id = qresult.entry.id
+
+        # Retrieve from database and verify permissions
+        entry = manager.get_entry(entry_id)
+        assert entry is not None
+        assert entry.original_permissions == 0o700
 
 
 class TestQuarantineManagerDelete:

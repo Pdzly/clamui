@@ -152,6 +152,7 @@ class QuarantineManager:
                 threat_name=threat_name,
                 file_size=file_result.file_size,
                 file_hash=file_result.file_hash,
+                original_permissions=file_result.original_permissions,
             )
 
             if entry_id is None:
@@ -242,9 +243,11 @@ class QuarantineManager:
                     error_message=f"File integrity verification failed: {verify_error}",
                 )
 
-            # Restore file to original location
+            # Restore file to original location with original permissions
             file_result = self._file_handler.restore_from_quarantine(
-                entry.quarantine_path, entry.original_path
+                entry.quarantine_path,
+                entry.original_path,
+                entry.original_permissions,
             )
 
             if not file_result.is_success:

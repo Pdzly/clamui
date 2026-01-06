@@ -15,11 +15,12 @@ from ..core.log_manager import DaemonStatus, LogEntry, LogManager
 from ..core.statistics_calculator import StatisticsCalculator
 from ..core.utils import copy_to_clipboard
 from .fullscreen_dialog import FullscreenLogDialog
+from .pagination import PaginatedListController
 from .utils import add_row_icon
 
-# Pagination thresholds for historical logs
-INITIAL_LOG_DISPLAY_LIMIT = 25
-LOAD_MORE_LOG_BATCH_SIZE = 25
+# Backward compatibility constants for tests
+INITIAL_LOG_DISPLAY_LIMIT = PaginatedListController.DEFAULT_INITIAL_LIMIT
+LOAD_MORE_LOG_BATCH_SIZE = PaginatedListController.DEFAULT_BATCH_SIZE
 
 
 class LogsView(Gtk.Box):
@@ -59,14 +60,18 @@ class LogsView(Gtk.Box):
         # Loading state for historical logs
         self._is_loading = False
 
-        # Pagination state for log entries
-        self._displayed_log_count: int = 0
+        # Keep _all_log_entries for external access
         self._all_log_entries: list[LogEntry] = []
-        self._load_more_row: Gtk.ListBoxRow | None = None
-        self._logs_scrolled: Gtk.ScrolledWindow | None = None
 
-        # Set up the UI
+        # Set up the UI (this creates self._logs_listbox and self._logs_scrolled)
         self._setup_ui()
+
+        # Create pagination controller
+        self._pagination = PaginatedListController(
+            listbox=self._logs_listbox,
+            scrolled_window=self._logs_scrolled,
+            row_factory=self._create_log_row,
+        )
 
         # Load logs on startup asynchronously
         GLib.idle_add(self._load_logs_async)
@@ -497,18 +502,11 @@ class LogsView(Gtk.Box):
         """
         # Wrap all UI operations in try/finally to ensure loading state is always reset
         try:
-            # Clear existing rows efficiently using remove_all()
-            # This removes the loading placeholder row
-            try:
-                self._logs_listbox.remove_all()
-            except Exception:
-                # Widget may be in invalid state, just return
-                return False
-
-            # Reset pagination state
+            # Store logs in _all_log_entries for external access
             self._all_log_entries = logs
-            self._displayed_log_count = 0
-            self._load_more_row = None
+
+            # Use pagination controller to display logs
+            self._pagination.set_entries(logs, entries_label="logs")
 
             # Handle empty logs - placeholder will be shown automatically
             # by GTK ListBox since we set it with set_placeholder()
@@ -518,14 +516,6 @@ class LogsView(Gtk.Box):
                 self._export_all_csv_button.set_sensitive(False)
                 self._export_all_json_button.set_sensitive(False)
                 return False
-
-            # Display initial batch with pagination
-            initial_limit = min(INITIAL_LOG_DISPLAY_LIMIT, len(logs))
-            self._display_log_batch(0, initial_limit)
-
-            # Add "Load More" button if there are more logs
-            if len(logs) > INITIAL_LOG_DISPLAY_LIMIT:
-                self._add_load_more_button()
 
             # Update clear and export button sensitivity based on actual rendered rows
             has_logs = self._logs_listbox.get_row_at_index(0) is not None
@@ -538,117 +528,48 @@ class LogsView(Gtk.Box):
 
         return False  # Don't repeat
 
+    # Backward compatibility properties and methods for tests
+    @property
+    def _displayed_log_count(self) -> int:
+        """Get the current displayed count from pagination controller (backward compatibility)."""
+        return self._pagination.displayed_count if hasattr(self, '_pagination') else 0
+
+    @_displayed_log_count.setter
+    def _displayed_log_count(self, value: int):
+        """Set the displayed count on pagination controller (backward compatibility)."""
+        if hasattr(self, '_pagination'):
+            self._pagination._displayed_count = value
+
+    @property
+    def _load_more_row(self):
+        """Get the load more row from pagination controller (backward compatibility)."""
+        return self._pagination.load_more_row if hasattr(self, '_pagination') else None
+
+    @_load_more_row.setter
+    def _load_more_row(self, value):
+        """Set the load more row on pagination controller (backward compatibility)."""
+        if hasattr(self, '_pagination'):
+            self._pagination._load_more_row = value
+
     def _display_log_batch(self, start_index: int, count: int):
-        """
-        Display a batch of log rows starting from the given index.
-
-        Args:
-            start_index: Index in _all_log_entries to start from
-            count: Number of logs to display
-        """
-        end_index = min(start_index + count, len(self._all_log_entries))
-
-        for i in range(start_index, end_index):
-            entry = self._all_log_entries[i]
-            try:
-                row = self._create_log_row(entry)
-                # Insert before the "Load More" button if it exists
-                if self._load_more_row:
-                    self._logs_listbox.insert(row, self._displayed_log_count)
-                else:
-                    self._logs_listbox.append(row)
-                self._displayed_log_count += 1
-            except Exception:
-                # Skip entries that fail to render (corrupted data)
-                continue
+        """Display a batch of log rows (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.display_batch(start_index, count)
 
     def _add_load_more_button(self):
-        """Add a 'Show More' button row to load additional logs."""
-        load_more_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        load_more_box.set_halign(Gtk.Align.CENTER)
-        load_more_box.set_margin_top(12)
-        load_more_box.set_margin_bottom(12)
-
-        # Progress label
-        remaining = len(self._all_log_entries) - self._displayed_log_count
-        progress_label = Gtk.Label()
-        progress_label.set_markup(
-            f"<span size='small'>Showing {self._displayed_log_count} of "
-            f"{len(self._all_log_entries)} logs</span>"
-        )
-        progress_label.add_css_class("dim-label")
-        load_more_box.append(progress_label)
-
-        # Button row
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        button_box.set_halign(Gtk.Align.CENTER)
-
-        # "Show More" button
-        show_more_btn = Gtk.Button()
-        show_more_btn.set_label(f"Show {min(LOAD_MORE_LOG_BATCH_SIZE, remaining)} More")
-        show_more_btn.add_css_class("pill")
-        show_more_btn.connect("clicked", self._on_load_more_logs_clicked)
-        button_box.append(show_more_btn)
-
-        # "Show All" button (only if many remaining)
-        if remaining > LOAD_MORE_LOG_BATCH_SIZE:
-            show_all_btn = Gtk.Button()
-            show_all_btn.set_label(f"Show All ({remaining} remaining)")
-            show_all_btn.add_css_class("pill")
-            show_all_btn.connect("clicked", self._on_show_all_logs_clicked)
-            button_box.append(show_all_btn)
-
-        load_more_box.append(button_box)
-
-        # Wrap in ListBoxRow to ensure proper parent-child relationship
-        load_more_row = Gtk.ListBoxRow()
-        load_more_row.set_child(load_more_box)
-        load_more_row.set_activatable(False)
-        load_more_row.set_selectable(False)
-        self._load_more_row = load_more_row
-        self._logs_listbox.append(load_more_row)
+        """Add load more button (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.add_load_more_button(entries_label="logs")
 
     def _on_load_more_logs_clicked(self, button):
-        """Handle 'Show More' button click."""
-        # Preserve scroll position
-        scroll_pos = None
-        if self._logs_scrolled:
-            vadj = self._logs_scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        if self._load_more_row:
-            self._logs_listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        remaining = len(self._all_log_entries) - self._displayed_log_count
-        batch_size = min(LOAD_MORE_LOG_BATCH_SIZE, remaining)
-        self._display_log_batch(self._displayed_log_count, batch_size)
-
-        if self._displayed_log_count < len(self._all_log_entries):
-            self._add_load_more_button()
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+        """Handle load more button click (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.load_more(entries_label="logs")
 
     def _on_show_all_logs_clicked(self, button):
-        """Handle 'Show All' button click."""
-        # Preserve scroll position
-        scroll_pos = None
-        if self._logs_scrolled:
-            vadj = self._logs_scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        if self._load_more_row:
-            self._logs_listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        remaining = len(self._all_log_entries) - self._displayed_log_count
-        self._display_log_batch(self._displayed_log_count, remaining)
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+        """Handle show all button click (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.show_all()
 
     def _create_log_row(self, entry: LogEntry) -> Adw.ActionRow:
         """
@@ -1347,8 +1268,8 @@ class LogsView(Gtk.Box):
 
             # Reset pagination state before reloading
             self._all_log_entries = []
-            self._displayed_log_count = 0
-            self._load_more_row = None
+            if hasattr(self, '_pagination'):
+                self._pagination.reset_state()
 
             self._load_logs_async()
 

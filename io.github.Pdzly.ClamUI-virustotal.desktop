@@ -9,5 +9,5 @@ X-KDE-Priority=TopLevel
 
 [Desktop Action ScanWithVirusTotal]
 Name=Scan with VirusTotal
-Icon=com.github.rooki.clamui
+Icon=io.github.Pdzly.ClamUI
 Exec=clamui --virustotal %F

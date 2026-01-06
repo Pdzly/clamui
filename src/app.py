@@ -67,7 +67,7 @@ class ClamUIApp(Adw.Application):
     def __init__(self):
         """Initialize the ClamUI application."""
         super().__init__(
-            application_id="com.github.rooki.clamui", flags=Gio.ApplicationFlags.FLAGS_NONE
+            application_id="io.github.Pdzly.ClamUI", flags=Gio.ApplicationFlags.FLAGS_NONE
         )
 
         # Application metadata

@@ -49,8 +49,8 @@ def find_clamui_base_icon() -> str | None:
     """
     # Prefer PNG (PIL can read it directly), then SVG
     icon_filenames = [
-        "com.github.rooki.clamui.png",
-        "com.github.rooki.clamui.svg",
+        "io.github.Pdzly.ClamUI.png",
+        "io.github.Pdzly.ClamUI.svg",
     ]
 
     module_dir = Path(__file__).parent

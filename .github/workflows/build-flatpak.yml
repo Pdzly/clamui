@@ -24,7 +24,7 @@ jobs:
       - name: Build Flatpak
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
-          manifest-path: com.github.rooki.clamui.yml
+          manifest-path: io.github.Pdzly.ClamUI.yml
           bundle: clamui.flatpak
           cache-key: flatpak-builder-${{ github.sha }}
 

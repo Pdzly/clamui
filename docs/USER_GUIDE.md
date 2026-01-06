@@ -5857,7 +5857,7 @@ The minimize-to-tray feature is controlled by the `minimize_to_tray` setting in 
    nano ~/.config/clamui/settings.json
 
    # Flatpak installation
-   nano ~/.var/app/com.github.rooki.clamui/config/clamui/settings.json
+   nano ~/.var/app/io.github.Pdzly.ClamUI/config/clamui/settings.json
    ```
 3. Find the line with `"minimize_to_tray": false`
 4. Change it to `"minimize_to_tray": true`
@@ -5957,7 +5957,7 @@ The start-minimized feature is controlled by the `start_minimized` setting in yo
    nano ~/.config/clamui/settings.json
 
    # Flatpak installation
-   nano ~/.var/app/com.github.rooki.clamui/config/clamui/settings.json
+   nano ~/.var/app/io.github.Pdzly.ClamUI/config/clamui/settings.json
    ```
 3. Find the line with `"start_minimized": false`
 4. Change it to `"start_minimized": true`
@@ -6014,7 +6014,7 @@ Type=Application
 Name=ClamUI
 Comment=ClamUI Antivirus
 Exec=clamui
-Icon=com.github.rooki.clamui
+Icon=io.github.Pdzly.ClamUI
 Terminal=false
 Categories=Utility;Security;
 X-GNOME-Autostart-enabled=true
@@ -6027,8 +6027,8 @@ cat > ~/.config/autostart/clamui.desktop << 'EOF'
 Type=Application
 Name=ClamUI
 Comment=ClamUI Antivirus
-Exec=flatpak run com.github.rooki.clamui
-Icon=com.github.rooki.clamui
+Exec=flatpak run io.github.Pdzly.ClamUI
+Icon=io.github.Pdzly.ClamUI
 Terminal=false
 Categories=Utility;Security;
 X-GNOME-Autostart-enabled=true
@@ -6378,7 +6378,7 @@ When a background scan completes, ClamUI notifies you:
 
 ## Troubleshooting
 
-This section helps you diagnose and fix common issues with ClamUI. If you encounter a problem not covered here, please check the [FAQ](#frequently-asked-questions) section or visit the [GitHub Issues](https://github.com/rooki/clamui/issues) page.
+This section helps you diagnose and fix common issues with ClamUI. If you encounter a problem not covered here, please check the [FAQ](#frequently-asked-questions) section or visit the [GitHub Issues](https://github.com/Pdzly/clamui/issues) page.
 
 ### ClamAV Not Found
 
@@ -7805,7 +7805,7 @@ If you're still experiencing issues after trying these solutions:
    ```
 
 3. **Report an issue:**
-   - Visit [GitHub Issues](https://github.com/rooki/clamui/issues)
+   - Visit [GitHub Issues](https://github.com/Pdzly/clamui/issues)
    - Include: OS version, ClamAV version, exact error message, steps to reproduce
    - Attach relevant logs from Logs view
 
@@ -9945,7 +9945,7 @@ Workflow:
 
 If you're experiencing issues not covered in this guide:
 
-- **Report bugs**: Visit the [GitHub Issues](https://github.com/rooki/clamui/issues) page
+- **Report bugs**: Visit the [GitHub Issues](https://github.com/Pdzly/clamui/issues) page
 - **Technical documentation**: See [DEVELOPMENT.md](./DEVELOPMENT.md) for developer information
 - **Installation help**: Check the [Installation Guide](./INSTALL.md)
 

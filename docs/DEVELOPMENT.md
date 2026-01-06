@@ -52,7 +52,7 @@ sudo pacman -S python-gobject gtk4 libadwaita clamav libayatana-appindicator
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/rooki/clamui.git
+git clone https://github.com/Pdzly/clamui.git
 cd clamui
 ```
 

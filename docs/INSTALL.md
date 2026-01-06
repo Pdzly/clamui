@@ -135,7 +135,7 @@ sudo apt install clamav
 
 ### Download and Install
 
-Download the latest `.deb` package from the [releases page](https://github.com/rooki/clamui/releases), then install:
+Download the latest `.deb` package from the [releases page](https://github.com/Pdzly/clamui/releases), then install:
 
 ```bash
 # Install the package

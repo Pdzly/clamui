@@ -589,7 +589,7 @@ If you encounter issues not covered here:
 1. Check ClamUI logs in **Preferences → Logs View**
 2. Check system logs: `sudo journalctl -u clamav-daemon`
 3. Verify ClamAV installation: `clamscan --version` and `clamdscan --version`
-4. File an issue on GitHub: https://github.com/rooki/clamui/issues
+4. File an issue on GitHub: https://github.com/Pdzly/clamui/issues
 
 ---
 
@@ -651,7 +651,7 @@ Clamd socket location varies by distribution. ClamUI automatically detects the s
 - [ClamAV Daemon Configuration](https://docs.clamav.net/manual/Usage/Configuration.html)
 - [ClamUI Installation Guide](./INSTALL.md)
 - [ClamUI Development Guide](./DEVELOPMENT.md)
-- [ClamUI GitHub Repository](https://github.com/rooki/clamui)
+- [ClamUI GitHub Repository](https://github.com/Pdzly/clamui)
 
 ---
 

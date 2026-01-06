@@ -4,5 +4,5 @@
 
 Contact: clamui[at]rooki.xyz
 Preferred-Languages: en
-Canonical: https://github.com/rooki/clamui/blob/main/SECURITY.txt
-Policy: https://github.com/rooki/clamui/security/advisories
+Canonical: https://github.com/Pdzly/clamui/blob/main/SECURITY.txt
+Policy: https://github.com/Pdzly/clamui/security/advisories

@@ -21,7 +21,7 @@ This document provides a comprehensive guide for submitting ClamUI to Flathub, t
   - ClamUI uses MIT license (FOSS-compliant)
 
 - [ ] Source code is publicly available
-  - Repository: https://github.com/rooki/clamui
+  - Repository: https://github.com/Pdzly/clamui
 
 - [ ] No bundled proprietary libraries or dependencies
   - All dependencies are open source (GTK4, libadwaita, Python)
@@ -82,7 +82,7 @@ Screenshots must be hosted at **publicly accessible URLs**:
 
 **Current screenshot location in metainfo.xml:**
 ```xml
-<image>https://raw.githubusercontent.com/rooki/clamui/main/screenshots/main-window.png</image>
+<image>https://raw.githubusercontent.com/Pdzly/clamui/main/screenshots/main-window.png</image>
 ```
 
 ### Screenshot Checklist
@@ -125,11 +125,11 @@ gnome-screenshot -w -f main-window.png
 <screenshots>
   <screenshot type="default">
     <caption>Main application window showing scan interface</caption>
-    <image>https://raw.githubusercontent.com/rooki/clamui/main/screenshots/main-window.png</image>
+    <image>https://raw.githubusercontent.com/Pdzly/clamui/main/screenshots/main-window.png</image>
   </screenshot>
   <screenshot>
     <caption>Background scanning with progress indicator</caption>
-    <image>https://raw.githubusercontent.com/rooki/clamui/main/screenshots/scanning.png</image>
+    <image>https://raw.githubusercontent.com/Pdzly/clamui/main/screenshots/scanning.png</image>
   </screenshot>
 </screenshots>
 ```
@@ -270,7 +270,7 @@ modules:
       - install -Dm644 com.github.rooki.ClamUI.metainfo.xml -t /app/share/metainfo/
     sources:
       - type: git
-        url: https://github.com/rooki/clamui.git
+        url: https://github.com/Pdzly/clamui.git
         tag: v0.1.0
         commit: <COMMIT_HASH>  # Required: full commit hash for the tag
 ```
@@ -298,7 +298,7 @@ ClamUI - Graphical interface for ClamAV antivirus scanner
 
 ## Repository
 
-https://github.com/rooki/clamui
+https://github.com/Pdzly/clamui
 
 ## License
 
@@ -376,7 +376,7 @@ cd com.github.rooki.ClamUI
    # Edit manifest - update tag and commit
    # sources:
    #   - type: git
-   #     url: https://github.com/rooki/clamui.git
+   #     url: https://github.com/Pdzly/clamui.git
    #     tag: v0.2.0
    #     commit: abc123...  # New commit hash
    ```

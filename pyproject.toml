@@ -48,8 +48,8 @@ clamui = "src.main:main"
 clamui-scheduled-scan = "src.cli.scheduled_scan:main"
 
 [project.urls]
-Homepage = "https://github.com/rooki/clamui"
-Repository = "https://github.com/rooki/clamui"
+Homepage = "https://github.com/Pdzly/clamui"
+Repository = "https://github.com/Pdzly/clamui"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

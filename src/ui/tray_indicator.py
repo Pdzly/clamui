@@ -24,7 +24,7 @@ def _find_clamui_icon() -> str | None:
         Absolute path to the icon file, or None if not found
     """
     # Possible icon filenames
-    icon_names = ["com.github.rooki.clamui.svg", "com.github.rooki.clamui.png"]
+    icon_names = ["io.github.Pdzly.ClamUI.svg", "io.github.Pdzly.ClamUI.png"]
 
     # Search paths relative to this module
     module_dir = Path(__file__).parent

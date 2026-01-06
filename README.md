@@ -57,7 +57,7 @@ flatpak run com.github.clamui
 ### From Source
 
 ```bash
-git clone https://github.com/rooki/clamui.git
+git clone https://github.com/Pdzly/clamui.git
 cd clamui
 uv sync
 uv run clamui

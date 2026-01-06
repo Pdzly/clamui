@@ -1,6 +1,6 @@
 # ClamUI Troubleshooting Guide
 
-This guide helps you diagnose and resolve common issues with ClamUI. If you encounter a problem not covered here, please [open an issue](https://github.com/rooki/clamui/issues) on GitHub.
+This guide helps you diagnose and resolve common issues with ClamUI. If you encounter a problem not covered here, please [open an issue](https://github.com/Pdzly/clamui/issues) on GitHub.
 
 ## Table of Contents
 
@@ -611,8 +611,8 @@ gtk-update-icon-cache ~/.local/share/icons/hicolor/
 
 ```bash
 # Check for ClamUI icon
-ls -la /usr/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.*
-ls -la ~/.local/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.*
+ls -la /usr/share/icons/hicolor/scalable/apps/io.github.Pdzly.ClamUI.*
+ls -la ~/.local/share/icons/hicolor/scalable/apps/io.github.Pdzly.ClamUI.*
 ```
 
 ---
@@ -632,10 +632,10 @@ ls -la ~/.local/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.*
 
 ```bash
 # 1. Check if desktop file exists
-ls -la ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls -la ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # 2. Verify desktop file content
-cat ~/.local/share/applications/com.github.rooki.clamui.desktop | grep -E "Actions|ScanFile"
+cat ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop | grep -E "Actions|ScanFile"
 
 # 3. Check if clamui command is accessible
 which clamui
@@ -653,10 +653,10 @@ Context menu integration works via Desktop Actions in the `.desktop` file.
 
 ```bash
 # Verify desktop file exists
-ls ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Check if it has the Actions entry
-grep "Actions=ScanFile" ~/.local/share/applications/com.github.rooki.clamui.desktop
+grep "Actions=ScanFile" ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Update desktop database
 update-desktop-database ~/.local/share/applications
@@ -692,10 +692,10 @@ Nemo supports both Desktop Actions and Nemo-specific action files.
 
 ```bash
 # Check for Nemo action file (preferred method)
-ls ~/.local/share/nemo/actions/com.github.rooki.clamui.nemo_action
+ls ~/.local/share/nemo/actions/io.github.Pdzly.ClamUI.nemo_action
 
 # If missing, check desktop file fallback
-ls ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Update desktop database
 update-desktop-database ~/.local/share/applications
@@ -712,7 +712,7 @@ Thunar uses custom actions in its settings.
 
 ```bash
 # Verify desktop file exists
-ls ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Update desktop database
 update-desktop-database ~/.local/share/applications
@@ -763,27 +763,27 @@ caja &
 
 ```bash
 # Check current permissions
-ls -la ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls -la ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # The file should be readable (doesn't need to be executable for context menu)
 # Set correct permissions
-chmod 644 ~/.local/share/applications/com.github.rooki.clamui.desktop
+chmod 644 ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Verify ownership
-stat ~/.local/share/applications/com.github.rooki.clamui.desktop
+stat ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Ensure it's owned by your user
-sudo chown $USER:$USER ~/.local/share/applications/com.github.rooki.clamui.desktop
+sudo chown $USER:$USER ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 ```
 
 **Validate desktop file content**:
 
 ```bash
 # Check for syntax errors
-desktop-file-validate ~/.local/share/applications/com.github.rooki.clamui.desktop
+desktop-file-validate ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Verify it has required entries
-grep -E "^Type=|^Name=|^Exec=|^Actions=|^\[Desktop Action" ~/.local/share/applications/com.github.rooki.clamui.desktop
+grep -E "^Type=|^Name=|^Exec=|^Actions=|^\[Desktop Action" ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 ```
 
 **Expected output** should include:
@@ -812,15 +812,15 @@ cd /path/to/clamui
 
 # Copy desktop file
 mkdir -p ~/.local/share/applications
-cp com.github.rooki.clamui.desktop ~/.local/share/applications/
+cp io.github.Pdzly.ClamUI.desktop ~/.local/share/applications/
 
 # Copy Nemo action file (for Cinnamon users)
 mkdir -p ~/.local/share/nemo/actions
-cp com.github.rooki.clamui.nemo_action ~/.local/share/nemo/actions/
+cp io.github.Pdzly.ClamUI.nemo_action ~/.local/share/nemo/actions/
 
 # Copy application icons
 mkdir -p ~/.local/share/icons/hicolor/scalable/apps
-cp icons/com.github.rooki.clamui.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp icons/io.github.Pdzly.ClamUI.svg ~/.local/share/icons/hicolor/scalable/apps/
 
 # Update desktop database
 update-desktop-database ~/.local/share/applications
@@ -829,7 +829,7 @@ update-desktop-database ~/.local/share/applications
 gtk-update-icon-cache -f ~/.local/share/icons/hicolor/
 
 # Verify installation
-ls -la ~/.local/share/applications/com.github.rooki.clamui.desktop
+ls -la ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 ```
 
 **For Flatpak installation**:
@@ -838,28 +838,28 @@ ls -la ~/.local/share/applications/com.github.rooki.clamui.desktop
 # Export desktop file from Flatpak
 mkdir -p ~/.local/share/applications
 flatpak run --command=sh com.github.rooki.ClamUI -c \
-  "cat /app/share/applications/com.github.rooki.clamui.desktop" \
-  > ~/.local/share/applications/com.github.rooki.clamui.desktop
+  "cat /app/share/applications/io.github.Pdzly.ClamUI.desktop" \
+  > ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # For Nemo users, export Nemo action
 mkdir -p ~/.local/share/nemo/actions
 flatpak run --command=sh com.github.rooki.ClamUI -c \
-  "cat /app/share/nemo/actions/com.github.rooki.clamui.nemo_action" \
-  > ~/.local/share/nemo/actions/com.github.rooki.clamui.nemo_action
+  "cat /app/share/nemo/actions/io.github.Pdzly.ClamUI.nemo_action" \
+  > ~/.local/share/nemo/actions/io.github.Pdzly.ClamUI.nemo_action
 
 # Update desktop file to use Flatpak command
 sed -i 's|Exec=clamui|Exec=flatpak run com.github.rooki.ClamUI|g' \
-  ~/.local/share/applications/com.github.rooki.clamui.desktop
+  ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Also update the Desktop Action
 sed -i 's|Exec=clamui %F|Exec=flatpak run com.github.rooki.ClamUI %F|g' \
-  ~/.local/share/applications/com.github.rooki.clamui.desktop
+  ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Update desktop database
 update-desktop-database ~/.local/share/applications
 
 # Verify the Exec line uses flatpak
-grep "^Exec=" ~/.local/share/applications/com.github.rooki.clamui.desktop
+grep "^Exec=" ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 ```
 
 **Verify integration works**:
@@ -980,7 +980,7 @@ ps aux | grep -E "nautilus|dolphin|nemo" | grep -v grep
 
 ```bash
 # Verify the Desktop Action accepts all file types
-grep -A 3 "\[Desktop Action ScanFile\]" ~/.local/share/applications/com.github.rooki.clamui.desktop
+grep -A 3 "\[Desktop Action ScanFile\]" ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Should show:
 # [Desktop Action ScanFile]
@@ -1009,7 +1009,7 @@ journalctl --user -u clamui --since "1 minute ago"
 
 ```bash
 # Check Exec line in desktop file
-grep "Exec=" ~/.local/share/applications/com.github.rooki.clamui.desktop
+grep "Exec=" ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 
 # Should contain:
 # Exec=flatpak run com.github.rooki.ClamUI
@@ -1017,7 +1017,7 @@ grep "Exec=" ~/.local/share/applications/com.github.rooki.clamui.desktop
 
 # If not, update it
 sed -i 's|Exec=clamui|Exec=flatpak run com.github.rooki.ClamUI|g' \
-  ~/.local/share/applications/com.github.rooki.clamui.desktop
+  ~/.local/share/applications/io.github.Pdzly.ClamUI.desktop
 update-desktop-database ~/.local/share/applications
 ```
 
@@ -2968,7 +2968,7 @@ systemctl --user cat clamui-scheduled-scan.timer | grep OnCalendar
 When using ClamUI as a Flatpak:
 - The timer runs on the host system via `flatpak-spawn --host`
 - Systemd files are created in the host user directory
-- The service executes: `flatpak run --command=clamui-scheduled-scan com.github.rooki.clamui`
+- The service executes: `flatpak run --command=clamui-scheduled-scan io.github.Pdzly.ClamUI`
 
 Check Flatpak-specific issues:
 ```bash
@@ -3194,7 +3194,7 @@ crontab -e
 
 # Add:
 # ClamUI Scheduled Scan
-0 2 * * * flatpak run --command=clamui-scheduled-scan com.github.rooki.clamui --target "$HOME" 2>&1 | logger -t clamui-scan
+0 2 * * * flatpak run --command=clamui-scheduled-scan io.github.Pdzly.ClamUI --target "$HOME" 2>&1 | logger -t clamui-scan
 ```
 
 ---
@@ -3336,7 +3336,7 @@ python3 -c "import psutil; print(psutil.__version__)"
 For Flatpak installations, psutil should be bundled. If it's missing:
 ```bash
 # Reinstall ClamUI Flatpak
-flatpak update com.github.rooki.clamui
+flatpak update io.github.Pdzly.ClamUI
 ```
 
 **Solution 2: Verify battery detection is working**
@@ -4236,7 +4236,7 @@ flatpak run com.github.rooki.ClamUI
    ```bash
    pkill -9 clamui
    ```
-3. **Report the issue**: If reproducible, [open an issue](https://github.com/rooki/clamui/issues)
+3. **Report the issue**: If reproducible, [open an issue](https://github.com/Pdzly/clamui/issues)
 
 ### High CPU or memory usage
 
@@ -4408,8 +4408,8 @@ If you've tried the solutions in this guide and still need help:
 
 ### Community Support
 
-1. **GitHub Issues**: [Report a bug or request a feature](https://github.com/rooki/clamui/issues)
-2. **Discussions**: [Ask questions and share tips](https://github.com/rooki/clamui/discussions)
+1. **GitHub Issues**: [Report a bug or request a feature](https://github.com/Pdzly/clamui/issues)
+2. **Discussions**: [Ask questions and share tips](https://github.com/Pdzly/clamui/discussions)
 
 ### Before Reporting an Issue
 

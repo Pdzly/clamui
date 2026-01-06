@@ -6,7 +6,7 @@ from pathlib import Path
 
 def test_metainfo_xml_wellformed():
     """Test that metainfo.xml is well-formed XML."""
-    metainfo_path = Path("com.github.rooki.clamui.metainfo.xml")
+    metainfo_path = Path("io.github.Pdzly.ClamUI.metainfo.xml")
     assert metainfo_path.exists(), "Metainfo file should exist"
 
     # This will raise an exception if XML is malformed
@@ -21,7 +21,7 @@ def test_metainfo_xml_wellformed():
 
 def test_metainfo_required_elements():
     """Test that all required AppStream elements are present."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     # Required elements per AppStream spec
@@ -42,30 +42,30 @@ def test_metainfo_required_elements():
 
 def test_metainfo_app_id():
     """Test that app ID matches expected format."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     app_id = root.find("id")
     assert app_id is not None
-    assert app_id.text == "com.github.rooki.clamui", "App ID should match reverse-DNS format"
+    assert app_id.text == "io.github.Pdzly.ClamUI", "App ID should match reverse-DNS format"
 
 
 def test_metainfo_launchable():
     """Test that launchable element references correct desktop file."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     launchable = root.find("launchable")
     assert launchable is not None, "Launchable element should be present"
     assert launchable.attrib.get("type") == "desktop-id", "Launchable type should be desktop-id"
-    assert launchable.text == "com.github.rooki.clamui.desktop", (
+    assert launchable.text == "io.github.Pdzly.ClamUI.desktop", (
         "Should reference correct desktop file"
     )
 
 
 def test_metainfo_screenshots():
     """Test that screenshots section exists."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     screenshots = root.find("screenshots")
@@ -80,7 +80,7 @@ def test_metainfo_screenshots():
 
 def test_metainfo_releases():
     """Test that releases section exists with at least one release."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     releases = root.find("releases")
@@ -96,7 +96,7 @@ def test_metainfo_releases():
 
 def test_metainfo_content_rating():
     """Test that content rating is present (required for Flathub)."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     content_rating = root.find("content_rating")
@@ -106,7 +106,7 @@ def test_metainfo_content_rating():
 
 def test_metainfo_provides_binary():
     """Test that provides section includes the binary."""
-    tree = ET.parse("com.github.rooki.clamui.metainfo.xml")
+    tree = ET.parse("io.github.Pdzly.ClamUI.metainfo.xml")
     root = tree.getroot()
 
     provides = root.find("provides")

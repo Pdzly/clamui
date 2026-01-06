@@ -100,7 +100,7 @@ class TestClamUIAppSetup:
 
     def test_app_has_correct_application_id(self, app):
         """Test that the application has the correct application ID."""
-        assert app.application_id == "com.github.rooki.clamui"
+        assert app.application_id == "io.github.Pdzly.ClamUI"
 
     def test_app_has_version(self, app):
         """Test that the application has a version string."""

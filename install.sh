@@ -392,42 +392,42 @@ install_xdg_files() {
 
     # Install desktop entry
     log_info "Installing desktop entry to $DESKTOP_DIR..."
-    if [ -f "$SCRIPT_DIR/com.github.rooki.clamui.desktop" ]; then
-        cp "$SCRIPT_DIR/com.github.rooki.clamui.desktop" "$DESKTOP_DIR/"
-        log_success "Desktop entry installed: $DESKTOP_DIR/com.github.rooki.clamui.desktop"
+    if [ -f "$SCRIPT_DIR/io.github.Pdzly.ClamUI.desktop" ]; then
+        cp "$SCRIPT_DIR/io.github.Pdzly.ClamUI.desktop" "$DESKTOP_DIR/"
+        log_success "Desktop entry installed: $DESKTOP_DIR/io.github.Pdzly.ClamUI.desktop"
     else
-        log_error "Desktop entry file not found: $SCRIPT_DIR/com.github.rooki.clamui.desktop"
+        log_error "Desktop entry file not found: $SCRIPT_DIR/io.github.Pdzly.ClamUI.desktop"
         return 1
     fi
 
     # Install application icons (both SVG and PNG for tray icon support)
     log_info "Installing application icons to $ICON_DIR..."
-    if [ -f "$SCRIPT_DIR/icons/com.github.rooki.clamui.svg" ]; then
-        cp "$SCRIPT_DIR/icons/com.github.rooki.clamui.svg" "$ICON_DIR/"
-        log_success "SVG icon installed: $ICON_DIR/com.github.rooki.clamui.svg"
+    if [ -f "$SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.svg" ]; then
+        cp "$SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.svg" "$ICON_DIR/"
+        log_success "SVG icon installed: $ICON_DIR/io.github.Pdzly.ClamUI.svg"
     else
-        log_warning "SVG icon file not found: $SCRIPT_DIR/icons/com.github.rooki.clamui.svg"
+        log_warning "SVG icon file not found: $SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.svg"
     fi
-    if [ -f "$SCRIPT_DIR/icons/com.github.rooki.clamui.png" ]; then
-        cp "$SCRIPT_DIR/icons/com.github.rooki.clamui.png" "$ICON_DIR/"
-        log_success "PNG icon installed: $ICON_DIR/com.github.rooki.clamui.png"
+    if [ -f "$SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.png" ]; then
+        cp "$SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.png" "$ICON_DIR/"
+        log_success "PNG icon installed: $ICON_DIR/io.github.Pdzly.ClamUI.png"
     else
-        log_warning "PNG icon file not found: $SCRIPT_DIR/icons/com.github.rooki.clamui.png"
+        log_warning "PNG icon file not found: $SCRIPT_DIR/icons/io.github.Pdzly.ClamUI.png"
         log_warning "Tray icon may use default theme icon"
     fi
 
     # Install Nemo file manager actions
     log_info "Installing Nemo actions to $NEMO_ACTION_DIR..."
-    if [ -f "$SCRIPT_DIR/com.github.rooki.clamui.nemo_action" ]; then
-        cp "$SCRIPT_DIR/com.github.rooki.clamui.nemo_action" "$NEMO_ACTION_DIR/"
-        log_success "Nemo action installed: $NEMO_ACTION_DIR/com.github.rooki.clamui.nemo_action"
+    if [ -f "$SCRIPT_DIR/io.github.Pdzly.ClamUI.nemo_action" ]; then
+        cp "$SCRIPT_DIR/io.github.Pdzly.ClamUI.nemo_action" "$NEMO_ACTION_DIR/"
+        log_success "Nemo action installed: $NEMO_ACTION_DIR/io.github.Pdzly.ClamUI.nemo_action"
     else
-        log_warning "Nemo action file not found: $SCRIPT_DIR/com.github.rooki.clamui.nemo_action"
+        log_warning "Nemo action file not found: $SCRIPT_DIR/io.github.Pdzly.ClamUI.nemo_action"
         log_warning "Nemo context menu integration will not be available"
     fi
     # Install VirusTotal Nemo action
-    if [ -f "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.nemo_action" ]; then
-        cp "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.nemo_action" "$NEMO_ACTION_DIR/"
+    if [ -f "$SCRIPT_DIR/io.github.Pdzly.ClamUI-virustotal.nemo_action" ]; then
+        cp "$SCRIPT_DIR/io.github.Pdzly.ClamUI-virustotal.nemo_action" "$NEMO_ACTION_DIR/"
         log_success "VirusTotal Nemo action installed"
     fi
 
@@ -446,8 +446,8 @@ install_xdg_files() {
     if command -v dolphin >/dev/null 2>&1 || [ -d "$SHARE_DIR/kservices5" ]; then
         log_info "Installing Dolphin service menus..."
         mkdir -p "$DOLPHIN_SERVICES_DIR"
-        if [ -f "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.desktop" ]; then
-            cp "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.desktop" "$DOLPHIN_SERVICES_DIR/"
+        if [ -f "$SCRIPT_DIR/io.github.Pdzly.ClamUI-virustotal.desktop" ]; then
+            cp "$SCRIPT_DIR/io.github.Pdzly.ClamUI-virustotal.desktop" "$DOLPHIN_SERVICES_DIR/"
             log_success "Dolphin VirusTotal service menu installed"
         fi
     fi

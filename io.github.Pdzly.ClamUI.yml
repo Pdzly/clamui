@@ -1,4 +1,4 @@
-app-id: com.github.rooki.clamui
+app-id: io.github.Pdzly.ClamUI
 runtime: org.gnome.Platform
 runtime-version: '48'
 sdk: org.gnome.Sdk
@@ -7,26 +7,29 @@ sdk-extensions:
 command: clamui
 
 finish-args:
-  # Read-only access to host filesystem for scanning files
-  - --filesystem=host:ro
-  # Read-write access to ClamAV database directory for updates
-  - --filesystem=/var/lib/clamav:rw
-  # D-Bus session access for desktop integration
-  - --socket=session-bus
-  # X11 display access
-  - --socket=x11
-  # Wayland display access
+  # Display - use fallback-x11 for X11/Wayland compatibility
+  - --socket=fallback-x11
   - --socket=wayland
-  # GPU acceleration
-  - --device=dri
-  # Desktop icons and themes
   - --share=ipc
-  # Network access for virus database updates
+  - --device=dri
+
+  # Network for virus database updates
   - --share=network
-  # GVFS access for file browser integration
+
+  # Specific D-Bus permissions (instead of full session-bus)
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+  # File access via XDG directories
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --filesystem=xdg-music
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-videos
+  - --filesystem=xdg-desktop
+
+  # GVFS for file browser integration
   - --filesystem=xdg-run/gvfsd
-  # Host /tmp access for EICAR test files (daemon scanner runs on host)
-  - --filesystem=/tmp
 
 modules:
   # System tray indicator support (AyatanaAppIndicator3)
@@ -142,9 +145,10 @@ modules:
     buildsystem: simple
     build-commands:
       - pip3 install --prefix=/app --no-deps --no-build-isolation .
-      - install -Dm644 com.github.rooki.clamui.desktop /app/share/applications/com.github.rooki.clamui.desktop
-      - install -Dm644 icons/com.github.rooki.clamui.svg /app/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.svg
-      - install -Dm644 icons/com.github.rooki.clamui.png /app/share/icons/hicolor/scalable/apps/com.github.rooki.clamui.png
+      - install -Dm644 io.github.Pdzly.ClamUI.desktop /app/share/applications/io.github.Pdzly.ClamUI.desktop
+      - install -Dm644 io.github.Pdzly.ClamUI.metainfo.xml /app/share/metainfo/io.github.Pdzly.ClamUI.metainfo.xml
+      - install -Dm644 icons/io.github.Pdzly.ClamUI.svg /app/share/icons/hicolor/scalable/apps/io.github.Pdzly.ClamUI.svg
+      - install -Dm644 icons/io.github.Pdzly.ClamUI.png /app/share/icons/hicolor/scalable/apps/io.github.Pdzly.ClamUI.png
     sources:
       - type: dir
         path: .

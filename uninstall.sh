@@ -104,6 +104,8 @@ fi
 DESKTOP_DIR="$SHARE_DIR/applications"
 ICON_DIR="$SHARE_DIR/icons/hicolor/scalable/apps"
 NEMO_ACTION_DIR="$SHARE_DIR/nemo/actions"
+NAUTILUS_SCRIPTS_DIR="$HOME/.local/share/nautilus/scripts"
+DOLPHIN_SERVICES_DIR="$SHARE_DIR/kservices5/ServiceMenus"
 
 #
 # Uninstallation Functions
@@ -167,7 +169,7 @@ remove_xdg_files() {
     FILES_REMOVED=0
 
     # Remove desktop entry
-    DESKTOP_FILE="$DESKTOP_DIR/com.github.rooki.clamui.desktop"
+    DESKTOP_FILE="$DESKTOP_DIR/io.github.Pdzly.ClamUI.desktop"
     if [ -f "$DESKTOP_FILE" ]; then
         log_info "Removing desktop entry..."
         rm -f "$DESKTOP_FILE"
@@ -178,7 +180,7 @@ remove_xdg_files() {
     fi
 
     # Remove application icons (SVG and PNG)
-    SVG_ICON_FILE="$ICON_DIR/com.github.rooki.clamui.svg"
+    SVG_ICON_FILE="$ICON_DIR/io.github.Pdzly.ClamUI.svg"
     if [ -f "$SVG_ICON_FILE" ]; then
         log_info "Removing SVG icon..."
         rm -f "$SVG_ICON_FILE"
@@ -188,7 +190,7 @@ remove_xdg_files() {
         log_info "SVG icon not found: $SVG_ICON_FILE"
     fi
 
-    PNG_ICON_FILE="$ICON_DIR/com.github.rooki.clamui.png"
+    PNG_ICON_FILE="$ICON_DIR/io.github.Pdzly.ClamUI.png"
     if [ -f "$PNG_ICON_FILE" ]; then
         log_info "Removing PNG icon..."
         rm -f "$PNG_ICON_FILE"
@@ -198,8 +200,8 @@ remove_xdg_files() {
         log_info "PNG icon not found: $PNG_ICON_FILE"
     fi
 
-    # Remove Nemo file manager action
-    NEMO_FILE="$NEMO_ACTION_DIR/com.github.rooki.clamui.nemo_action"
+    # Remove Nemo file manager actions
+    NEMO_FILE="$NEMO_ACTION_DIR/io.github.Pdzly.ClamUI.nemo_action"
     if [ -f "$NEMO_FILE" ]; then
         log_info "Removing Nemo action..."
         rm -f "$NEMO_FILE"
@@ -207,6 +209,39 @@ remove_xdg_files() {
         FILES_REMOVED=$((FILES_REMOVED + 1))
     else
         log_info "Nemo action not found: $NEMO_FILE"
+    fi
+
+    # Remove VirusTotal Nemo action
+    NEMO_VT_FILE="$NEMO_ACTION_DIR/io.github.Pdzly.ClamUI-virustotal.nemo_action"
+    if [ -f "$NEMO_VT_FILE" ]; then
+        log_info "Removing VirusTotal Nemo action..."
+        rm -f "$NEMO_VT_FILE"
+        log_success "Removed: $NEMO_VT_FILE"
+        FILES_REMOVED=$((FILES_REMOVED + 1))
+    else
+        log_info "VirusTotal Nemo action not found: $NEMO_VT_FILE"
+    fi
+
+    # Remove Nautilus scripts
+    NAUTILUS_VT_SCRIPT="$NAUTILUS_SCRIPTS_DIR/Scan with VirusTotal"
+    if [ -f "$NAUTILUS_VT_SCRIPT" ]; then
+        log_info "Removing Nautilus VirusTotal script..."
+        rm -f "$NAUTILUS_VT_SCRIPT"
+        log_success "Removed: $NAUTILUS_VT_SCRIPT"
+        FILES_REMOVED=$((FILES_REMOVED + 1))
+    else
+        log_info "Nautilus script not found: $NAUTILUS_VT_SCRIPT"
+    fi
+
+    # Remove Dolphin service menus
+    DOLPHIN_VT_FILE="$DOLPHIN_SERVICES_DIR/io.github.Pdzly.ClamUI-virustotal.desktop"
+    if [ -f "$DOLPHIN_VT_FILE" ]; then
+        log_info "Removing Dolphin VirusTotal service menu..."
+        rm -f "$DOLPHIN_VT_FILE"
+        log_success "Removed: $DOLPHIN_VT_FILE"
+        FILES_REMOVED=$((FILES_REMOVED + 1))
+    else
+        log_info "Dolphin service menu not found: $DOLPHIN_VT_FILE"
     fi
 
     # Update desktop database if available
@@ -227,6 +262,17 @@ remove_xdg_files() {
         else
             log_warning "Could not update icon cache (non-fatal)"
         fi
+    fi
+
+    # Rebuild KDE service cache if available
+    if command -v kbuildsycoca5 >/dev/null 2>&1; then
+        log_info "Rebuilding KDE service cache..."
+        kbuildsycoca5 --noincremental 2>/dev/null || true
+        log_success "KDE service cache rebuilt"
+    elif command -v kbuildsycoca6 >/dev/null 2>&1; then
+        log_info "Rebuilding KDE6 service cache..."
+        kbuildsycoca6 --noincremental 2>/dev/null || true
+        log_success "KDE6 service cache rebuilt"
     fi
 
     echo

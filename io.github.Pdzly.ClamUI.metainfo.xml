@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.github.rooki.clamui</id>
+  <id>io.github.Pdzly.ClamUI</id>
   <name>ClamUI</name>
   <summary>Graphical interface for ClamAV antivirus scanner</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
 
-  <developer id="com.github.rooki">
+  <developer id="io.github.Pdzly">
     <name>ClamUI Contributors</name>
   </developer>
 
@@ -31,18 +31,18 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">com.github.rooki.clamui.desktop</launchable>
+  <launchable type="desktop-id">io.github.Pdzly.ClamUI.desktop</launchable>
 
   <screenshots>
     <screenshot type="default">
       <caption>Main application window showing scan interface</caption>
-      <image>https://raw.githubusercontent.com/rooki/clamui/main/screenshots/main-window.png</image>
+      <image>https://raw.githubusercontent.com/Pdzly/clamui/main/screenshots/main-window.png</image>
     </screenshot>
   </screenshots>
 
-  <url type="homepage">https://github.com/rooki/clamui</url>
-  <url type="bugtracker">https://github.com/rooki/clamui/issues</url>
-  <url type="vcs-browser">https://github.com/rooki/clamui</url>
+  <url type="homepage">https://github.com/Pdzly/clamui</url>
+  <url type="bugtracker">https://github.com/Pdzly/clamui/issues</url>
+  <url type="vcs-browser">https://github.com/Pdzly/clamui</url>
 
   <provides>
     <binary>clamui</binary>

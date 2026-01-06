@@ -3,7 +3,7 @@
 Updater module for ClamUI providing freshclam subprocess execution and async database updates.
 """
 
-import contextlib
+import logging
 import subprocess
 import threading
 import time
@@ -15,6 +15,13 @@ from gi.repository import GLib
 
 from .log_manager import LogEntry, LogManager
 from .utils import check_freshclam_installed, get_freshclam_path, wrap_host_command
+
+logger = logging.getLogger(__name__)
+
+# Timeout constants (seconds)
+_TERMINATE_GRACE_TIMEOUT = 5  # Time to wait after SIGTERM before SIGKILL
+_KILL_WAIT_TIMEOUT = 2  # Time to wait after SIGKILL
+_UPDATE_COMMUNICATE_TIMEOUT = 600  # 10 minutes for freshclam (network operations)
 
 
 def get_pkexec_path() -> str | None:
@@ -125,18 +132,55 @@ class FreshclamUpdater:
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
 
+            timed_out = False
             try:
-                stdout, stderr = self._current_process.communicate()
+                stdout, stderr = self._current_process.communicate(
+                    timeout=_UPDATE_COMMUNICATE_TIMEOUT
+                )
                 exit_code = self._current_process.returncode
+            except subprocess.TimeoutExpired as e:
+                # Process timed out - capture partial output and kill
+                logger.warning("Update process timed out, killing")
+                timed_out = True
+                self._current_process.kill()
+                # Capture partial output from exception
+                partial_stdout = e.stdout or ""
+                partial_stderr = e.stderr or ""
+                try:
+                    remaining_stdout, remaining_stderr = self._current_process.communicate(
+                        timeout=_KILL_WAIT_TIMEOUT
+                    )
+                    stdout = partial_stdout + (remaining_stdout or "")
+                    stderr = partial_stderr + (remaining_stderr or "")
+                except subprocess.TimeoutExpired:
+                    stdout = partial_stdout
+                    stderr = partial_stderr
+                exit_code = -1  # Indicate timeout
             finally:
                 # Ensure process is cleaned up even if communicate() raises
-                if self._current_process is not None:
+                process = self._current_process
+                if process is not None:
+                    self._current_process = None  # Clear first to avoid race
                     try:
-                        self._current_process.kill()
-                        self._current_process.wait(timeout=5)
+                        if process.poll() is None:  # Only kill if still running
+                            process.kill()
+                        process.wait(timeout=_KILL_WAIT_TIMEOUT)
                     except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
                         pass
-                    self._current_process = None
+
+            # Check if timed out (and not cancelled) - treat as error
+            if timed_out and not self._update_cancelled:
+                result = UpdateResult(
+                    status=UpdateStatus.ERROR,
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=exit_code,
+                    databases_updated=0,
+                    error_message="Update timed out after 10 minutes",
+                )
+                duration = time.monotonic() - start_time
+                self._save_update_log(result, duration)
+                return result
 
             # Check if cancelled during execution
             if self._update_cancelled:
@@ -217,14 +261,35 @@ class FreshclamUpdater:
 
     def cancel(self) -> None:
         """
-        Cancel the current update operation.
+        Cancel the current update operation with graceful shutdown escalation.
 
-        If an update is in progress, it will be terminated.
+        If an update is in progress, it will be terminated with SIGTERM first,
+        then escalated to SIGKILL if the process doesn't respond within
+        the grace period.
         """
         self._update_cancelled = True
-        if self._current_process is not None:
-            with contextlib.suppress(OSError, ProcessLookupError):
-                self._current_process.terminate()
+        process = self._current_process
+        if process is None:
+            return
+
+        # Step 1: SIGTERM (graceful)
+        try:
+            process.terminate()
+        except (OSError, ProcessLookupError):
+            # Process already gone
+            return
+
+        # Step 2: Wait for graceful termination
+        try:
+            process.wait(timeout=_TERMINATE_GRACE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # Step 3: SIGKILL (forceful)
+            logger.warning("Update process didn't terminate gracefully, killing")
+            try:
+                process.kill()
+                process.wait(timeout=_KILL_WAIT_TIMEOUT)
+            except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+                pass  # Best effort
 
     def _build_command(self) -> list[str]:
         """

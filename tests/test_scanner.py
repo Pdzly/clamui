@@ -1,6 +1,7 @@
 # ClamUI Scanner Tests
 """Unit tests for the scanner module, including Flatpak integration."""
 
+import subprocess
 import sys
 from unittest import mock
 
@@ -1309,6 +1310,80 @@ class TestScannerCancelEdgeCases:
 
         # Should not raise exception
         scanner.cancel()
+        assert scanner._scan_cancelled is True
+
+    def test_cancel_terminate_timeout_escalates_to_kill(self):
+        """Test that cancel() escalates to kill if terminate times out."""
+        scanner = Scanner()
+        mock_process = mock.MagicMock()
+        mock_process.terminate = mock.MagicMock()
+        mock_process.kill = mock.MagicMock()
+        mock_process.wait = mock.MagicMock(
+            side_effect=[
+                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
+                None,  # Second wait (after kill) succeeds
+            ]
+        )
+        scanner._current_process = mock_process
+
+        scanner.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+        assert scanner._scan_cancelled is True
+
+    def test_cancel_kill_timeout_handles_gracefully(self):
+        """Test that cancel() handles kill timeout gracefully."""
+        scanner = Scanner()
+        mock_process = mock.MagicMock()
+        mock_process.terminate = mock.MagicMock()
+        mock_process.kill = mock.MagicMock()
+        mock_process.wait = mock.MagicMock(
+            side_effect=[
+                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
+                subprocess.TimeoutExpired(cmd="test", timeout=2),  # Second wait also times out
+            ]
+        )
+        scanner._current_process = mock_process
+
+        # Should not raise exception even if kill times out
+        scanner.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+        assert scanner._scan_cancelled is True
+
+    def test_cancel_process_already_terminated_on_terminate(self):
+        """Test cancel() handles process already gone when calling terminate."""
+        scanner = Scanner()
+        mock_process = mock.MagicMock()
+        mock_process.terminate = mock.MagicMock(side_effect=ProcessLookupError("No such process"))
+        mock_process.kill = mock.MagicMock()
+        mock_process.wait = mock.MagicMock()
+        scanner._current_process = mock_process
+
+        # Should not raise exception and should return early
+        scanner.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_not_called()  # Should not reach kill
+        mock_process.wait.assert_not_called()  # Should not reach wait
+        assert scanner._scan_cancelled is True
+
+    def test_cancel_graceful_termination_success(self):
+        """Test cancel() when process terminates gracefully within timeout."""
+        scanner = Scanner()
+        mock_process = mock.MagicMock()
+        mock_process.terminate = mock.MagicMock()
+        mock_process.kill = mock.MagicMock()
+        mock_process.wait = mock.MagicMock(return_value=None)  # Succeeds on first call
+        scanner._current_process = mock_process
+
+        scanner.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.wait.assert_called_once()  # Only one wait call
+        mock_process.kill.assert_not_called()  # Should not escalate to kill
         assert scanner._scan_cancelled is True
 
 

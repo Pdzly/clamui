@@ -4,8 +4,8 @@ Daemon scanner module for ClamUI using clamdscan for clamd communication.
 Provides faster scanning by leveraging the ClamAV daemon's in-memory database.
 """
 
-import contextlib
 import fnmatch
+import logging
 import os
 import subprocess
 import threading
@@ -16,6 +16,13 @@ from pathlib import Path
 from gi.repository import GLib
 
 from .log_manager import LogEntry, LogManager
+
+logger = logging.getLogger(__name__)
+
+# Timeout constants (seconds)
+_TERMINATE_GRACE_TIMEOUT = 5  # Time to wait after SIGTERM before SIGKILL
+_KILL_WAIT_TIMEOUT = 2  # Time to wait after SIGKILL
+
 from .scanner import ScanResult, ScanStatus, ThreatDetail
 from .settings_manager import SettingsManager
 from .threat_classifier import (
@@ -153,13 +160,15 @@ class DaemonScanner:
                 exit_code = self._current_process.returncode
             finally:
                 # Ensure process is cleaned up even if communicate() raises
-                if self._current_process is not None:
+                process = self._current_process
+                if process is not None:
+                    self._current_process = None  # Clear first to avoid race
                     try:
-                        self._current_process.kill()
-                        self._current_process.wait(timeout=5)
+                        if process.poll() is None:  # Only kill if still running
+                            process.kill()
+                        process.wait(timeout=_KILL_WAIT_TIMEOUT)
                     except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
                         pass
-                    self._current_process = None
 
             # Check if cancelled during execution
             if self._scan_cancelled:
@@ -272,14 +281,35 @@ class DaemonScanner:
 
     def cancel(self) -> None:
         """
-        Cancel the current scan operation.
+        Cancel the current scan operation with graceful shutdown escalation.
 
-        If a scan is in progress, it will be terminated.
+        If a scan is in progress, it will be terminated with SIGTERM first,
+        then escalated to SIGKILL if the process doesn't respond within
+        the grace period.
         """
         self._scan_cancelled = True
-        if self._current_process is not None:
-            with contextlib.suppress(OSError, ProcessLookupError):
-                self._current_process.terminate()
+        process = self._current_process
+        if process is None:
+            return
+
+        # Step 1: SIGTERM (graceful)
+        try:
+            process.terminate()
+        except (OSError, ProcessLookupError):
+            # Process already gone
+            return
+
+        # Step 2: Wait for graceful termination
+        try:
+            process.wait(timeout=_TERMINATE_GRACE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # Step 3: SIGKILL (forceful)
+            logger.warning("Daemon scan process didn't terminate gracefully, killing")
+            try:
+                process.kill()
+                process.wait(timeout=_KILL_WAIT_TIMEOUT)
+            except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+                pass  # Best effort
 
     def _build_command(
         self, path: str, recursive: bool, profile_exclusions: dict | None = None

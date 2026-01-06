@@ -745,6 +745,16 @@ class ScanView(Gtk.Box):
         self._eicar_button.connect("clicked", self._on_eicar_test_clicked)
         button_box.append(self._eicar_button)
 
+        # Cancel button - hidden initially, shown during scanning
+        self._cancel_button = Gtk.Button()
+        self._cancel_button.set_label("Cancel")
+        self._cancel_button.set_tooltip_text("Cancel the current scan")
+        self._cancel_button.add_css_class("destructive-action")
+        self._cancel_button.set_size_request(120, -1)
+        self._cancel_button.set_visible(False)
+        self._cancel_button.connect("clicked", self._on_cancel_clicked)
+        button_box.append(self._cancel_button)
+
         scan_group.add(button_box)
 
         self.append(scan_group)
@@ -903,6 +913,7 @@ class ScanView(Gtk.Box):
         self._scan_button.set_sensitive(False)
         self._eicar_button.set_sensitive(False)
         self._path_row.set_sensitive(False)
+        self._cancel_button.set_visible(True)
 
         # Dismiss any previous status banner
         self._status_banner.set_revealed(False)
@@ -977,6 +988,7 @@ class ScanView(Gtk.Box):
         self._scan_button.set_sensitive(True)
         self._eicar_button.set_sensitive(True)
         self._path_row.set_sensitive(True)
+        self._cancel_button.set_visible(False)
 
         # Notify external handlers
         if self._on_scan_state_changed:
@@ -1032,6 +1044,7 @@ class ScanView(Gtk.Box):
         self._scan_button.set_sensitive(True)
         self._eicar_button.set_sensitive(True)
         self._path_row.set_sensitive(True)
+        self._cancel_button.set_visible(False)
 
         # Notify external handlers
         if self._on_scan_state_changed:
@@ -1040,6 +1053,13 @@ class ScanView(Gtk.Box):
         self._status_banner.set_title(f"Scan error: {error_msg}")
         set_status_class(self._status_banner, StatusLevel.ERROR)
         self._status_banner.set_revealed(True)
+
+    def _on_cancel_clicked(self, button: Gtk.Button) -> None:
+        """Handle cancel button click."""
+        logger.info("Scan cancelled by user")
+        self._scanner.cancel()
+        # The scan thread will complete with CANCELLED status
+        # and _on_scan_complete will handle the UI update
 
     def _create_backend_indicator(self):
         """Create a small indicator showing the active scan backend."""

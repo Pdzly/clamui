@@ -9,6 +9,7 @@ Tests cover:
 - FreshclamUpdater class methods including async operations
 """
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -591,7 +592,7 @@ class TestFreshclamUpdaterUpdateSync:
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
 
-                            def simulate_cancel():
+                            def simulate_cancel(*args, **kwargs):
                                 # Simulate cancellation happening during communicate()
                                 updater._update_cancelled = True
                                 return ("", "")
@@ -600,6 +601,7 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_process.returncode = 0
                             mock_process.kill = MagicMock()
                             mock_process.wait = MagicMock()
+                            mock_process.poll = MagicMock(return_value=0)  # Process already done
                             mock_popen.return_value = mock_process
 
                             result = updater.update_sync()
@@ -651,6 +653,124 @@ class TestFreshclamUpdaterCancel:
         # Should not raise an error
         updater.cancel()
         assert updater._update_cancelled is True
+
+    def test_cancel_terminate_timeout_escalates_to_kill(self, updater_module):
+        """Test that cancel escalates to kill if terminate times out."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        updater = FreshclamUpdater(log_manager=MagicMock())
+        mock_process = MagicMock()
+        mock_process.terminate = MagicMock()
+        mock_process.kill = MagicMock()
+        mock_process.wait = MagicMock(
+            side_effect=[
+                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
+                None,  # Second wait (after kill) succeeds
+            ]
+        )
+        updater._current_process = mock_process
+
+        updater.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+        assert updater._update_cancelled is True
+
+    def test_cancel_kill_timeout_handles_gracefully(self, updater_module):
+        """Test that cancel handles kill timeout gracefully."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        updater = FreshclamUpdater(log_manager=MagicMock())
+        mock_process = MagicMock()
+        mock_process.terminate = MagicMock()
+        mock_process.kill = MagicMock()
+        mock_process.wait = MagicMock(
+            side_effect=[
+                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
+                subprocess.TimeoutExpired(cmd="test", timeout=2),  # Second wait also times out
+            ]
+        )
+        updater._current_process = mock_process
+
+        # Should not raise exception even if kill times out
+        updater.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+        assert updater._update_cancelled is True
+
+    def test_cancel_process_already_terminated_on_terminate(self, updater_module):
+        """Test cancel handles process already gone when calling terminate."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        updater = FreshclamUpdater(log_manager=MagicMock())
+        mock_process = MagicMock()
+        mock_process.terminate = MagicMock(side_effect=ProcessLookupError("No such process"))
+        mock_process.kill = MagicMock()
+        mock_process.wait = MagicMock()
+        updater._current_process = mock_process
+
+        # Should not raise exception and should return early
+        updater.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_not_called()  # Should not reach kill
+        mock_process.wait.assert_not_called()  # Should not reach wait
+        assert updater._update_cancelled is True
+
+    def test_cancel_graceful_termination_success(self, updater_module):
+        """Test cancel when process terminates gracefully within timeout."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        updater = FreshclamUpdater(log_manager=MagicMock())
+        mock_process = MagicMock()
+        mock_process.terminate = MagicMock()
+        mock_process.kill = MagicMock()
+        mock_process.wait = MagicMock(return_value=None)  # Succeeds on first call
+        updater._current_process = mock_process
+
+        updater.cancel()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.wait.assert_called_once()  # Only one wait call
+        mock_process.kill.assert_not_called()  # Should not escalate to kill
+        assert updater._update_cancelled is True
+
+
+class TestFreshclamUpdaterCommunicateTimeout:
+    """Tests for FreshclamUpdater communicate() timeout handling."""
+
+    def test_communicate_timeout_kills_process_and_returns_error(self, updater_module):
+        """Test that communicate() timeout kills process and returns ERROR status."""
+        FreshclamUpdater = updater_module["FreshclamUpdater"]
+        UpdateStatus = updater_module["UpdateStatus"]
+        mock_log_manager = MagicMock()
+
+        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+            with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
+                with patch("src.core.updater.get_pkexec_path", return_value=None):
+                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                        with patch("subprocess.Popen") as mock_popen:
+                            mock_process = MagicMock()
+                            # Simulate timeout on communicate
+                            timeout_exc = subprocess.TimeoutExpired(cmd="freshclam", timeout=600)
+                            timeout_exc.stdout = "partial output"
+                            timeout_exc.stderr = ""
+                            mock_process.communicate = MagicMock(
+                                side_effect=[
+                                    timeout_exc,  # First call times out
+                                    ("", ""),  # Second call after kill
+                                ]
+                            )
+                            mock_process.kill = MagicMock()
+                            mock_process.poll = MagicMock(return_value=None)
+                            mock_process.wait = MagicMock()
+                            mock_popen.return_value = mock_process
+
+                            updater = FreshclamUpdater(log_manager=mock_log_manager)
+                            result = updater.update_sync()
+
+                            # Should have called kill after timeout
+                            mock_process.kill.assert_called()
+                            # Should return ERROR status with timeout message
+                            assert result.status == UpdateStatus.ERROR
+                            assert "timed out" in result.error_message.lower()
 
 
 # =============================================================================

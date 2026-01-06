@@ -19,9 +19,16 @@ from gi.repository import GLib
 if TYPE_CHECKING:
     from .daemon_scanner import DaemonScanner
 
-import contextlib
+import logging
 
 from .log_manager import LogEntry, LogManager
+
+logger = logging.getLogger(__name__)
+
+# Timeout constants (seconds)
+_TERMINATE_GRACE_TIMEOUT = 5  # Time to wait after SIGTERM before SIGKILL
+_KILL_WAIT_TIMEOUT = 2  # Time to wait after SIGKILL
+
 from .settings_manager import SettingsManager
 from .threat_classifier import (
     categorize_threat,
@@ -307,13 +314,15 @@ class Scanner:
                 exit_code = self._current_process.returncode
             finally:
                 # Ensure process is cleaned up even if communicate() raises
-                if self._current_process is not None:
+                process = self._current_process
+                if process is not None:
+                    self._current_process = None  # Clear first to avoid race
                     try:
-                        self._current_process.kill()
-                        self._current_process.wait(timeout=5)
+                        if process.poll() is None:  # Only kill if still running
+                            process.kill()
+                        process.wait(timeout=_KILL_WAIT_TIMEOUT)
                     except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
                         pass
-                    self._current_process = None
 
             # Check if cancelled during execution
             if self._scan_cancelled:
@@ -424,15 +433,41 @@ class Scanner:
 
     def cancel(self) -> None:
         """
-        Cancel the current scan operation.
+        Cancel the current scan operation with graceful shutdown escalation.
 
-        If a scan is in progress, it will be terminated.
-        Cancels both clamscan and daemon scanner if active.
+        If a scan is in progress, it will be terminated with SIGTERM first,
+        then escalated to SIGKILL if the process doesn't respond within
+        the grace period. Cancels both clamscan and daemon scanner if active.
         """
         self._scan_cancelled = True
-        if self._current_process is not None:
-            with contextlib.suppress(OSError, ProcessLookupError):
-                self._current_process.terminate()
+        process = self._current_process
+        if process is None:
+            # No clamscan process, but still cancel daemon scanner if it exists
+            if self._daemon_scanner is not None:
+                self._daemon_scanner.cancel()
+            return
+
+        # Step 1: SIGTERM (graceful)
+        try:
+            process.terminate()
+        except (OSError, ProcessLookupError):
+            # Process already gone
+            if self._daemon_scanner is not None:
+                self._daemon_scanner.cancel()
+            return
+
+        # Step 2: Wait for graceful termination
+        try:
+            process.wait(timeout=_TERMINATE_GRACE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # Step 3: SIGKILL (forceful)
+            logger.warning("Scan process didn't terminate gracefully, killing")
+            try:
+                process.kill()
+                process.wait(timeout=_KILL_WAIT_TIMEOUT)
+            except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+                pass  # Best effort
+
         # Also cancel daemon scanner if it exists
         if self._daemon_scanner is not None:
             self._daemon_scanner.cancel()

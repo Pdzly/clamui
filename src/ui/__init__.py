@@ -7,6 +7,7 @@ Contains GTK4/Adwaita widgets and views.
 from .components_view import ComponentsView
 from .fullscreen_dialog import FullscreenLogDialog
 from .logs_view import LogsView
+from .pagination import PaginatedListController
 from .preferences_dialog import PreferencesDialog
 from .quarantine_view import QuarantineView
 from .update_view import UpdateView
@@ -18,4 +19,5 @@ __all__ = [
     "ComponentsView",
     "PreferencesDialog",
     "QuarantineView",
+    "PaginatedListController",
 ]

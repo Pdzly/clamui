@@ -27,11 +27,12 @@ from ..core.quarantine import (
     QuarantineResult,
     QuarantineStatus,
 )
+from .pagination import PaginatedListController
 from .utils import add_row_icon
 
-# Pagination thresholds for quarantine list
-INITIAL_DISPLAY_LIMIT = 25
-LOAD_MORE_BATCH_SIZE = 25
+# Backward compatibility constants for tests
+INITIAL_DISPLAY_LIMIT = PaginatedListController.DEFAULT_INITIAL_LIMIT
+LOAD_MORE_BATCH_SIZE = PaginatedListController.DEFAULT_BATCH_SIZE
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -81,11 +82,8 @@ class QuarantineView(Gtk.Box):
         # Loading state
         self._is_loading = False
 
-        # Pagination state
-        self._displayed_count: int = 0
+        # Pagination state - keep _all_entries for compatibility with search filtering
         self._all_entries: list[QuarantineEntry] = []
-        self._load_more_row: Gtk.ListBoxRow | None = None
-        self._scrolled: Gtk.ScrolledWindow | None = None
 
         # Search/filter state
         self._search_query: str = ""
@@ -98,8 +96,27 @@ class QuarantineView(Gtk.Box):
         # Track last refresh time to prevent excessive refreshes
         self._last_refresh_time: float = 0.0
 
-        # Set up the UI
+        # Set up the UI (this creates self._listbox and self._scrolled)
         self._setup_ui()
+
+        # Create custom pagination controller that uses view's entries_to_display
+        # We need to create a custom controller that can access the view's filtered entries
+        class QuarantinePaginationController(PaginatedListController):
+            def __init__(controller_self, view, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                controller_self._view = view
+
+            @property
+            def entries_to_display(controller_self):
+                """Use the view's entries_to_display property for filtering support."""
+                return controller_self._view._entries_to_display
+
+        self._pagination = QuarantinePaginationController(
+            self,
+            listbox=self._listbox,
+            scrolled_window=self._scrolled,
+            row_factory=self._create_entry_row,
+        )
 
         # Connect to map signal to refresh when view becomes visible
         self.connect("map", self._on_view_mapped)
@@ -351,17 +368,8 @@ class QuarantineView(Gtk.Box):
             False to prevent GLib.idle_add from repeating
         """
         try:
-            # Clear existing rows (compatible with all GTK4 versions)
-            while True:
-                child = self._listbox.get_first_child()
-                if child is None:
-                    break
-                self._listbox.remove(child)
-
-            # Reset pagination state
+            # Store entries for filtering support
             self._all_entries = entries
-            self._displayed_count = 0
-            self._load_more_row = None
 
             # Update storage info (pass entries to avoid synchronous DB calls on main thread)
             self._update_storage_info(entries)
@@ -372,6 +380,8 @@ class QuarantineView(Gtk.Box):
             # Handle empty state - placeholder will be shown automatically
             if not entries:
                 self._clear_old_button.set_sensitive(False)
+                # Clear the pagination controller
+                self._pagination.set_entries([])
                 return False
 
             # If search is active, apply filter to maintain filtered view across refresh
@@ -382,18 +392,14 @@ class QuarantineView(Gtk.Box):
                 # If filtered results are empty, show placeholder and return
                 if not self._filtered_entries:
                     self._clear_old_button.set_sensitive(True)
+                    # Pass all_entries to controller, controller's entries_to_display will return empty filtered list
+                    self._pagination.set_entries(self._all_entries)
                     return False
 
-            # Get the appropriate entry list for display
-            entries_to_display = self._entries_to_display
-
-            # Display initial batch with pagination
-            initial_limit = min(INITIAL_DISPLAY_LIMIT, len(entries_to_display))
-            self._display_entry_batch(0, initial_limit)
-
-            # Add "Load More" button if there are more entries
-            if len(entries_to_display) > INITIAL_DISPLAY_LIMIT:
-                self._add_load_more_button()
+            # Use controller to display entries with pagination
+            # Always pass all_entries - controller's entries_to_display override handles filtering
+            entries_label = "filtered entries" if self._search_query else "entries"
+            self._pagination.set_entries(self._all_entries, entries_label)
 
             # Enable clear old button if there are entries
             self._clear_old_button.set_sensitive(True)
@@ -423,130 +429,48 @@ class QuarantineView(Gtk.Box):
             return self._filtered_entries
         return self._all_entries
 
+    # Backward compatibility properties and methods for tests
+    @property
+    def _displayed_count(self) -> int:
+        """Get the current displayed count from pagination controller (backward compatibility)."""
+        return self._pagination.displayed_count if hasattr(self, '_pagination') else 0
+
+    @_displayed_count.setter
+    def _displayed_count(self, value: int):
+        """Set the displayed count on pagination controller (backward compatibility)."""
+        if hasattr(self, '_pagination'):
+            self._pagination._displayed_count = value
+
+    @property
+    def _load_more_row(self):
+        """Get the load more row from pagination controller (backward compatibility)."""
+        return self._pagination.load_more_row if hasattr(self, '_pagination') else None
+
+    @_load_more_row.setter
+    def _load_more_row(self, value):
+        """Set the load more row on pagination controller (backward compatibility)."""
+        if hasattr(self, '_pagination'):
+            self._pagination._load_more_row = value
+
     def _display_entry_batch(self, start_index: int, count: int):
-        """
-        Display a batch of entry rows starting from the given index.
+        """Display a batch of entries (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.display_batch(start_index, count)
 
-        Uses _entries_to_display property to determine which list to use
-        based on whether search is active.
-
-        Args:
-            start_index: Index in entry list to start from
-            count: Number of entries to display
-        """
-        entries = self._entries_to_display
-        end_index = min(start_index + count, len(entries))
-
-        for i in range(start_index, end_index):
-            entry = entries[i]
-            try:
-                row = self._create_entry_row(entry)
-                # Insert before the "Load More" button if it exists
-                if self._load_more_row:
-                    self._listbox.insert(row, self._displayed_count)
-                else:
-                    self._listbox.append(row)
-                self._displayed_count += 1
-            except Exception as e:
-                # Log and skip entries that fail to render
-                logger.warning(f"Failed to create row for entry {entry.id}: {e}")
-                continue
-
-    def _add_load_more_button(self):
-        """Add a 'Show More' button row to load additional entries."""
-        load_more_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        load_more_box.set_halign(Gtk.Align.CENTER)
-        load_more_box.set_margin_top(12)
-        load_more_box.set_margin_bottom(12)
-
-        # Get the appropriate entry list
-        entries = self._entries_to_display
-
-        # Progress label
-        remaining = len(entries) - self._displayed_count
-        progress_label = Gtk.Label()
-
-        # Show "filtered entries" when search is active
-        entries_label = "filtered entries" if self._search_query else "entries"
-        progress_label.set_markup(
-            f"<span size='small'>Showing {self._displayed_count} of "
-            f"{len(entries)} {entries_label}</span>"
-        )
-        progress_label.add_css_class("dim-label")
-        load_more_box.append(progress_label)
-
-        # Button row
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        button_box.set_halign(Gtk.Align.CENTER)
-
-        # "Show More" button
-        show_more_btn = Gtk.Button()
-        show_more_btn.set_label(f"Show {min(LOAD_MORE_BATCH_SIZE, remaining)} More")
-        show_more_btn.add_css_class("pill")
-        show_more_btn.connect("clicked", self._on_load_more_clicked)
-        button_box.append(show_more_btn)
-
-        # "Show All" button (only if many remaining)
-        if remaining > LOAD_MORE_BATCH_SIZE:
-            show_all_btn = Gtk.Button()
-            show_all_btn.set_label(f"Show All ({remaining} remaining)")
-            show_all_btn.add_css_class("pill")
-            show_all_btn.connect("clicked", self._on_show_all_clicked)
-            button_box.append(show_all_btn)
-
-        load_more_box.append(button_box)
-
-        # Wrap in ListBoxRow to ensure proper parent-child relationship
-        load_more_row = Gtk.ListBoxRow()
-        load_more_row.set_child(load_more_box)
-        load_more_row.set_activatable(False)
-        load_more_row.set_selectable(False)
-        self._load_more_row = load_more_row
-        self._listbox.append(load_more_row)
+    def _add_load_more_button(self, entries_label: str = "entries"):
+        """Add load more button (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.add_load_more_button(entries_label)
 
     def _on_load_more_clicked(self, button):
-        """Handle 'Show More' button click."""
-        # Preserve scroll position
-        scroll_pos = None
-        if self._scrolled:
-            vadj = self._scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        if self._load_more_row:
-            self._listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        entries = self._entries_to_display
-        remaining = len(entries) - self._displayed_count
-        batch_size = min(LOAD_MORE_BATCH_SIZE, remaining)
-        self._display_entry_batch(self._displayed_count, batch_size)
-
-        if self._displayed_count < len(entries):
-            self._add_load_more_button()
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+        """Handle load more button click (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.load_more()
 
     def _on_show_all_clicked(self, button):
-        """Handle 'Show All' button click."""
-        # Preserve scroll position
-        scroll_pos = None
-        if self._scrolled:
-            vadj = self._scrolled.get_vadjustment()
-            scroll_pos = vadj.get_value()
-
-        if self._load_more_row:
-            self._listbox.remove(self._load_more_row)
-            self._load_more_row = None
-
-        entries = self._entries_to_display
-        remaining = len(entries) - self._displayed_count
-        self._display_entry_batch(self._displayed_count, remaining)
-
-        # Restore scroll position after layout
-        if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+        """Handle show all button click (backward compatibility - delegates to pagination controller)."""
+        if hasattr(self, '_pagination'):
+            self._pagination.show_all()
 
     def _on_refresh_clicked(self, button):
         """Handle refresh button click."""
@@ -641,17 +565,6 @@ class QuarantineView(Gtk.Box):
         # Update storage info to reflect filtered count
         self._update_storage_info(self._all_entries)
 
-        # Clear existing rows (compatible with all GTK4 versions)
-        while True:
-            child = self._listbox.get_first_child()
-            if child is None:
-                break
-            self._listbox.remove(child)
-
-        # Reset pagination state
-        self._displayed_count = 0
-        self._load_more_row = None
-
         # Handle empty filtered results - show appropriate placeholder
         if not self._filtered_entries:
             # If search is active but has no matches (all_entries exists but filtered is empty),
@@ -661,21 +574,19 @@ class QuarantineView(Gtk.Box):
             else:
                 # Otherwise show empty state placeholder (for when quarantine is actually empty)
                 self._listbox.set_placeholder(self._create_empty_state())
+            # Reset controller state - pass all_entries so controller maintains full dataset
+            # Controller's entries_to_display override will return empty filtered list
+            self._pagination.set_entries(self._all_entries)
             return
 
         # Results exist - ensure empty state placeholder is set (for when all entries are removed later)
         self._listbox.set_placeholder(self._create_empty_state())
 
-        # Get the appropriate entry list for display
-        entries_to_display = self._entries_to_display
-
-        # Display initial batch with pagination
-        initial_limit = min(INITIAL_DISPLAY_LIMIT, len(entries_to_display))
-        self._display_entry_batch(0, initial_limit)
-
-        # Add "Load More" button if there are more entries
-        if len(entries_to_display) > INITIAL_DISPLAY_LIMIT:
-            self._add_load_more_button()
+        # Reset controller and provide all entries
+        # Controller's overridden entries_to_display property will return filtered entries
+        # This allows controller to maintain full dataset while displaying filtered results
+        entries_label = "filtered entries" if self._search_query else "entries"
+        self._pagination.set_entries(self._all_entries, entries_label)
 
     def _on_cleanup_completed(self, removed_count: int) -> bool:
         """

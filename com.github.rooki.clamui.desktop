@@ -7,10 +7,14 @@ Exec=clamui
 Icon=com.github.rooki.clamui
 Terminal=false
 Categories=GTK;Utility;Security;
-Keywords=antivirus;virus;scanner;clamav;security;malware;
+Keywords=antivirus;virus;scanner;clamav;security;malware;virustotal;
 StartupNotify=true
-Actions=ScanFile;
+Actions=ScanFile;ScanVirusTotal;
 
 [Desktop Action ScanFile]
 Name=Scan with ClamUI
 Exec=clamui %F
+
+[Desktop Action ScanVirusTotal]
+Name=Scan with VirusTotal
+Exec=clamui --virustotal %F

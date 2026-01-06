@@ -1,0 +1,7 @@
+[Nemo Action]
+Name=Scan with VirusTotal
+Comment=Scan selected file with VirusTotal online service
+Exec=clamui --virustotal %F
+Icon-Name=com.github.rooki.clamui
+Selection=s
+Extensions=any;

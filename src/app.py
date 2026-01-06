@@ -99,6 +99,13 @@ class ClamUIApp(Adw.Application):
         # Track first activation for start-minimized functionality
         self._first_activation = True
 
+        # Initial scan paths from CLI (e.g., from file manager context menu)
+        self._initial_scan_paths: list[str] = []
+        self._initial_use_virustotal: bool = False
+
+        # VirusTotal client (lazy-initialized)
+        self._vt_client = None
+
     @property
     def app_name(self) -> str:
         """Get the application name."""
@@ -171,11 +178,14 @@ class ClamUIApp(Adw.Application):
             self._sync_profiles_to_tray()
 
         # Check if we should start minimized (only on first activation)
+        # BUT: If we have a pending VirusTotal scan, we need the window for dialogs
+        has_pending_vt_scan = self._initial_scan_paths and self._initial_use_virustotal
         start_minimized = (
             self._first_activation
             and is_new_window
             and self._settings_manager.get("start_minimized", False)
             and self._tray_indicator is not None
+            and not has_pending_vt_scan  # Force window for VT scans
         )
 
         if start_minimized:
@@ -187,6 +197,9 @@ class ClamUIApp(Adw.Application):
 
         # Mark first activation as complete
         self._first_activation = False
+
+        # Process any initial scan paths from CLI (e.g., from context menu)
+        self._process_initial_scan_paths()
 
     def do_startup(self):
         """
@@ -779,3 +792,208 @@ class ClamUIApp(Adw.Application):
 
         # Call parent shutdown
         Adw.Application.do_shutdown(self)
+
+    # Initial scan path handling (from CLI / context menu)
+
+    def set_initial_scan_paths(
+        self, file_paths: list[str], use_virustotal: bool = False
+    ) -> None:
+        """
+        Set initial file paths to scan on activation.
+
+        Called from main.py when paths are provided via CLI arguments
+        (e.g., from file manager context menu).
+
+        Args:
+            file_paths: List of file/directory paths to scan.
+            use_virustotal: If True, scan with VirusTotal instead of ClamAV.
+        """
+        self._initial_scan_paths = file_paths
+        self._initial_use_virustotal = use_virustotal
+        logger.info(
+            f"Set {len(file_paths)} initial scan path(s) "
+            f"(virustotal={use_virustotal})"
+        )
+
+    def _process_initial_scan_paths(self) -> None:
+        """
+        Process any initial scan paths set via CLI.
+
+        Called during do_activate after window creation.
+        Handles both ClamAV and VirusTotal scan requests.
+        """
+        if not self._initial_scan_paths:
+            return
+
+        paths = self._initial_scan_paths
+        use_vt = self._initial_use_virustotal
+
+        # Clear stored paths to prevent re-processing
+        self._initial_scan_paths = []
+        self._initial_use_virustotal = False
+
+        if use_vt:
+            # VirusTotal scan - only scan first file
+            if paths:
+                self._handle_virustotal_scan_request(paths[0])
+        else:
+            # ClamAV scan - handled by scan view
+            if self._scan_view and paths:
+                self._scan_view._set_selected_path(paths[0])
+                # Start scan automatically for context menu invocation
+                self._scan_view._start_scan()
+
+    # VirusTotal integration methods
+
+    def _handle_virustotal_scan_request(self, file_path: str) -> None:
+        """
+        Handle a VirusTotal scan request.
+
+        Checks for API key and either starts the scan, shows setup dialog,
+        or uses the remembered action.
+
+        Args:
+            file_path: Path to the file to scan.
+        """
+        from .core import keyring_manager
+
+        # Check for API key
+        api_key = keyring_manager.get_api_key(self._settings_manager)
+
+        if api_key:
+            # Have API key - start scan
+            self._trigger_virustotal_scan(file_path, api_key)
+        else:
+            # No API key - check remembered action
+            action = self._settings_manager.get(
+                "virustotal_remember_no_key_action", "none"
+            )
+
+            if action == "open_website":
+                # Open VirusTotal website directly
+                self._open_virustotal_website()
+            elif action == "prompt":
+                # Show notification only
+                self._notification_manager.notify_virustotal_no_key()
+            else:
+                # Show setup dialog (action == "none" or unknown)
+                self._show_virustotal_setup_dialog(file_path)
+
+    def _trigger_virustotal_scan(self, file_path: str, api_key: str) -> None:
+        """
+        Start a VirusTotal scan for a file.
+
+        Args:
+            file_path: Path to the file to scan.
+            api_key: VirusTotal API key.
+        """
+        from .core.log_manager import LogEntry, LogManager
+        from .core.virustotal import VirusTotalClient
+
+        # Initialize client if needed
+        if self._vt_client is None:
+            self._vt_client = VirusTotalClient(api_key)
+        else:
+            self._vt_client.set_api_key(api_key)
+
+        logger.info(f"Starting VirusTotal scan for: {file_path}")
+
+        def on_scan_complete(result):
+            """Handle scan completion on main thread."""
+            logger.info(
+                f"VirusTotal scan complete: status={result.status.value}, "
+                f"detections={result.detections}/{result.total_engines}"
+            )
+
+            # Save to log
+            try:
+                log_manager = LogManager()
+                log_entry = LogEntry.from_virustotal_result_data(
+                    vt_status=result.status.value,
+                    file_path=result.file_path,
+                    duration=result.duration,
+                    sha256=result.sha256,
+                    detections=result.detections,
+                    total_engines=result.total_engines,
+                    detection_details=[
+                        {
+                            "engine_name": d.engine_name,
+                            "category": d.category,
+                            "result": d.result,
+                        }
+                        for d in result.detection_details
+                    ],
+                    permalink=result.permalink,
+                    error_message=result.error_message,
+                )
+                log_manager.save_log(log_entry)
+            except Exception as e:
+                logger.error(f"Failed to save VirusTotal log: {e}")
+
+            # Show results dialog
+            self._show_virustotal_results_dialog(result)
+
+            # Send notification
+            if result.is_error:
+                if result.status.value == "rate_limited":
+                    self._notification_manager.notify_virustotal_rate_limit()
+                # Other errors don't need separate notification - dialog shows them
+            else:
+                self._notification_manager.notify_virustotal_scan_complete(
+                    is_clean=result.is_clean,
+                    detections=result.detections,
+                    total_engines=result.total_engines,
+                    permalink=result.permalink,
+                )
+
+        # Start async scan
+        self._vt_client.scan_file_async(file_path, on_scan_complete)
+
+    def _show_virustotal_setup_dialog(self, file_path: str) -> None:
+        """
+        Show the VirusTotal setup dialog for API key configuration.
+
+        Args:
+            file_path: Path to scan after setup completes.
+        """
+        from .ui.virustotal_setup_dialog import VirusTotalSetupDialog
+
+        win = self.props.active_window
+        if not win:
+            # Create window if needed
+            self.activate()
+            win = self.props.active_window
+
+        if win:
+            dialog = VirusTotalSetupDialog(
+                settings_manager=self._settings_manager,
+                on_key_saved=lambda key: self._trigger_virustotal_scan(file_path, key),
+            )
+            dialog.present(win)
+
+    def _show_virustotal_results_dialog(self, result) -> None:
+        """
+        Show the VirusTotal results dialog.
+
+        Args:
+            result: VTScanResult from the scan.
+        """
+        from .ui.virustotal_results_dialog import VirusTotalResultsDialog
+
+        win = self.props.active_window
+        if not win:
+            self.activate()
+            win = self.props.active_window
+
+        if win:
+            dialog = VirusTotalResultsDialog(vt_result=result)
+            dialog.present(win)
+
+    def _open_virustotal_website(self) -> None:
+        """Open the VirusTotal website for manual file upload."""
+        url = "https://www.virustotal.com/gui/home/upload"
+        try:
+            Gio.AppInfo.launch_default_for_uri(url, None)
+            logger.info("Opened VirusTotal website")
+        except Exception as e:
+            logger.error(f"Failed to open VirusTotal website: {e}")

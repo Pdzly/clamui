@@ -113,6 +113,8 @@ fi
 DESKTOP_DIR="$SHARE_DIR/applications"
 ICON_DIR="$SHARE_DIR/icons/hicolor/scalable/apps"
 NEMO_ACTION_DIR="$SHARE_DIR/nemo/actions"
+NAUTILUS_SCRIPTS_DIR="$HOME/.local/share/nautilus/scripts"
+DOLPHIN_SERVICES_DIR="$SHARE_DIR/kservices5/ServiceMenus"
 
 # Get script directory (where install.sh is located)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -414,14 +416,40 @@ install_xdg_files() {
         log_warning "Tray icon may use default theme icon"
     fi
 
-    # Install Nemo file manager action
-    log_info "Installing Nemo action to $NEMO_ACTION_DIR..."
+    # Install Nemo file manager actions
+    log_info "Installing Nemo actions to $NEMO_ACTION_DIR..."
     if [ -f "$SCRIPT_DIR/com.github.rooki.clamui.nemo_action" ]; then
         cp "$SCRIPT_DIR/com.github.rooki.clamui.nemo_action" "$NEMO_ACTION_DIR/"
         log_success "Nemo action installed: $NEMO_ACTION_DIR/com.github.rooki.clamui.nemo_action"
     else
         log_warning "Nemo action file not found: $SCRIPT_DIR/com.github.rooki.clamui.nemo_action"
         log_warning "Nemo context menu integration will not be available"
+    fi
+    # Install VirusTotal Nemo action
+    if [ -f "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.nemo_action" ]; then
+        cp "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.nemo_action" "$NEMO_ACTION_DIR/"
+        log_success "VirusTotal Nemo action installed"
+    fi
+
+    # Install Nautilus scripts (if Nautilus is detected)
+    if [ -d "$HOME/.local/share/nautilus" ] || command -v nautilus >/dev/null 2>&1; then
+        log_info "Installing Nautilus scripts..."
+        mkdir -p "$NAUTILUS_SCRIPTS_DIR"
+        if [ -f "$SCRIPT_DIR/scripts/clamui-virustotal-nautilus.sh" ]; then
+            cp "$SCRIPT_DIR/scripts/clamui-virustotal-nautilus.sh" "$NAUTILUS_SCRIPTS_DIR/Scan with VirusTotal"
+            chmod +x "$NAUTILUS_SCRIPTS_DIR/Scan with VirusTotal"
+            log_success "Nautilus VirusTotal script installed"
+        fi
+    fi
+
+    # Install Dolphin service menus (if Dolphin/KDE is detected)
+    if command -v dolphin >/dev/null 2>&1 || [ -d "$SHARE_DIR/kservices5" ]; then
+        log_info "Installing Dolphin service menus..."
+        mkdir -p "$DOLPHIN_SERVICES_DIR"
+        if [ -f "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.desktop" ]; then
+            cp "$SCRIPT_DIR/com.github.rooki.clamui-virustotal.desktop" "$DOLPHIN_SERVICES_DIR/"
+            log_success "Dolphin VirusTotal service menu installed"
+        fi
     fi
 
     # Update desktop database if available
@@ -443,6 +471,35 @@ install_xdg_files() {
             log_warning "Could not update icon cache (non-fatal)"
         fi
     fi
+
+    # Refresh file manager caches
+    log_info "Refreshing file manager caches..."
+
+    # Nemo: Restart to pick up new actions
+    if command -v nemo >/dev/null 2>&1; then
+        if pgrep -x nemo >/dev/null 2>&1; then
+            log_info "Restarting Nemo to load new actions..."
+            nemo -q 2>/dev/null || true
+            sleep 1
+            # Nemo will restart automatically when needed
+            log_success "Nemo cache refreshed"
+        else
+            log_info "Nemo not running, actions will be available on next start"
+        fi
+    fi
+
+    # Dolphin: Rebuild service menu cache
+    if command -v kbuildsycoca5 >/dev/null 2>&1; then
+        log_info "Rebuilding KDE service cache..."
+        kbuildsycoca5 --noincremental 2>/dev/null || true
+        log_success "KDE service cache rebuilt"
+    elif command -v kbuildsycoca6 >/dev/null 2>&1; then
+        log_info "Rebuilding KDE6 service cache..."
+        kbuildsycoca6 --noincremental 2>/dev/null || true
+        log_success "KDE6 service cache rebuilt"
+    fi
+
+    # Nautilus scripts don't need cache refresh - they're read on demand
 
     echo
     log_success "XDG files installed successfully!"

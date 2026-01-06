@@ -22,6 +22,9 @@ class NotificationManager:
     NOTIFICATION_ID_SCAN = "scan-complete"
     NOTIFICATION_ID_UPDATE = "update-complete"
     NOTIFICATION_ID_SCHEDULED_SCAN = "scheduled-scan-complete"
+    NOTIFICATION_ID_VT_SCAN = "virustotal-scan-complete"
+    NOTIFICATION_ID_VT_RATE_LIMIT = "virustotal-rate-limit"
+    NOTIFICATION_ID_VT_NO_KEY = "virustotal-no-key"
 
     def __init__(self, settings_manager: SettingsManager | None = None):
         """
@@ -161,6 +164,89 @@ class NotificationManager:
             body=body,
             priority=priority,
             default_action="app.show-scan",
+        )
+
+    def notify_virustotal_scan_complete(
+        self,
+        is_clean: bool,
+        detections: int = 0,
+        total_engines: int = 0,
+        file_name: str | None = None,
+        permalink: str | None = None,
+    ) -> bool:
+        """
+        Send notification for VirusTotal scan completion.
+
+        Args:
+            is_clean: True if no threats were detected
+            detections: Number of engines that detected threats
+            total_engines: Total number of engines that scanned the file
+            file_name: Optional name of the scanned file
+            permalink: Optional VirusTotal permalink
+
+        Returns:
+            True if notification was sent, False otherwise
+        """
+        if not self._can_notify():
+            return False
+
+        if is_clean:
+            title = "VirusTotal: No Threats"
+            if file_name:
+                body = f"'{file_name}' appears safe (0/{total_engines} detections)"
+            else:
+                body = f"File appears safe (0/{total_engines} detections)"
+            priority = Gio.NotificationPriority.NORMAL
+        else:
+            title = "VirusTotal: Threats Detected!"
+            if file_name:
+                body = f"'{file_name}' flagged by {detections}/{total_engines} engines"
+            else:
+                body = f"File flagged by {detections}/{total_engines} engines"
+            priority = Gio.NotificationPriority.URGENT
+
+        return self._send(
+            notification_id=self.NOTIFICATION_ID_VT_SCAN,
+            title=title,
+            body=body,
+            priority=priority,
+            default_action="app.show-logs",
+        )
+
+    def notify_virustotal_rate_limit(self) -> bool:
+        """
+        Send notification when VirusTotal rate limit is exceeded.
+
+        Returns:
+            True if notification was sent, False otherwise
+        """
+        if not self._can_notify():
+            return False
+
+        return self._send(
+            notification_id=self.NOTIFICATION_ID_VT_RATE_LIMIT,
+            title="VirusTotal Rate Limit",
+            body="Too many requests. Try again in a minute or use the website.",
+            priority=Gio.NotificationPriority.NORMAL,
+            default_action="app.show-preferences",
+        )
+
+    def notify_virustotal_no_key(self) -> bool:
+        """
+        Send notification when VirusTotal API key is not configured.
+
+        Returns:
+            True if notification was sent, False otherwise
+        """
+        if not self._can_notify():
+            return False
+
+        return self._send(
+            notification_id=self.NOTIFICATION_ID_VT_NO_KEY,
+            title="VirusTotal Not Configured",
+            body="Add your API key in Preferences to scan with VirusTotal.",
+            priority=Gio.NotificationPriority.NORMAL,
+            default_action="app.show-preferences",
         )
 
     def _can_notify(self) -> bool:

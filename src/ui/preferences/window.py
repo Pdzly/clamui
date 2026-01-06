@@ -24,6 +24,7 @@ from .onaccess_page import OnAccessPage
 from .save_page import SavePage
 from .scanner_page import ScannerPage
 from .scheduled_page import ScheduledPage
+from .virustotal_page import VirusTotalPage
 
 
 class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
@@ -133,6 +134,10 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
         exclusions_page_instance = ExclusionsPage(self._settings_manager)
         exclusions_page = exclusions_page_instance.create_page()
         self.add(exclusions_page)
+
+        # Create VirusTotal page (API key and settings)
+        virustotal_page = VirusTotalPage.create_page(self._settings_manager, self)
+        self.add(virustotal_page)
 
         # Create Save & Apply page - instance-based
         save_page_instance = SavePage(

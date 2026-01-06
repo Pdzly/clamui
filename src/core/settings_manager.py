@@ -40,6 +40,9 @@ class SettingsManager:
         # Scan backend settings
         "scan_backend": "auto",  # "auto", "daemon", "clamscan"
         "daemon_socket_path": "",  # Empty = auto-detect
+        # VirusTotal settings
+        "virustotal_api_key": None,  # Fallback storage if keyring unavailable
+        "virustotal_remember_no_key_action": "none",  # "none", "open_website", "prompt"
     }
 
     def __init__(self, config_dir: Path | None = None):

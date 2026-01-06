@@ -8,11 +8,13 @@ This package contains modular preference pages organized by domain:
 - OnAccessPage: On-Access scanning settings (clamonacc)
 - ScheduledPage: Scheduled scans configuration
 - ExclusionsPage: Scan exclusion patterns (preset + custom)
+- VirusTotalPage: VirusTotal API key and settings
 - SavePage: Save & Apply with config persistence
 - PreferencesWindow: Main window orchestrating all pages
 """
 
 from .exclusions_page import PRESET_EXCLUSIONS
+from .virustotal_page import VirusTotalPage
 from .window import PreferencesWindow
 
-__all__ = ["PreferencesWindow", "PRESET_EXCLUSIONS"]
+__all__ = ["PreferencesWindow", "PRESET_EXCLUSIONS", "VirusTotalPage"]

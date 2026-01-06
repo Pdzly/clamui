@@ -158,6 +158,7 @@ class LogType(Enum):
 
     SCAN = "scan"
     UPDATE = "update"
+    VIRUSTOTAL = "virustotal"
 
 
 class DaemonStatus(Enum):
@@ -339,6 +340,103 @@ class LogEntry:
             path=sanitized_path,
             duration=duration,
             scheduled=scheduled,
+        )
+
+    @classmethod
+    def from_virustotal_result_data(
+        cls,
+        vt_status: str,
+        file_path: str,
+        duration: float,
+        sha256: str,
+        detections: int = 0,
+        total_engines: int = 0,
+        detection_details: list | None = None,
+        permalink: str | None = None,
+        error_message: str | None = None,
+    ) -> "LogEntry":
+        """
+        Create a LogEntry from VirusTotal scan result data.
+
+        This factory method handles the common logic for creating log entries
+        from VirusTotal scan results.
+
+        Args:
+            vt_status: Status of the scan ("clean", "detected", "error",
+                       "rate_limited", "pending", "not_found", "file_too_large")
+            file_path: The path to the scanned file
+            duration: Scan duration in seconds
+            sha256: SHA256 hash of the file
+            detections: Number of engines that detected threats
+            total_engines: Total number of engines that analyzed the file
+            detection_details: List of detection dicts with engine_name, category, result
+            permalink: URL to the VirusTotal report
+            error_message: Error message if status is error
+
+        Returns:
+            New LogEntry instance
+        """
+        detection_details = detection_details or []
+
+        # Sanitize input fields before building summary and details
+        sanitized_path = sanitize_log_line(file_path)
+        sanitized_sha256 = sanitize_log_line(sha256)
+        sanitized_error_message = sanitize_log_line(error_message) if error_message else None
+
+        # Build summary based on status
+        if vt_status == "clean":
+            summary = f"VirusTotal: Clean scan of {sanitized_path}"
+            status = "clean"
+        elif vt_status == "detected":
+            summary = f"VirusTotal: {detections}/{total_engines} engines detected threats in {sanitized_path}"
+            status = "infected"
+        elif vt_status == "rate_limited":
+            summary = f"VirusTotal: Rate limit exceeded for {sanitized_path}"
+            status = "error"
+        elif vt_status == "pending":
+            summary = f"VirusTotal: Analysis pending for {sanitized_path}"
+            status = "pending"
+        elif vt_status == "not_found":
+            summary = f"VirusTotal: File not previously analyzed - {sanitized_path}"
+            status = "unknown"
+        elif vt_status == "file_too_large":
+            summary = f"VirusTotal: File too large for upload - {sanitized_path}"
+            status = "error"
+        else:
+            summary = f"VirusTotal: Scan error for {sanitized_path}"
+            status = "error"
+
+        # Build details string
+        details_parts = [f"SHA256: {sanitized_sha256}"]
+
+        if total_engines > 0:
+            details_parts.append(f"Scanned by: {total_engines} engines")
+
+        if detections > 0:
+            details_parts.append(f"Detections: {detections}/{total_engines}")
+            for detection in detection_details:
+                engine = sanitize_log_line(detection.get("engine_name", "unknown"))
+                result = sanitize_log_line(detection.get("result", "unknown"))
+                category = detection.get("category", "unknown")
+                details_parts.append(f"  - {engine} ({category}): {result}")
+
+        if permalink:
+            sanitized_permalink = sanitize_log_line(permalink)
+            details_parts.append(f"Report: {sanitized_permalink}")
+
+        if sanitized_error_message:
+            details_parts.append(f"Error: {sanitized_error_message}")
+
+        details = "\n".join(details_parts)
+
+        return cls.create(
+            log_type="virustotal",
+            status=status,
+            summary=summary,
+            details=details,
+            path=sanitized_path,
+            duration=duration,
+            scheduled=False,
         )
 
 

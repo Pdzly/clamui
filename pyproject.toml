@@ -31,6 +31,8 @@ dependencies = [
     "psutil>=5.9.0",
     "pygobject-stubs>=2.16.0",
     "matplotlib>=3.8.0",
+    "requests>=2.31.0",
+    "keyring>=25.0.0",
 ]
 
 [project.optional-dependencies]

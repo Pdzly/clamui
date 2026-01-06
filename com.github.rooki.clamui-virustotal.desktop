@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Service
+Name=ClamUI VirusTotal Scanner
+Comment=Scan files with VirusTotal online service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;
+Actions=ScanWithVirusTotal;
+X-KDE-Priority=TopLevel
+
+[Desktop Action ScanWithVirusTotal]
+Name=Scan with VirusTotal
+Icon=com.github.rooki.clamui
+Exec=clamui --virustotal %F

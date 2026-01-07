@@ -11,6 +11,7 @@ These tests verify the scanner's end-to-end behavior including:
 All tests mock ClamAV subprocess execution to run without requiring ClamAV installed.
 """
 
+import subprocess
 from unittest import mock
 
 import pytest
@@ -684,7 +685,7 @@ Time: 0.100 sec (0 m 0 s)
         def mock_glib_idle_add(callback_func, *args):
             return callback_func(*args)
 
-        def mock_communicate():
+        def mock_communicate(timeout=None):
             # Record the thread ID where scan executes
             scan_thread_ids.append(threading.current_thread().ident)
             return (mock_stdout, "")
@@ -874,7 +875,6 @@ def test_scan_cancellation(tmp_path):
     to verify the scanner properly handles the cancellation request.
     """
     import threading
-    import time
 
     # Create test file to scan
     test_file = tmp_path / "test_cancel.txt"
@@ -895,18 +895,23 @@ def test_scan_cancellation(tmp_path):
         """Mock GLib.idle_add to capture and immediately invoke callback."""
         return callback_func(*args)
 
-    def mock_communicate():
-        """
-        Mock communicate that simulates a long-running scan.
+    # Track communicate call count for proper cancellation simulation
+    call_count = [0]
 
-        This gives us time to trigger cancellation during execution.
-        When cancelled, the process sets _scan_cancelled flag before
-        communicate returns, simulating a terminated subprocess.
+    def mock_communicate(timeout=None):
         """
-        # Simulate scan taking some time
-        time.sleep(0.1)
-        # Set cancelled flag to simulate user cancellation during scan
-        scanner._scan_cancelled = True
+        Mock communicate that simulates a long-running scan with cancellation.
+
+        The _communicate_with_cancel_check method polls with timeout=0.5:
+        1. First call: Set cancelled flag and raise TimeoutExpired to force loop iteration
+        2. Second call: Return empty output for cleanup after termination
+        """
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First call: simulate process still running, set cancel flag
+            scanner._scan_cancelled = True
+            raise subprocess.TimeoutExpired(cmd="clamscan", timeout=0.5)
+        # Second call: return output after termination
         return ("", "")
 
     with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
@@ -994,14 +999,28 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
         """Mock GLib.idle_add to capture and immediately invoke callback."""
         return callback_func(*args)
 
-    def mock_communicate():
+    # Track communicate call count for proper cancellation simulation
+    call_count = [0]
+
+    def mock_communicate(timeout=None):
         """
-        Mock communicate that signals when process starts,
-        then waits to allow cancel() to be called.
+        Mock communicate that signals when process starts and allows cancel().
+
+        The _communicate_with_cancel_check method polls with timeout=0.5:
+        1. First call: Signal process started, raise TimeoutExpired to keep loop running
+        2. Main test calls scanner.cancel() which sets _scan_cancelled flag
+        3. Loop detects cancellation, calls terminate() then communicate(timeout=2.0)
+        4. Second call: Return empty output for cleanup
         """
-        process_started_event.set()
-        # Wait a bit to allow cancel() to be called
-        time.sleep(0.2)
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First call: signal process started
+            process_started_event.set()
+            # Wait a bit to allow cancel() to be called
+            time.sleep(0.2)
+            # Raise TimeoutExpired to force loop to check cancel flag
+            raise subprocess.TimeoutExpired(cmd="clamscan", timeout=0.5)
+        # Second call: return output after termination
         return ("", "")
 
     with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
@@ -1046,7 +1065,9 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
     assert scanner._scan_cancelled is True
 
     # Verify terminate was called on the process
-    mock_process.terminate.assert_called_once()
+    # Note: terminate() may be called twice - once by cancel() and once by
+    # _communicate_with_cancel_check() when it detects the cancellation flag
+    mock_process.terminate.assert_called()
 
     # Verify result properties
     assert result.error_message is not None

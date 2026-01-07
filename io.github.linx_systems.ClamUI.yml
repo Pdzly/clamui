@@ -20,19 +20,8 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
   - --talk-name=org.kde.StatusNotifierWatcher
 
-  # File access via XDG directories
-  - --filesystem=xdg-documents
-  - --filesystem=xdg-download
-  - --filesystem=xdg-music
-  - --filesystem=xdg-pictures
-  - --filesystem=xdg-videos
-  - --filesystem=xdg-desktop
-
   # GVFS for file browser integration
   - --filesystem=xdg-run/gvfsd
-
-  # Nemo actions directory (for context menu integration)
-  - --filesystem=~/.local/share/nemo/actions:create
 
 modules:
   # System tray indicator support (AyatanaAppIndicator3)

@@ -579,8 +579,8 @@ class ClamUIApp(Adw.Application):
         about.set_developer_name("ClamUI Contributors")
         about.set_license_type(Gtk.License.MIT_X11)
         about.set_comments("A graphical interface for ClamAV antivirus")
-        about.set_website("https://github.com/clamui/clamui")
-        about.set_issue_url("https://github.com/clamui/clamui/issues")
+        about.set_website("https://github.com/linx-systems/clamui")
+        about.set_issue_url("https://github.com/linx-systems/clamui/issues")
         about.set_application_icon("security-high-symbolic")
         about.present(self.props.active_window)
 

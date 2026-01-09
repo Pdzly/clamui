@@ -646,7 +646,7 @@ class ScanView(Gtk.Box):
         """
         Handle select file button click.
 
-        Opens a file chooser dialog to select a file.
+        Opens a file chooser dialog to select one or more files.
 
         Args:
             button: The Gtk.Button that was clicked
@@ -656,7 +656,7 @@ class ScanView(Gtk.Box):
             return
 
         dialog = Gtk.FileDialog()
-        dialog.set_title("Select File to Scan")
+        dialog.set_title("Select Files to Scan")
 
         # Set initial folder if a path is already selected
         if self._selected_paths:
@@ -665,23 +665,27 @@ class ScanView(Gtk.Box):
             if os.path.isdir(parent_dir):
                 dialog.set_initial_folder(Gio.File.new_for_path(parent_dir))
 
-        def on_file_selected(dialog, result):
+        def on_files_selected(dialog, result):
             try:
-                file = dialog.open_finish(result)
-                if file:
-                    path = file.get_path()
-                    if path:
-                        self._set_selected_path(path)
+                files = dialog.open_multiple_finish(result)
+                if files:
+                    # Clear existing selection before adding new files
+                    self._clear_paths()
+                    for i in range(files.get_n_items()):
+                        file = files.get_item(i)
+                        path = file.get_path()
+                        if path:
+                            self._add_path(path)
             except GLib.GError:
                 pass  # User cancelled
 
-        dialog.open(root, None, on_file_selected)
+        dialog.open_multiple(root, None, on_files_selected)
 
     def _on_select_folder_clicked(self, button):
         """
         Handle select folder button click.
 
-        Opens a file chooser dialog to select a folder.
+        Opens a file chooser dialog to select one or more folders.
 
         Args:
             button: The Gtk.Button that was clicked
@@ -691,7 +695,7 @@ class ScanView(Gtk.Box):
             return
 
         dialog = Gtk.FileDialog()
-        dialog.set_title("Select Folder to Scan")
+        dialog.set_title("Select Folders to Scan")
 
         # Set initial folder if a path is already selected
         if self._selected_paths:
@@ -700,17 +704,21 @@ class ScanView(Gtk.Box):
             if os.path.isdir(initial_dir):
                 dialog.set_initial_folder(Gio.File.new_for_path(initial_dir))
 
-        def on_folder_selected(dialog, result):
+        def on_folders_selected(dialog, result):
             try:
-                file = dialog.select_folder_finish(result)
-                if file:
-                    path = file.get_path()
-                    if path:
-                        self._set_selected_path(path)
+                files = dialog.select_multiple_folders_finish(result)
+                if files:
+                    # Clear existing selection before adding new folders
+                    self._clear_paths()
+                    for i in range(files.get_n_items()):
+                        file = files.get_item(i)
+                        path = file.get_path()
+                        if path:
+                            self._add_path(path)
             except GLib.GError:
                 pass  # User cancelled
 
-        dialog.select_folder(root, None, on_folder_selected)
+        dialog.select_multiple_folders(root, None, on_folders_selected)
 
     def _set_selected_path(self, path: str):
         """

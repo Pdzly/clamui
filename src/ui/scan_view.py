@@ -543,14 +543,21 @@ class ScanView(Gtk.Box):
             profile_idx = selected_idx - 1  # Adjust for "No Profile" option
             if 0 <= profile_idx < len(self._profile_list):
                 self._selected_profile = self._profile_list[profile_idx]
-                # Apply profile's targets to the selected path
+                # Apply all profile targets to the path list
                 if self._selected_profile.targets:
-                    first_target = self._selected_profile.targets[0]
-                    # Expand ~ in paths
-                    if first_target.startswith("~"):
-                        first_target = os.path.expanduser(first_target)
-                    if os.path.exists(first_target):
-                        self._set_selected_path(first_target)
+                    self._clear_paths()
+                    valid_count = 0
+                    for target in self._selected_profile.targets:
+                        # Expand ~ in paths
+                        expanded = os.path.expanduser(target) if target.startswith("~") else target
+                        if os.path.exists(expanded):
+                            self._add_path(expanded)
+                            valid_count += 1
+                    # Warn if no valid targets were found
+                    if valid_count == 0:
+                        self._show_toast(
+                            f"Profile '{self._selected_profile.name}' has no valid targets"
+                        )
             else:
                 self._selected_profile = None
 

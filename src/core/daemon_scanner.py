@@ -63,7 +63,7 @@ class DaemonScanner:
         """
         self._current_process: subprocess.Popen | None = None
         self._process_lock = threading.Lock()
-        self._scan_cancelled = False
+        self._cancel_event = threading.Event()
         self._log_manager = log_manager if log_manager else LogManager()
         self._settings_manager = settings_manager
 
@@ -115,9 +115,9 @@ class DaemonScanner:
         """
         start_time = time.monotonic()
 
-        # Reset cancelled flag at the start of every scan
+        # Reset cancel event at the start of every scan
         # This ensures a previous cancelled scan doesn't affect new scans
-        self._scan_cancelled = False
+        self._cancel_event.clear()
 
         # Validate the path first
         is_valid, error = validate_path(path)
@@ -140,7 +140,7 @@ class DaemonScanner:
         )
 
         # Check if cancelled during counting phase
-        if self._scan_cancelled:
+        if self._cancel_event.is_set():
             result = create_cancelled_result(path)
             self._save_scan_log(result, time.monotonic() - start_time)
             return result
@@ -156,7 +156,7 @@ class DaemonScanner:
 
             try:
                 stdout, stderr, was_cancelled = communicate_with_cancel_check(
-                    self._current_process, lambda: self._scan_cancelled
+                    self._current_process, self._cancel_event.is_set
                 )
                 exit_code = self._current_process.returncode
             finally:
@@ -244,7 +244,7 @@ class DaemonScanner:
         then escalated to SIGKILL if the process doesn't respond within
         the grace period.
         """
-        self._scan_cancelled = True
+        self._cancel_event.set()
         # Acquire lock to safely get process reference
         with self._process_lock:
             process = self._current_process
@@ -354,7 +354,7 @@ class DaemonScanner:
         try:
             for root, dirs, files in os.walk(path):
                 # Check for cancellation during counting
-                if self._scan_cancelled:
+                if self._cancel_event.is_set():
                     logger.info("File counting cancelled by user")
                     return (0, 0)
 

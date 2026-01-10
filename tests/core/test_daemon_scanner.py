@@ -214,12 +214,12 @@ class TestDaemonScannerCancel:
     """Tests for DaemonScanner.cancel method."""
 
     def test_cancel_sets_flag(self, daemon_scanner_class):
-        """Test that cancel sets the cancelled flag."""
+        """Test that cancel sets the cancel event."""
         scanner = daemon_scanner_class()
 
         scanner.cancel()
 
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_terminates_process(self, daemon_scanner_class):
         """Test that cancel terminates running process."""
@@ -249,7 +249,7 @@ class TestDaemonScannerCancel:
 
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_called_once()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_kill_timeout_handles_gracefully(self, daemon_scanner_class):
         """Test that cancel handles kill timeout gracefully."""
@@ -270,7 +270,7 @@ class TestDaemonScannerCancel:
 
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_called_once()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_process_already_terminated_on_terminate(self, daemon_scanner_class):
         """Test cancel handles process already gone when calling terminate."""
@@ -287,7 +287,7 @@ class TestDaemonScannerCancel:
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_not_called()  # Should not reach kill
         mock_process.wait.assert_not_called()  # Should not reach wait
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_graceful_termination_success(self, daemon_scanner_class):
         """Test cancel when process terminates gracefully within timeout."""
@@ -303,7 +303,7 @@ class TestDaemonScannerCancel:
         mock_process.terminate.assert_called_once()
         mock_process.wait.assert_called_once()  # Only one wait call
         mock_process.kill.assert_not_called()  # Should not escalate to kill
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
 
 class TestDaemonScannerFilterExcludedThreats:
@@ -926,7 +926,7 @@ class TestDaemonScannerProcessLockThreadSafety:
 
         # Run multiple iterations to increase chance of hitting race condition
         for _ in range(5):
-            scanner._scan_cancelled = False
+            scanner._cancel_event.clear()
             t1 = threading.Thread(target=scan_thread)
             t2 = threading.Thread(target=cancel_thread)
 
@@ -971,23 +971,23 @@ class TestDaemonScannerProcessLockThreadSafety:
 
         # Should not raise any exception
         scanner.cancel()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
 
 class TestDaemonScannerCancelFlagReset:
-    """Tests for cancel flag reset at start of new scans."""
+    """Tests for cancel event reset at start of new scans."""
 
     def test_cancelled_flag_reset_at_scan_start(
         self, tmp_path, daemon_scanner_class, scan_status_class
     ):
-        """Test that _scan_cancelled flag is reset at start of scan_sync."""
+        """Test that _cancel_event is reset at start of scan_sync."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
         scanner = daemon_scanner_class()
 
-        # Manually set cancelled flag to simulate previous cancelled scan
-        scanner._scan_cancelled = True
+        # Manually set cancel event to simulate previous cancelled scan
+        scanner._cancel_event.set()
 
         with (
             patch("src.core.daemon_scanner.check_clamdscan_installed") as mock_installed,
@@ -1006,8 +1006,8 @@ class TestDaemonScannerCancelFlagReset:
 
         # Scan should complete successfully (not be cancelled)
         assert result.status == scan_status_class.CLEAN
-        # Flag should have been reset during scan
-        assert scanner._scan_cancelled is False
+        # Event should have been cleared during scan
+        assert scanner._cancel_event.is_set() is False
 
     def test_scan_after_cancelled_during_counting_runs_normally(
         self, tmp_path, daemon_scanner_class, scan_status_class
@@ -1016,7 +1016,7 @@ class TestDaemonScannerCancelFlagReset:
 
         This is the specific bug scenario:
         1. Start scan A
-        2. Cancel during counting phase (flag set to True, scan returns cancelled)
+        2. Cancel during counting phase (event set, scan returns cancelled)
         3. Start scan B - it should run normally, not return cancelled immediately
         """
         # Create test directory with files to trigger counting phase
@@ -1031,7 +1031,7 @@ class TestDaemonScannerCancelFlagReset:
         # This is what happens when user cancels during _count_scan_targets
         def counting_that_gets_cancelled(*args, **kwargs):
             # Simulate cancel during counting
-            scanner._scan_cancelled = True
+            scanner._cancel_event.set()
             return (0, 0)
 
         with (
@@ -1046,8 +1046,8 @@ class TestDaemonScannerCancelFlagReset:
             result_a = scanner.scan_sync(str(test_dir), count_targets=True)
 
         assert result_a.status == scan_status_class.CANCELLED
-        # Flag should still be True after cancelled scan
-        assert scanner._scan_cancelled is True
+        # Event should still be set after cancelled scan
+        assert scanner._cancel_event.is_set() is True
 
         # Now start scan B - this is where the bug manifested
         # Without the fix, scan B would return CANCELLED immediately
@@ -1070,7 +1070,7 @@ class TestDaemonScannerCancelFlagReset:
 
         # With the fix, scan B should complete successfully
         assert result_b.status == scan_status_class.CLEAN
-        assert scanner._scan_cancelled is False
+        assert scanner._cancel_event.is_set() is False
 
     def test_multiple_cancelled_scans_followed_by_successful_scan(
         self, tmp_path, daemon_scanner_class, scan_status_class
@@ -1083,7 +1083,7 @@ class TestDaemonScannerCancelFlagReset:
 
         # Cancel several scans in a row
         for _ in range(3):
-            scanner._scan_cancelled = True
+            scanner._cancel_event.set()
 
         # Now run a real scan
         with (

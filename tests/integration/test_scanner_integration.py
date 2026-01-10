@@ -903,13 +903,13 @@ def test_scan_cancellation(tmp_path):
         Mock communicate that simulates a long-running scan with cancellation.
 
         The _communicate_with_cancel_check method polls with timeout=0.5:
-        1. First call: Set cancelled flag and raise TimeoutExpired to force loop iteration
+        1. First call: Set cancel event and raise TimeoutExpired to force loop iteration
         2. Second call: Return empty output for cleanup after termination
         """
         call_count[0] += 1
         if call_count[0] == 1:
-            # First call: simulate process still running, set cancel flag
-            scanner._scan_cancelled = True
+            # First call: simulate process still running, set cancel event
+            scanner._cancel_event.set()
             raise subprocess.TimeoutExpired(cmd="clamscan", timeout=0.5)
         # Second call: return output after termination
         return ("", "")
@@ -970,7 +970,7 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
     Test scan cancellation via the cancel() method.
 
     This test verifies that calling scanner.cancel() during an active scan:
-    1. Sets the internal _scan_cancelled flag to True
+    1. Sets the internal _cancel_event
     2. Calls terminate() on the subprocess
     3. The scan result reflects the cancellation
 
@@ -1008,7 +1008,7 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
 
         The _communicate_with_cancel_check method polls with timeout=0.5:
         1. First call: Signal process started, raise TimeoutExpired to keep loop running
-        2. Main test calls scanner.cancel() which sets _scan_cancelled flag
+        2. Main test calls scanner.cancel() which sets _cancel_event
         3. Loop detects cancellation, calls terminate() then communicate(timeout=2.0)
         4. Second call: Return empty output for cleanup
         """
@@ -1045,7 +1045,7 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
                         assert process_started, "Process did not start"
 
                         # Call cancel() method - this should:
-                        # 1. Set _scan_cancelled flag to True
+                        # 1. Set _cancel_event
                         # 2. Call terminate() on the subprocess
                         scanner.cancel()
 
@@ -1062,7 +1062,7 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
     )
 
     # Verify cancel() was effective
-    assert scanner._scan_cancelled is True
+    assert scanner._cancel_event.is_set() is True
 
     # Verify terminate was called on the process
     # Note: terminate() may be called twice - once by cancel() and once by

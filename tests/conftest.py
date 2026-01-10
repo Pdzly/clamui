@@ -388,7 +388,8 @@ def mock_scanner():
     scanner.scan_async.return_value = clean_result
     scanner.cancel_scan.return_value = None
     scanner._build_command.return_value = ["clamscan", "-i"]
-    scanner._scan_cancelled = False
+    scanner._cancel_event = MagicMock()
+    scanner._cancel_event.is_set.return_value = False
     scanner._current_process = None
 
     yield scanner

@@ -815,7 +815,7 @@ Infected files: 1
 
         # Set up mock to simulate cancellation during polling loop:
         # First call raises TimeoutExpired (process still running),
-        # then we set _scan_cancelled, and the loop detects cancellation
+        # then we set _cancel_event, and the loop detects cancellation
         call_count = 0
 
         def simulate_timeout_then_cancel(*args, **kwargs):
@@ -823,7 +823,7 @@ Infected files: 1
             call_count += 1
             if call_count == 1:
                 # First call: simulate process still running
-                scanner._scan_cancelled = True  # Simulate cancel() being called
+                scanner._cancel_event.set()  # Simulate cancel() being called
                 raise subprocess.TimeoutExpired(cmd="clamscan", timeout=0.5)
             # Second call: return output after termination
             return ("", "")
@@ -1294,7 +1294,7 @@ class TestScannerCancelEdgeCases:
         scanner = Scanner()
         # Should not raise any exception
         scanner.cancel()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_handles_terminate_oserror(self, tmp_path):
         """Test cancel() handles OSError when terminating process."""
@@ -1310,7 +1310,7 @@ class TestScannerCancelEdgeCases:
 
         # Should not raise exception
         scanner.cancel()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_handles_process_lookup_error(self, tmp_path):
         """Test cancel() handles ProcessLookupError when terminating process."""
@@ -1323,7 +1323,7 @@ class TestScannerCancelEdgeCases:
 
         # Should not raise exception
         scanner.cancel()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_terminate_timeout_escalates_to_kill(self):
         """Test that cancel() escalates to kill if terminate times out."""
@@ -1343,7 +1343,7 @@ class TestScannerCancelEdgeCases:
 
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_called_once()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_kill_timeout_handles_gracefully(self):
         """Test that cancel() handles kill timeout gracefully."""
@@ -1364,7 +1364,7 @@ class TestScannerCancelEdgeCases:
 
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_called_once()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_process_already_terminated_on_terminate(self):
         """Test cancel() handles process already gone when calling terminate."""
@@ -1381,7 +1381,7 @@ class TestScannerCancelEdgeCases:
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_not_called()  # Should not reach kill
         mock_process.wait.assert_not_called()  # Should not reach wait
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
     def test_cancel_graceful_termination_success(self):
         """Test cancel() when process terminates gracefully within timeout."""
@@ -1397,7 +1397,7 @@ class TestScannerCancelEdgeCases:
         mock_process.terminate.assert_called_once()
         mock_process.wait.assert_called_once()  # Only one wait call
         mock_process.kill.assert_not_called()  # Should not escalate to kill
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
 
 class TestParseResultsEdgeCases:
@@ -1814,7 +1814,7 @@ class TestScannerProcessLockThreadSafety:
 
         # Run multiple iterations to increase chance of hitting race condition
         for _ in range(5):
-            scanner._scan_cancelled = False
+            scanner._cancel_event.clear()
             t1 = threading.Thread(target=scan_thread)
             t2 = threading.Thread(target=cancel_thread)
 
@@ -1857,21 +1857,21 @@ class TestScannerProcessLockThreadSafety:
 
         # Should not raise any exception
         scanner.cancel()
-        assert scanner._scan_cancelled is True
+        assert scanner._cancel_event.is_set() is True
 
 
 class TestScannerCancelFlagReset:
-    """Tests for cancel flag reset at start of new scans."""
+    """Tests for cancel event reset at start of new scans."""
 
     def test_cancelled_flag_reset_at_scan_start(self, tmp_path):
-        """Test that _scan_cancelled flag is reset at start of scan_sync."""
+        """Test that _cancel_event is reset at start of scan_sync."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test content")
 
         scanner = Scanner()
 
-        # Manually set cancelled flag to simulate previous cancelled scan
-        scanner._scan_cancelled = True
+        # Manually set cancel event to simulate previous cancelled scan
+        scanner._cancel_event.set()
 
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
             with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
@@ -1888,13 +1888,13 @@ class TestScannerCancelFlagReset:
 
         # Scan should complete successfully (not be cancelled)
         assert result.status == ScanStatus.CLEAN
-        # Flag should have been reset during scan
-        assert scanner._scan_cancelled is False
+        # Event should have been cleared during scan
+        assert scanner._cancel_event.is_set() is False
 
     def test_scan_after_cancelled_scan_runs_normally(self, tmp_path):
         """Test that a new scan runs normally after a previous scan was cancelled.
 
-        This verifies the fix for the bug where a cancelled scan's flag
+        This verifies the fix for the bug where a cancelled scan's event
         would affect subsequent scans.
         """
         test_file = tmp_path / "test.txt"
@@ -1903,7 +1903,7 @@ class TestScannerCancelFlagReset:
         scanner = Scanner()
 
         # Simulate a cancelled scan
-        scanner._scan_cancelled = True
+        scanner._cancel_event.set()
 
         # Now run a new scan
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
@@ -1921,7 +1921,7 @@ class TestScannerCancelFlagReset:
 
         # With the fix, the new scan should complete successfully
         assert result.status == ScanStatus.CLEAN
-        assert scanner._scan_cancelled is False
+        assert scanner._cancel_event.is_set() is False
 
     def test_multiple_cancelled_scans_followed_by_successful_scan(self, tmp_path):
         """Test that multiple consecutive cancelled scans don't affect subsequent scans."""
@@ -1932,7 +1932,7 @@ class TestScannerCancelFlagReset:
 
         # Cancel several scans in a row
         for _ in range(3):
-            scanner._scan_cancelled = True
+            scanner._cancel_event.set()
 
         # Now run a real scan
         with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):

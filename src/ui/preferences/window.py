@@ -6,6 +6,7 @@ This module provides the PreferencesWindow class which composes all
 preference page modules into a cohesive preferences interface.
 """
 
+import logging
 from pathlib import Path
 
 import gi
@@ -16,6 +17,8 @@ from gi.repository import Adw
 
 from src.core.clamav_config import parse_config
 from src.core.flatpak import ensure_freshclam_config, get_freshclam_config_path, is_flatpak
+
+logger = logging.getLogger(__name__)
 from src.core.scheduler import Scheduler
 
 from .base import PreferencesPageMixin
@@ -88,12 +91,24 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
         # Default config file paths - use Flatpak-specific paths when running in Flatpak
         if is_flatpak():
             # In Flatpak, use the generated config in user's config directory
+            logger.info("Running in Flatpak, using Flatpak-specific config paths")
             flatpak_config = get_freshclam_config_path()
             if flatpak_config:
                 # Ensure the config file exists (generates it if needed)
-                ensure_freshclam_config()
-                self._freshclam_conf_path = str(flatpak_config)
+                generated_path = ensure_freshclam_config()
+                if generated_path:
+                    logger.info("Flatpak freshclam config generated at: %s", generated_path)
+                    self._freshclam_conf_path = str(generated_path)
+                else:
+                    logger.warning(
+                        "Failed to generate Flatpak freshclam config, using expected path: %s",
+                        flatpak_config,
+                    )
+                    self._freshclam_conf_path = str(flatpak_config)
             else:
+                logger.warning(
+                    "Could not determine Flatpak config path, falling back to system path"
+                )
                 self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
             # clamd.conf is typically not used in Flatpak (daemon runs on host)
             self._clamd_conf_path = "/etc/clamav/clamd.conf"
@@ -185,21 +200,45 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
         Loads both freshclam.conf and clamd.conf (if available),
         parses them, and updates the UI with current values.
         """
+        # Load freshclam.conf
+        logger.debug("Loading freshclam config from: %s", self._freshclam_conf_path)
         try:
-            # Load freshclam.conf
             self._freshclam_config, error = parse_config(self._freshclam_conf_path)
+            if error:
+                logger.warning("Failed to load freshclam.conf: %s", error)
+            elif self._freshclam_config:
+                # Log number of options loaded (values is a dict in ClamAVConfig)
+                num_options = (
+                    len(self._freshclam_config.values)
+                    if hasattr(self._freshclam_config, "values")
+                    and isinstance(self._freshclam_config.values, dict)
+                    else 0
+                )
+                logger.info("Loaded freshclam.conf with %d options", num_options)
             self._populate_freshclam_fields()
         except Exception as e:
-            print(f"Error loading freshclam.conf: {e}")
+            logger.exception("Unexpected error loading freshclam.conf: %s", e)
 
         # Load clamd.conf if available
         if self._clamd_available:
+            logger.debug("Loading clamd config from: %s", self._clamd_conf_path)
             try:
                 self._clamd_config, error = parse_config(self._clamd_conf_path)
+                if error:
+                    logger.warning("Failed to load clamd.conf: %s", error)
+                elif self._clamd_config:
+                    # Log number of options loaded (values is a dict in ClamAVConfig)
+                    num_options = (
+                        len(self._clamd_config.values)
+                        if hasattr(self._clamd_config, "values")
+                        and isinstance(self._clamd_config.values, dict)
+                        else 0
+                    )
+                    logger.info("Loaded clamd.conf with %d options", num_options)
                 self._populate_clamd_fields()
                 self._populate_onaccess_fields()
             except Exception as e:
-                print(f"Error loading clamd.conf: {e}")
+                logger.exception("Unexpected error loading clamd.conf: %s", e)
 
     def _populate_freshclam_fields(self):
         """

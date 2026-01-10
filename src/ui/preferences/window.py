@@ -15,6 +15,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw
 
 from src.core.clamav_config import parse_config
+from src.core.flatpak import ensure_freshclam_config, get_freshclam_config_path, is_flatpak
 from src.core.scheduler import Scheduler
 
 from .base import PreferencesPageMixin
@@ -84,9 +85,21 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
         self._freshclam_config = None
         self._clamd_config = None
 
-        # Default config file paths
-        self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
-        self._clamd_conf_path = "/etc/clamav/clamd.conf"
+        # Default config file paths - use Flatpak-specific paths when running in Flatpak
+        if is_flatpak():
+            # In Flatpak, use the generated config in user's config directory
+            flatpak_config = get_freshclam_config_path()
+            if flatpak_config:
+                # Ensure the config file exists (generates it if needed)
+                ensure_freshclam_config()
+                self._freshclam_conf_path = str(flatpak_config)
+            else:
+                self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
+            # clamd.conf is typically not used in Flatpak (daemon runs on host)
+            self._clamd_conf_path = "/etc/clamav/clamd.conf"
+        else:
+            self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
+            self._clamd_conf_path = "/etc/clamav/clamd.conf"
 
         # Check if clamd.conf exists
         if Path(self._clamd_conf_path).exists():

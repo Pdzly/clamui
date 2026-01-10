@@ -468,3 +468,97 @@ class TestQuarantineDatabase:
 
         old_entries = db.get_old_entries(days=30)
         assert len(old_entries) == 0
+
+
+class TestQuarantineDatabaseErrorLogging:
+    """Tests for error logging in QuarantineDatabase."""
+
+    @pytest.fixture
+    def temp_db_dir(self):
+        """Create a temporary directory for database storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield tmpdir
+
+    @pytest.fixture
+    def db(self, temp_db_dir):
+        """Create a QuarantineDatabase with a temporary database."""
+        db_path = os.path.join(temp_db_dir, "test_quarantine.db")
+        database = QuarantineDatabase(db_path=db_path)
+        yield database
+        database.close()
+
+    def test_add_entry_logs_error_on_failure(self, db, caplog):
+        """Test that add_entry logs error when database operation fails."""
+        import logging
+
+        # Add a valid entry first
+        db.add_entry(
+            original_path="/file1.exe",
+            quarantine_path="/quarantine/unique.quar",
+            threat_name="Threat1",
+            file_size=100,
+            file_hash="hash1",
+        )
+
+        # Try to add duplicate (violates UNIQUE constraint)
+        with caplog.at_level(logging.ERROR):
+            result = db.add_entry(
+                original_path="/file2.exe",
+                quarantine_path="/quarantine/unique.quar",  # Same quarantine_path
+                threat_name="Threat2",
+                file_size=200,
+                file_hash="hash2",
+            )
+
+        assert result is None
+        assert "Failed to add quarantine entry" in caplog.text
+        assert "/file2.exe" in caplog.text
+
+    def test_get_entry_logs_error_on_database_error(self, temp_db_dir, caplog):
+        """Test that get_entry logs error when database is corrupted."""
+        import logging
+
+        # Create a corrupted database file
+        db_path = os.path.join(temp_db_dir, "corrupted.db")
+        with open(db_path, "w") as f:
+            f.write("not a valid sqlite database")
+
+        # Try to use the corrupted database
+        with caplog.at_level(logging.ERROR):
+            db = QuarantineDatabase(db_path=db_path, pool_size=0)
+            result = db.get_entry(1)
+
+        # Should log error about init and/or get_entry failure
+        assert result is None
+        assert "Failed to" in caplog.text
+
+    def test_remove_entry_logs_error_on_failure(self, temp_db_dir, caplog):
+        """Test that remove_entry logs error when operation fails."""
+        import logging
+
+        # Create a corrupted database file
+        db_path = os.path.join(temp_db_dir, "corrupted.db")
+        with open(db_path, "w") as f:
+            f.write("not a valid sqlite database")
+
+        with caplog.at_level(logging.ERROR):
+            db = QuarantineDatabase(db_path=db_path, pool_size=0)
+            result = db.remove_entry(1)
+
+        assert result is False
+        assert "Failed to" in caplog.text
+
+    def test_init_database_logs_error_on_corrupted_db(self, temp_db_dir, caplog):
+        """Test that _init_database logs error when database is corrupted."""
+        import logging
+
+        # Create a corrupted database file
+        db_path = os.path.join(temp_db_dir, "corrupted.db")
+        with open(db_path, "w") as f:
+            f.write("this is not a valid sqlite database file")
+
+        with caplog.at_level(logging.ERROR):
+            QuarantineDatabase(db_path=db_path, pool_size=0)
+
+        assert "Failed to initialize quarantine database" in caplog.text
+        assert db_path in caplog.text

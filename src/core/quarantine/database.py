@@ -16,6 +16,7 @@ Security Considerations:
     other users from accessing quarantine information.
 """
 
+import logging
 import os
 import sqlite3
 import threading
@@ -26,6 +27,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .connection_pool import ConnectionPool
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -253,9 +256,8 @@ class QuarantineDatabase:
                     # and WAL/SHM files (created by SQLite's Write-Ahead Logging mode) have
                     # restrictive permissions. See _secure_db_file_permissions() for details.
                     self._secure_db_file_permissions()
-            except sqlite3.Error:
-                # Database initialization failed - will be handled on operations
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to initialize quarantine database at %s: %s", self._db_path, e)
 
     def add_entry(
         self,
@@ -302,7 +304,8 @@ class QuarantineDatabase:
                     )
                     conn.commit()
                     return cursor.lastrowid
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                logger.error("Failed to add quarantine entry for %s: %s", original_path, e)
                 return None
 
     def get_entry(self, entry_id: int) -> QuarantineEntry | None:
@@ -329,8 +332,8 @@ class QuarantineDatabase:
                     row = cursor.fetchone()
                     if row:
                         return QuarantineEntry.from_row(row)
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to get quarantine entry id=%s: %s", entry_id, e)
         return None
 
     def get_entry_by_original_path(self, original_path: str) -> QuarantineEntry | None:
@@ -357,8 +360,12 @@ class QuarantineDatabase:
                     row = cursor.fetchone()
                     if row:
                         return QuarantineEntry.from_row(row)
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to get quarantine entry by original_path=%s: %s",
+                    original_path,
+                    e,
+                )
         return None
 
     def get_all_entries(self) -> list[QuarantineEntry]:
@@ -382,8 +389,8 @@ class QuarantineDatabase:
                     )
                     for row in cursor.fetchall():
                         entries.append(QuarantineEntry.from_row(row))
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to get all quarantine entries: %s", e)
         return entries
 
     def remove_entry(self, entry_id: int) -> bool:
@@ -405,7 +412,8 @@ class QuarantineDatabase:
                     )
                     conn.commit()
                     return cursor.rowcount > 0
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                logger.error("Failed to remove quarantine entry id=%s: %s", entry_id, e)
                 return False
 
     def get_total_size(self) -> int:
@@ -422,8 +430,8 @@ class QuarantineDatabase:
                     row = cursor.fetchone()
                     if row:
                         return row[0]
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to get quarantine total size: %s", e)
         return 0
 
     def get_entry_count(self) -> int:
@@ -440,8 +448,8 @@ class QuarantineDatabase:
                     row = cursor.fetchone()
                     if row:
                         return row[0]
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to get quarantine entry count: %s", e)
         return 0
 
     def get_old_entries(self, days: int = 30) -> list[QuarantineEntry]:
@@ -472,8 +480,8 @@ class QuarantineDatabase:
                     )
                     for row in cursor.fetchall():
                         entries.append(QuarantineEntry.from_row(row))
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                logger.error("Failed to get old quarantine entries (days=%s): %s", days, e)
         return entries
 
     def cleanup_old_entries(self, days: int = 30) -> int:
@@ -500,7 +508,8 @@ class QuarantineDatabase:
                     )
                     conn.commit()
                     return cursor.rowcount
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                logger.error("Failed to cleanup old quarantine entries (days=%s): %s", days, e)
                 return 0
 
     def entry_exists(self, original_path: str) -> bool:
@@ -521,7 +530,12 @@ class QuarantineDatabase:
                         (original_path,),
                     )
                     return cursor.fetchone() is not None
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to check quarantine entry existence for %s: %s",
+                    original_path,
+                    e,
+                )
                 return False
 
     def close(self) -> None:

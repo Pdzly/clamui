@@ -1,8 +1,10 @@
 # ClamUI SecureFileHandler Tests
-"""Unit tests for the SecureFileHandler path validation."""
+"""Unit tests for the SecureFileHandler path validation and restore error paths."""
 
 import os
+import stat
 from pathlib import Path
+from unittest import mock
 
 from src.core.quarantine.file_handler import (
     FileOperationStatus,
@@ -619,3 +621,509 @@ class TestDeleteFromQuarantinePathValidation:
 
         assert result.status == FileOperationStatus.SUCCESS
         assert not quarantine_file.exists()
+
+
+class TestRestorePermissionErrors:
+    """Tests for permission-related errors in restore_from_quarantine()."""
+
+    def test_restore_source_file_unreadable(self, tmp_path):
+        """Test restore fails when source quarantine file is unreadable."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file with no read permissions
+        quarantine_file = quarantine_dir / "abc123_secret.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o000)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        try:
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            # Should fail due to permission denied reading file for hash/size
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert result.error_message is not None
+            assert "permission" in result.error_message.lower()
+        finally:
+            # Restore permissions for cleanup
+            os.chmod(quarantine_file, 0o644)
+
+    def test_restore_destination_directory_not_writable(self, tmp_path):
+        """Test restore fails when destination directory is not writable."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Create a destination directory with no write permissions
+        dest_dir = tmp_path / "readonly_dest"
+        dest_dir.mkdir(mode=0o500)
+        restore_path = dest_dir / "file.txt"
+
+        try:
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            # Should fail due to permission denied during move
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert result.error_message is not None
+        finally:
+            # Restore permissions for cleanup
+            os.chmod(dest_dir, 0o755)
+
+    def test_restore_cannot_create_parent_directory(self, tmp_path):
+        """Test restore fails when parent directory cannot be created."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Create a read-only directory - can't create subdirs inside
+        readonly_dir = tmp_path / "readonly"
+        readonly_dir.mkdir(mode=0o500)
+        restore_path = readonly_dir / "subdir" / "file.txt"
+
+        try:
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            # Should fail due to permission denied creating directory
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert result.error_message is not None
+            assert "directory" in result.error_message.lower()
+        finally:
+            # Restore permissions for cleanup
+            os.chmod(readonly_dir, 0o755)
+
+    def test_restore_chmod_fails_after_move(self, tmp_path):
+        """Test that restore reports error when chmod fails after file move."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        # Mock os.chmod to fail after the move
+        original_chmod = os.chmod
+
+        def failing_chmod(path, mode):
+            # Only fail for the restore destination
+            if str(path) == str(restore_path):
+                raise PermissionError("Cannot change permissions")
+            return original_chmod(path, mode)
+
+        with mock.patch("os.chmod", side_effect=failing_chmod):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path), 0o755)
+
+            # Move succeeds but chmod fails - should be caught by exception handler
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert result.error_message is not None
+
+    def test_restore_shutil_move_permission_error(self, tmp_path):
+        """Test restore fails with PERMISSION_DENIED when shutil.move raises PermissionError."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        with mock.patch(
+            "shutil.move", side_effect=PermissionError("Permission denied during move")
+        ):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert "permission denied" in result.error_message.lower()
+
+
+class TestRestoreFileConflicts:
+    """Tests for file conflict errors in restore_from_quarantine()."""
+
+    def test_restore_fails_when_file_already_exists(self, tmp_path):
+        """Test restore fails when a regular file already exists at restore location."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Create a file that already exists at restore destination
+        restore_path = tmp_path / "existing_file.txt"
+        restore_path.write_text("I already exist!")
+
+        result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.ALREADY_EXISTS
+        assert result.error_message is not None
+        assert "already exists" in result.error_message.lower()
+        # Original file should remain unchanged
+        assert restore_path.read_text() == "I already exist!"
+
+    def test_restore_fails_when_symlink_exists_at_location(self, tmp_path):
+        """Test restore fails when a symlink exists at restore location."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Create a target for the symlink
+        symlink_target = tmp_path / "target.txt"
+        symlink_target.write_text("symlink target")
+
+        # Create a symlink at the restore location
+        restore_path = tmp_path / "symlink_at_dest"
+        restore_path.symlink_to(symlink_target)
+
+        try:
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.ALREADY_EXISTS
+            assert result.error_message is not None
+            assert "already exists" in result.error_message.lower()
+        finally:
+            if restore_path.is_symlink():
+                restore_path.unlink()
+
+    def test_restore_fails_when_directory_exists_at_location(self, tmp_path):
+        """Test restore fails when a directory exists at restore location."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Create a directory at the restore location
+        restore_path = tmp_path / "existing_directory"
+        restore_path.mkdir()
+
+        result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.ALREADY_EXISTS
+        assert result.error_message is not None
+        assert "already exists" in result.error_message.lower()
+
+
+class TestRestoreIntegrityChecks:
+    """Tests for integrity check failures in restore_from_quarantine()."""
+
+    def test_restore_fails_when_file_is_not_regular_file(self, tmp_path):
+        """Test restore fails when quarantine path is not a regular file."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a directory inside quarantine instead of a file
+        quarantine_subdir = quarantine_dir / "not_a_file"
+        quarantine_subdir.mkdir()
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        result = handler.restore_from_quarantine(str(quarantine_subdir), str(restore_path))
+
+        assert result.status == FileOperationStatus.ERROR
+        assert result.error_message is not None
+        assert "not a file" in result.error_message.lower()
+
+    def test_restore_fails_when_quarantine_file_not_found(self, tmp_path):
+        """Test restore fails when quarantined file doesn't exist."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Reference a file that doesn't exist
+        nonexistent_file = quarantine_dir / "nonexistent.txt"
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        result = handler.restore_from_quarantine(str(nonexistent_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.FILE_NOT_FOUND
+        assert result.error_message is not None
+        assert "not found" in result.error_message.lower()
+
+    def test_restore_hash_calculation_fails(self, tmp_path):
+        """Test restore fails when hash calculation encounters an error."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        # Mock calculate_hash to return an error
+        with mock.patch.object(
+            handler, "calculate_hash", return_value=(None, "Hash calculation failed")
+        ):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert "hash calculation failed" in result.error_message.lower()
+
+    def test_restore_get_file_size_fails(self, tmp_path):
+        """Test restore fails when file size cannot be retrieved."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        # Mock get_file_size to return an error
+        with mock.patch.object(handler, "get_file_size", return_value=(-1, "Cannot stat file")):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.PERMISSION_DENIED
+            assert "cannot stat file" in result.error_message.lower()
+
+
+class TestRestoreShutilErrors:
+    """Tests for shutil.move errors in restore_from_quarantine()."""
+
+    def test_restore_shutil_error(self, tmp_path):
+        """Test restore fails with ERROR status on shutil.Error."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        import shutil
+
+        with mock.patch("shutil.move", side_effect=shutil.Error("Move operation failed")):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.ERROR
+            assert "move operation failed" in result.error_message.lower()
+
+    def test_restore_oserror(self, tmp_path):
+        """Test restore fails with ERROR status on OSError."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        with mock.patch("shutil.move", side_effect=OSError("Disk I/O error")):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.ERROR
+            assert "file operation error" in result.error_message.lower()
+
+    def test_restore_mkdir_oserror(self, tmp_path):
+        """Test restore fails when mkdir raises OSError."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("quarantined content")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "subdir" / "file.txt"
+
+        # Mock Path.mkdir to raise OSError
+        with mock.patch.object(Path, "mkdir", side_effect=OSError("Filesystem error")):
+            result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+            assert result.status == FileOperationStatus.ERROR
+            assert "directory" in result.error_message.lower()
+
+
+class TestRestoreSuccessfulOperation:
+    """Tests for successful restore operations with various edge cases."""
+
+    def test_restore_success_with_custom_permissions(self, tmp_path):
+        """Test successful restore with custom file permissions."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_script.sh"
+        quarantine_file.write_text("#!/bin/bash\necho hello")
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "script.sh"
+        original_permissions = 0o755
+
+        result = handler.restore_from_quarantine(
+            str(quarantine_file), str(restore_path), original_permissions
+        )
+
+        assert result.status == FileOperationStatus.SUCCESS
+        assert result.is_success
+        assert restore_path.exists()
+        # Check permissions were restored
+        actual_perms = stat.S_IMODE(restore_path.stat().st_mode)
+        assert actual_perms == original_permissions
+        assert result.original_permissions == original_permissions
+
+    def test_restore_success_creates_parent_directories(self, tmp_path):
+        """Test successful restore creates nested parent directories."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text("content")
+        os.chmod(quarantine_file, 0o400)
+
+        # Restore to deeply nested path
+        restore_path = tmp_path / "a" / "b" / "c" / "d" / "file.txt"
+
+        result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.SUCCESS
+        assert restore_path.exists()
+        assert restore_path.read_text() == "content"
+
+    def test_restore_returns_correct_file_hash(self, tmp_path):
+        """Test successful restore returns the correct file hash."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file with known content
+        test_content = "Hello, World!"
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text(test_content)
+        os.chmod(quarantine_file, 0o400)
+
+        # Calculate expected hash before restore
+        expected_hash, _ = handler.calculate_hash(quarantine_file)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.SUCCESS
+        assert result.file_hash == expected_hash
+        assert len(result.file_hash) == 64  # SHA256 hex digest length
+
+    def test_restore_returns_correct_file_size(self, tmp_path):
+        """Test successful restore returns the correct file size."""
+        quarantine_dir = tmp_path / "quarantine"
+        quarantine_dir.mkdir(mode=0o700)
+        handler = SecureFileHandler(str(quarantine_dir))
+
+        # Create a quarantined file with known size
+        test_content = "X" * 1000  # 1000 bytes
+        quarantine_file = quarantine_dir / "abc123_file.txt"
+        quarantine_file.write_text(test_content)
+        os.chmod(quarantine_file, 0o400)
+
+        restore_path = tmp_path / "restored" / "file.txt"
+
+        result = handler.restore_from_quarantine(str(quarantine_file), str(restore_path))
+
+        assert result.status == FileOperationStatus.SUCCESS
+        assert result.file_size == 1000
+
+
+class TestVerifyFileIntegrity:
+    """Tests for verify_file_integrity() method used in restore operations."""
+
+    def test_verify_integrity_success(self, tmp_path):
+        """Test verify_file_integrity returns True for matching hash."""
+        handler = SecureFileHandler(str(tmp_path / "quarantine"))
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        # Calculate the actual hash
+        actual_hash, _ = handler.calculate_hash(test_file)
+
+        is_valid, error = handler.verify_file_integrity(str(test_file), actual_hash)
+
+        assert is_valid is True
+        assert error is None
+
+    def test_verify_integrity_hash_mismatch(self, tmp_path):
+        """Test verify_file_integrity returns False for mismatched hash."""
+        handler = SecureFileHandler(str(tmp_path / "quarantine"))
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+
+        # Use a wrong hash
+        wrong_hash = "a" * 64
+
+        is_valid, error = handler.verify_file_integrity(str(test_file), wrong_hash)
+
+        assert is_valid is False
+        assert "mismatch" in error.lower()
+        assert "corrupted" in error.lower()
+
+    def test_verify_integrity_file_not_found(self, tmp_path):
+        """Test verify_file_integrity handles missing files."""
+        handler = SecureFileHandler(str(tmp_path / "quarantine"))
+
+        nonexistent_file = tmp_path / "nonexistent.txt"
+
+        is_valid, error = handler.verify_file_integrity(str(nonexistent_file), "abc123")
+
+        assert is_valid is False
+        assert "not found" in error.lower()
+
+    def test_verify_integrity_permission_denied(self, tmp_path):
+        """Test verify_file_integrity handles permission errors."""
+        handler = SecureFileHandler(str(tmp_path / "quarantine"))
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("test content")
+        os.chmod(test_file, 0o000)
+
+        try:
+            is_valid, error = handler.verify_file_integrity(str(test_file), "abc123")
+
+            assert is_valid is False
+            assert "permission" in error.lower()
+        finally:
+            os.chmod(test_file, 0o644)

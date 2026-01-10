@@ -2359,6 +2359,85 @@ class TestLogManagerIndexValidation:
         # Restore original method
         log_manager._validate_index = original_validate
 
+    def test_validate_index_performance_with_many_log_files(self, tmp_path):
+        """Test that _validate_index performs efficiently with 1000+ log files.
+
+        This test verifies that the set-based O(1) lookup optimization works
+        correctly with a large number of log files, avoiding individual exists()
+        syscalls for each entry.
+        """
+        import time
+
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 1000 log files directly (faster than using save_log)
+        log_ids = []
+        for i in range(1000):
+            log_id = f"perf-test-{i:04d}"
+            log_ids.append(log_id)
+            log_file = tmp_path / f"{log_id}.json"
+            log_file.write_text(
+                f'{{"id": "{log_id}", "timestamp": "2024-01-01T00:00:00", '
+                f'"type": "scan", "status": "clean", "summary": "Test {i}", '
+                f'"details": "Details"}}'
+            )
+
+        # Create matching index
+        index_data = {
+            "version": 1,
+            "entries": [
+                {"id": log_id, "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+                for log_id in log_ids
+            ],
+        }
+
+        # Measure validation time
+        start_time = time.perf_counter()
+        result = log_manager._validate_index(index_data)
+        elapsed_time = time.perf_counter() - start_time
+
+        # Validation should succeed
+        assert result is True
+
+        # Validation should complete in under 1 second
+        # (with the O(1) set lookup, this should be very fast)
+        assert elapsed_time < 1.0, f"Validation took too long: {elapsed_time:.3f}s"
+
+    def test_validate_index_set_lookup_detects_missing_files(self, tmp_path):
+        """Test that set-based lookup correctly detects missing files."""
+        log_manager = LogManager(str(tmp_path))
+
+        # Create 100 log files
+        log_ids = []
+        for i in range(100):
+            log_id = f"set-test-{i:03d}"
+            log_ids.append(log_id)
+            log_file = tmp_path / f"{log_id}.json"
+            log_file.write_text(
+                f'{{"id": "{log_id}", "timestamp": "2024-01-01T00:00:00", '
+                f'"type": "scan", "status": "clean"}}'
+            )
+
+        # Create index with all entries
+        index_data = {
+            "version": 1,
+            "entries": [
+                {"id": log_id, "timestamp": "2024-01-01T00:00:00", "type": "scan"}
+                for log_id in log_ids
+            ],
+        }
+
+        # Verify valid index
+        assert log_manager._validate_index(index_data) is True
+
+        # Delete 25 files (25% - above threshold)
+        for i in range(25):
+            log_file = tmp_path / f"{log_ids[i]}.json"
+            log_file.unlink()
+
+        # Should fail due to count mismatch (100 entries vs 75 files)
+        assert log_manager._validate_index(index_data) is False
+
 
 class TestLogManagerOptimizedGetLogs:
     """Tests for optimized get_logs() implementation using index."""

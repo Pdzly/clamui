@@ -594,9 +594,12 @@ class LogManager:
                 # No log directory means index should be empty
                 return len(index_data.get("entries", [])) == 0
 
-            # Get actual log file count (excluding index file)
-            actual_log_files = [f for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME]
-            actual_count = len(actual_log_files)
+            # Single glob() call, convert to set of stems for O(1) membership testing
+            # This avoids multiple filesystem syscalls for individual exists() checks
+            actual_file_stems = {
+                f.stem for f in self._log_dir.glob("*.json") if f.name != INDEX_FILENAME
+            }
+            actual_count = len(actual_file_stems)
 
             # Get index entry count
             index_entries = index_data.get("entries", [])
@@ -613,13 +616,10 @@ class LogManager:
                 # Sample 50 entries for large indices
                 entries_to_check = random.sample(index_entries, 50)
 
-            missing_count = 0
-            for entry in entries_to_check:
-                log_id = entry.get("id")
-                if log_id:
-                    log_file = self._log_dir / f"{log_id}.json"
-                    if not log_file.exists():
-                        missing_count += 1
+            # Use set membership for O(1) lookup instead of exists() syscalls
+            missing_count = sum(
+                1 for entry in entries_to_check if entry.get("id") not in actual_file_stems
+            )
 
             # Calculate missing percentage
             checked_count = len(entries_to_check)

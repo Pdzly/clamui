@@ -120,9 +120,9 @@ class TestPreferencesWindowInitialization:
         """Test that window initializes with settings manager."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        assert window._settings_manager == mock_settings_manager
+        assert _window._settings_manager == mock_settings_manager
 
     def test_window_sets_title(
         self,
@@ -136,9 +136,9 @@ class TestPreferencesWindowInitialization:
         """Test that window sets correct title."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        window.set_title.assert_called_with("Preferences")
+        _window.set_title.assert_called_with("Preferences")
 
     def test_window_sets_default_size(
         self,
@@ -152,9 +152,9 @@ class TestPreferencesWindowInitialization:
         """Test that window sets correct default size."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        window.set_default_size.assert_called_with(600, 500)
+        _window.set_default_size.assert_called_with(600, 500)
 
     def test_window_sets_modal(
         self,
@@ -168,9 +168,9 @@ class TestPreferencesWindowInitialization:
         """Test that window sets modal property."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        window.set_modal.assert_called_with(True)
+        _window.set_modal.assert_called_with(True)
 
     def test_window_disables_search(
         self,
@@ -184,9 +184,9 @@ class TestPreferencesWindowInitialization:
         """Test that window disables search."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        window.set_search_enabled.assert_called_with(False)
+        _window.set_search_enabled.assert_called_with(False)
 
     def test_window_initializes_widget_dicts(
         self,
@@ -200,12 +200,12 @@ class TestPreferencesWindowInitialization:
         """Test that window initializes all widget dictionaries."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        assert isinstance(window._freshclam_widgets, dict)
-        assert isinstance(window._clamd_widgets, dict)
-        assert isinstance(window._scheduled_widgets, dict)
-        assert isinstance(window._onaccess_widgets, dict)
+        assert isinstance(_window._freshclam_widgets, dict)
+        assert isinstance(_window._clamd_widgets, dict)
+        assert isinstance(_window._scheduled_widgets, dict)
+        assert isinstance(_window._onaccess_widgets, dict)
 
     def test_window_initializes_scheduler(
         self,
@@ -219,10 +219,10 @@ class TestPreferencesWindowInitialization:
         """Test that window initializes scheduler."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         mock_scheduler.assert_called_once()
-        assert window._scheduler is not None
+        assert _window._scheduler is not None
 
     def test_window_detects_clamd_available(
         self,
@@ -240,9 +240,9 @@ class TestPreferencesWindowInitialization:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-            assert window._clamd_available is True
+            assert _window._clamd_available is True
 
     def test_window_detects_clamd_unavailable(
         self,
@@ -260,9 +260,9 @@ class TestPreferencesWindowInitialization:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-            assert window._clamd_available is False
+            assert _window._clamd_available is False
 
     def test_window_initializes_saving_state(
         self,
@@ -276,10 +276,10 @@ class TestPreferencesWindowInitialization:
         """Test that window initializes saving state."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
-        assert window._is_saving is False
-        assert window._scheduler_error is None
+        assert _window._is_saving is False
+        assert _window._scheduler_error is None
 
 
 class TestPreferencesWindowPageComposition:
@@ -365,10 +365,10 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates database page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         mock_page_modules["database"].create_page.assert_called_once_with(
-            "/etc/clamav/freshclam.conf", window._freshclam_widgets
+            "/etc/clamav/freshclam.conf", _window._freshclam_widgets
         )
 
     def test_window_creates_scanner_page(
@@ -383,14 +383,14 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates scanner page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         mock_page_modules["scanner"].create_page.assert_called_once_with(
             "/etc/clamav/clamd.conf",
-            window._clamd_widgets,
+            _window._clamd_widgets,
             mock_settings_manager,
-            window._clamd_available,
-            window,
+            _window._clamd_available,
+            _window,
         )
 
     def test_window_creates_onaccess_page(
@@ -405,13 +405,13 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates on-access page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         mock_page_modules["onaccess"].create_page.assert_called_once_with(
             "/etc/clamav/clamd.conf",
-            window._onaccess_widgets,
-            window._clamd_available,
-            window,
+            _window._onaccess_widgets,
+            _window._clamd_available,
+            _window,
         )
 
     def test_window_creates_scheduled_page(
@@ -426,10 +426,10 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates scheduled page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         mock_page_modules["scheduled"].create_page.assert_called_once_with(
-            window._scheduled_widgets
+            _window._scheduled_widgets
         )
 
     def test_window_creates_exclusions_page(
@@ -444,7 +444,7 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates exclusions page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        PreferencesWindow(settings_manager=mock_settings_manager)
 
         # Should instantiate ExclusionsPage
         mock_page_modules["exclusions"].assert_called_once_with(mock_settings_manager)
@@ -463,7 +463,7 @@ class TestPreferencesWindowPageComposition:
         """Test that window creates save page."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         # Should instantiate SavePage with all required arguments
         mock_page_modules["save"].assert_called_once()
@@ -472,18 +472,18 @@ class TestPreferencesWindowPageComposition:
         # Verify all required arguments are passed
         # Note: _freshclam_config and _clamd_config are None when SavePage is called
         # because _setup_ui() runs before _load_configs()
-        assert call_args[0][0] == window  # window reference
+        assert call_args[0][0] == _window  # window reference
         assert call_args[0][1] is None  # freshclam_config (not yet loaded)
         assert call_args[0][2] is None  # clamd_config (not yet loaded)
         assert call_args[0][3] == "/etc/clamav/freshclam.conf"
         assert call_args[0][4] == "/etc/clamav/clamd.conf"
-        assert call_args[0][5] == window._clamd_available
+        assert call_args[0][5] == _window._clamd_available
         assert call_args[0][6] == mock_settings_manager
-        assert call_args[0][7] == window._scheduler
-        assert call_args[0][8] == window._freshclam_widgets
-        assert call_args[0][9] == window._clamd_widgets
-        assert call_args[0][10] == window._onaccess_widgets
-        assert call_args[0][11] == window._scheduled_widgets
+        assert call_args[0][7] == _window._scheduler
+        assert call_args[0][8] == _window._freshclam_widgets
+        assert call_args[0][9] == _window._clamd_widgets
+        assert call_args[0][10] == _window._onaccess_widgets
+        assert call_args[0][11] == _window._scheduled_widgets
 
         # Should call create_page on the instance
         mock_page_modules["save"].return_value.create_page.assert_called_once()
@@ -500,10 +500,10 @@ class TestPreferencesWindowPageComposition:
         """Test that window adds all 8 pages."""
         from src.ui.preferences.window import PreferencesWindow
 
-        window = PreferencesWindow(settings_manager=mock_settings_manager)
+        _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
         # Should call add() 8 times (one for each page)
-        assert window.add.call_count == 8
+        assert _window.add.call_count == 8
 
 
 class TestPreferencesWindowConfigLoading:
@@ -577,12 +577,12 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should parse freshclam.conf
             assert mock_parse.call_count >= 1
             mock_parse.assert_any_call("/etc/clamav/freshclam.conf")
-            assert window._freshclam_config == mock_freshclam_config
+            assert _window._freshclam_config == mock_freshclam_config
 
     def test_window_loads_clamd_config_when_available(
         self, mock_gi_modules, mock_settings_manager, mock_scheduler, mock_page_modules
@@ -609,11 +609,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should parse both configs
             assert mock_parse.call_count == 2
-            assert window._clamd_config == mock_clamd_config
+            assert _window._clamd_config == mock_clamd_config
 
     def test_window_populates_freshclam_fields(
         self, mock_gi_modules, mock_settings_manager, mock_scheduler, mock_page_modules
@@ -629,11 +629,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should populate freshclam fields
             mock_page_modules["database"].populate_fields.assert_called_once_with(
-                mock_freshclam_config, window._freshclam_widgets
+                mock_freshclam_config, _window._freshclam_widgets
             )
 
     def test_window_populates_clamd_fields_when_available(
@@ -661,11 +661,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should populate scanner fields
             mock_page_modules["scanner"].populate_fields.assert_called_once_with(
-                mock_clamd_config, window._clamd_widgets
+                mock_clamd_config, _window._clamd_widgets
             )
 
     def test_window_populates_onaccess_fields_when_available(
@@ -696,11 +696,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should populate on-access fields
             mock_page_modules["onaccess"].populate_fields.assert_called_once_with(
-                mock_clamd_config, window._onaccess_widgets
+                mock_clamd_config, _window._onaccess_widgets
             )
 
     def test_window_populates_scheduled_fields(
@@ -716,11 +716,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should populate scheduled fields
             mock_page_modules["scheduled"].populate_fields.assert_called_once_with(
-                mock_settings_manager, window._scheduled_widgets
+                mock_settings_manager, _window._scheduled_widgets
             )
 
     def test_window_handles_freshclam_load_error(
@@ -737,10 +737,10 @@ class TestPreferencesWindowConfigLoading:
             from src.ui.preferences.window import PreferencesWindow
 
             # Should not raise exception
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Config should be None
-            assert window._freshclam_config is None
+            assert _window._freshclam_config is None
 
     def test_window_handles_clamd_load_error(
         self, mock_gi_modules, mock_settings_manager, mock_scheduler, mock_page_modules
@@ -765,10 +765,10 @@ class TestPreferencesWindowConfigLoading:
             from src.ui.preferences.window import PreferencesWindow
 
             # Should not raise exception
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Config should be None
-            assert window._clamd_config is None
+            assert _window._clamd_config is None
 
     def test_window_skips_populate_when_config_is_none(
         self, mock_gi_modules, mock_settings_manager, mock_scheduler, mock_page_modules
@@ -784,11 +784,11 @@ class TestPreferencesWindowConfigLoading:
 
             from src.ui.preferences.window import PreferencesWindow
 
-            window = PreferencesWindow(settings_manager=mock_settings_manager)
+            _window = PreferencesWindow(settings_manager=mock_settings_manager)
 
             # Should NOT call populate_fields with None config
             # The populate_fields should not be called or should handle None gracefully
-            assert window._freshclam_config is None
+            assert _window._freshclam_config is None
 
 
 class TestPreferencesWindowPackageExport:

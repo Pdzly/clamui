@@ -96,7 +96,7 @@ class TestSavePageCreation:
         """Test create_page returns an Adw.PreferencesPage."""
         adw = mock_gi_modules["adw"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should create a PreferencesPage
         adw.PreferencesPage.assert_called()
@@ -105,7 +105,7 @@ class TestSavePageCreation:
         """Test create_page sets correct title and icon."""
         adw = mock_gi_modules["adw"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should set title and icon_name
         adw.PreferencesPage.assert_called_with(
@@ -117,7 +117,7 @@ class TestSavePageCreation:
         """Test create_page creates preference groups."""
         adw = mock_gi_modules["adw"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should create 2 PreferencesGroups (info and button)
         assert adw.PreferencesGroup.call_count == 2
@@ -126,7 +126,7 @@ class TestSavePageCreation:
         """Test create_page creates info rows."""
         adw = mock_gi_modules["adw"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should create 2 ActionRows for info (auto-save and manual save)
         assert adw.ActionRow.call_count >= 2
@@ -135,7 +135,7 @@ class TestSavePageCreation:
         """Test create_page creates save button."""
         gtk = mock_gi_modules["gtk"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should create a Button
         gtk.Button.assert_called()
@@ -146,7 +146,7 @@ class TestSavePageCreation:
         mock_button = mock.MagicMock()
         gtk.Button.return_value = mock_button
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should add suggested-action CSS class
         mock_button.add_css_class.assert_called_with("suggested-action")
@@ -157,7 +157,7 @@ class TestSavePageCreation:
         mock_button = mock.MagicMock()
         gtk.Button.return_value = mock_button
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should set label
         mock_button.set_label.assert_called_with("Save & Apply")
@@ -168,7 +168,7 @@ class TestSavePageCreation:
         mock_button = mock.MagicMock()
         gtk.Button.return_value = mock_button
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should connect clicked signal
         mock_button.connect.assert_called_with("clicked", save_page._on_save_clicked)
@@ -177,7 +177,7 @@ class TestSavePageCreation:
         """Test create_page creates info icons."""
         gtk = mock_gi_modules["gtk"]
 
-        result = save_page.create_page()
+        save_page.create_page()
 
         # Should create Image widgets for icons (success and warning)
         assert gtk.Image.new_from_icon_name.call_count >= 2

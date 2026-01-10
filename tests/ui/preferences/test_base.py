@@ -47,8 +47,6 @@ class TestPreferencesPageMixinMethods:
 
     def test_create_permission_indicator_returns_box(self, test_instance, mock_gi_modules):
         """Test _create_permission_indicator returns a Gtk.Box."""
-        gtk = mock_gi_modules["gtk"]
-
         result = test_instance._create_permission_indicator()
 
         # Should return a box (MockGtkBox is a real class, not MagicMock)
@@ -58,7 +56,7 @@ class TestPreferencesPageMixinMethods:
         """Test _create_permission_indicator creates a lock icon."""
         gtk = mock_gi_modules["gtk"]
 
-        result = test_instance._create_permission_indicator()
+        test_instance._create_permission_indicator()
 
         # Should create an Image with the lock icon
         gtk.Image.new_from_icon_name.assert_called_with("system-lock-screen-symbolic")
@@ -69,7 +67,7 @@ class TestPreferencesPageMixinMethods:
         mock_icon = mock.MagicMock()
         gtk.Image.new_from_icon_name.return_value = mock_icon
 
-        result = test_instance._create_permission_indicator()
+        test_instance._create_permission_indicator()
 
         # Should set tooltip text
         mock_icon.set_tooltip_text.assert_called_with("Requires administrator privileges to modify")
@@ -228,7 +226,6 @@ class TestPreferencesPageMixinMethods:
     ):
         """Test _create_file_location_group button opens parent directory."""
         gtk = mock_gi_modules["gtk"]
-        adw = mock_gi_modules["adw"]
         mock_page = mock.MagicMock()
         mock_button = mock.MagicMock()
         gtk.Button.return_value = mock_button

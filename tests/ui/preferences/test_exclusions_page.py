@@ -106,7 +106,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should create a PreferencesPage
         adw.PreferencesPage.assert_called()
@@ -117,7 +117,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should set title and icon_name
         adw.PreferencesPage.assert_called_with(
@@ -131,7 +131,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should create 2 PreferencesGroups (preset and custom)
         assert adw.PreferencesGroup.call_count == 2
@@ -142,7 +142,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import PRESET_EXCLUSIONS, ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should create one SwitchRow per preset exclusion
         assert adw.SwitchRow.call_count >= len(PRESET_EXCLUSIONS)
@@ -153,7 +153,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should create an EntryRow for custom exclusions
         adw.EntryRow.assert_called()
@@ -164,7 +164,7 @@ class TestExclusionsPageCreation:
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should create a Button
         assert gtk.Button.call_count >= 1
@@ -180,7 +180,7 @@ class TestExclusionsPageCreation:
         ]
 
         page = ExclusionsPage(mock_settings_manager)
-        result = page.create_page()
+        page.create_page()
 
         # Should call settings_manager.get to load exclusions
         mock_settings_manager.get.assert_called_with("exclusion_patterns", [])
@@ -215,7 +215,6 @@ class TestExclusionsPageLoadCustomExclusions:
 
     def test_load_custom_exclusions_with_empty_list(self, mock_gi_modules, mock_settings_manager):
         """Test _load_custom_exclusions with empty exclusion list."""
-        adw = mock_gi_modules["adw"]
         from src.ui.preferences.exclusions_page import ExclusionsPage
 
         mock_settings_manager.get.return_value = []

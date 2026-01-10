@@ -49,7 +49,7 @@ class TestDatabasePageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.database_page import DatabasePage
 
-        result = DatabasePage.create_page(mock_config_path, widgets_dict)
+        DatabasePage.create_page(mock_config_path, widgets_dict)
 
         # Should create a PreferencesPage
         adw.PreferencesPage.assert_called()
@@ -62,7 +62,7 @@ class TestDatabasePageCreation:
 
         from src.ui.preferences.database_page import DatabasePage
 
-        result = DatabasePage.create_page(mock_config_path, widgets_dict)
+        DatabasePage.create_page(mock_config_path, widgets_dict)
 
         # Should set title and icon_name
         adw.PreferencesPage.assert_called_with(
@@ -74,14 +74,13 @@ class TestDatabasePageCreation:
         self, mock_gi_modules, mock_config_path, widgets_dict
     ):
         """Test create_page creates file location group."""
-        adw = mock_gi_modules["adw"]
         from src.ui.preferences.database_page import DatabasePage
 
         # We need to mock the helper's method
         with mock.patch(
             "src.ui.preferences.database_page._DatabasePageHelper._create_file_location_group"
         ) as mock_create_file_location:
-            result = DatabasePage.create_page(mock_config_path, widgets_dict)
+            DatabasePage.create_page(mock_config_path, widgets_dict)
 
             # Should call _create_file_location_group
             mock_create_file_location.assert_called_once()

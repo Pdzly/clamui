@@ -54,7 +54,7 @@ class TestOnAccessPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.onaccess_page import OnAccessPage
 
-        result = OnAccessPage.create_page(mock_config_path, widgets_dict, True, mock_parent_window)
+        OnAccessPage.create_page(mock_config_path, widgets_dict, True, mock_parent_window)
 
         # Should create a PreferencesPage
         adw.PreferencesPage.assert_called()
@@ -67,7 +67,7 @@ class TestOnAccessPageCreation:
 
         from src.ui.preferences.onaccess_page import OnAccessPage
 
-        result = OnAccessPage.create_page(mock_config_path, widgets_dict, True, mock_parent_window)
+        OnAccessPage.create_page(mock_config_path, widgets_dict, True, mock_parent_window)
 
         # Should set title and icon_name
         adw.PreferencesPage.assert_called_with(

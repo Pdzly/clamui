@@ -43,7 +43,7 @@ class TestScheduledPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scheduled_page import ScheduledPage
 
-        result = ScheduledPage.create_page(widgets_dict)
+        ScheduledPage.create_page(widgets_dict)
 
         # Should create a PreferencesPage
         adw.PreferencesPage.assert_called()
@@ -54,7 +54,7 @@ class TestScheduledPageCreation:
 
         from src.ui.preferences.scheduled_page import ScheduledPage
 
-        result = ScheduledPage.create_page(widgets_dict)
+        ScheduledPage.create_page(widgets_dict)
 
         # Should set title and icon_name
         adw.PreferencesPage.assert_called_with(

@@ -67,7 +67,7 @@ class TestScannerPageCreation:
         from src.ui.preferences.scanner_page import ScannerPage
 
         with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
-            result = ScannerPage.create_page(
+            ScannerPage.create_page(
                 mock_config_path, widgets_dict, mock_settings_manager, True, mock_parent_window
             )
 
@@ -88,7 +88,7 @@ class TestScannerPageCreation:
         from src.ui.preferences.scanner_page import ScannerPage
 
         with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
-            result = ScannerPage.create_page(
+            ScannerPage.create_page(
                 mock_config_path, widgets_dict, mock_settings_manager, True, mock_parent_window
             )
 
@@ -115,7 +115,7 @@ class TestScannerPageCreation:
             with mock.patch(
                 "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
             ):
-                result = ScannerPage.create_page(
+                ScannerPage.create_page(
                     mock_config_path,
                     widgets_dict,
                     mock_settings_manager,
@@ -177,7 +177,6 @@ class TestScannerPageCreation:
         mock_parent_window,
     ):
         """Test create_page shows unavailable message when clamd is not available."""
-        adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
         with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
@@ -289,7 +288,6 @@ class TestScannerPageCreation:
         mock_parent_window,
     ):
         """Test create_page creates daemon status row with connection check."""
-        adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
         with mock.patch("src.core.utils.check_clamd_connection") as mock_check_clamd:
@@ -369,7 +367,6 @@ class TestScannerPageBackendSelection:
 
     def test_update_backend_subtitle_sets_correct_subtitle_for_auto(self, mock_gi_modules):
         """Test _update_backend_subtitle sets correct subtitle for auto."""
-        adw = mock_gi_modules["adw"]
         mock_row = mock.MagicMock()
 
         from src.ui.preferences.scanner_page import ScannerPage
@@ -383,7 +380,6 @@ class TestScannerPageBackendSelection:
 
     def test_update_backend_subtitle_sets_correct_subtitle_for_daemon(self, mock_gi_modules):
         """Test _update_backend_subtitle sets correct subtitle for daemon."""
-        adw = mock_gi_modules["adw"]
         mock_row = mock.MagicMock()
 
         from src.ui.preferences.scanner_page import ScannerPage
@@ -397,7 +393,6 @@ class TestScannerPageBackendSelection:
 
     def test_update_backend_subtitle_sets_correct_subtitle_for_clamscan(self, mock_gi_modules):
         """Test _update_backend_subtitle sets correct subtitle for clamscan."""
-        adw = mock_gi_modules["adw"]
         mock_row = mock.MagicMock()
 
         from src.ui.preferences.scanner_page import ScannerPage

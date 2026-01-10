@@ -36,6 +36,7 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.core.battery_manager import BatteryManager
@@ -43,6 +44,53 @@ from src.core.log_manager import LogEntry, LogManager
 from src.core.quarantine import QuarantineManager
 from src.core.scanner import Scanner, ScanResult, ScanStatus
 from src.core.settings_manager import SettingsManager
+
+
+@dataclass
+class ScanContext:
+    """Context object holding all managers and configuration for a scheduled scan."""
+
+    targets: list[str]
+    skip_on_battery: bool
+    auto_quarantine: bool
+    dry_run: bool
+    verbose: bool
+    settings: SettingsManager | None = None
+    battery_manager: BatteryManager | None = None
+    log_manager: LogManager | None = None
+    scanner: Scanner | None = None
+
+    def __post_init__(self) -> None:
+        # Create managers if not provided (allows mocking in tests)
+        if self.settings is None:
+            self.settings = SettingsManager()
+        if self.battery_manager is None:
+            self.battery_manager = BatteryManager()
+        if self.log_manager is None:
+            self.log_manager = LogManager()
+        if self.scanner is None:
+            self.scanner = Scanner(log_manager=self.log_manager)
+
+
+@dataclass
+class ScanAggregateResult:
+    """Aggregated results from scanning multiple targets."""
+
+    total_scanned: int = 0
+    total_infected: int = 0
+    all_infected_files: list[str] = field(default_factory=list)
+    all_results: list[ScanResult] = field(default_factory=list)
+    has_errors: bool = False
+    duration: float = 0.0
+    valid_targets: list[str] = field(default_factory=list)
+
+
+@dataclass
+class QuarantineResult:
+    """Results from quarantine processing."""
+
+    quarantined_count: int = 0
+    failed: list[tuple[str, str]] = field(default_factory=list)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -160,59 +208,55 @@ def send_notification(title: str, body: str, urgency: str = "normal") -> bool:
         return False
 
 
-def run_scheduled_scan(
-    targets: list[str],
-    skip_on_battery: bool,
-    auto_quarantine: bool,
-    dry_run: bool = False,
-    verbose: bool = False,
-) -> int:
+def _check_battery_status(ctx: ScanContext) -> int | None:
     """
-    Execute a scheduled scan.
+    Check battery status and skip scan if on battery power.
 
     Args:
-        targets: List of paths to scan
-        skip_on_battery: Whether to skip scan if on battery
-        auto_quarantine: Whether to quarantine detected threats
-        dry_run: If True, show what would be done without executing
-        verbose: Enable verbose output
+        ctx: Scan context with configuration and managers
 
     Returns:
-        Exit code (0 for success/clean, 1 for threats found, 2 for error)
+        Exit code (0) if scan should be skipped, None to continue
     """
-    # Initialize managers
-    settings = SettingsManager()
-    battery_manager = BatteryManager()
-    log_manager = LogManager()
-    scanner = Scanner(log_manager=log_manager)
+    if not ctx.skip_on_battery:
+        return None
 
-    log_message("ClamUI scheduled scan starting...", verbose)
+    log_message("Checking battery status...", ctx.verbose, is_verbose=True)
 
-    # Check battery status if skip_on_battery is enabled
-    if skip_on_battery:
-        log_message("Checking battery status...", verbose, is_verbose=True)
-        if battery_manager.should_skip_scan(skip_on_battery=True):
-            battery_status = battery_manager.get_status()
-            percent = battery_status.percent or 0
-            log_message(f"Skipping scan: running on battery power ({percent:.0f}%)", verbose)
+    if not ctx.battery_manager.should_skip_scan(skip_on_battery=True):
+        return None
 
-            # Log the skip event
-            log_entry = LogEntry.create(
-                log_type="scan",
-                status="skipped",
-                summary="Scheduled scan skipped (on battery power)",
-                details=f"Battery level: {percent:.0f}%\nScan skipped due to battery-aware settings.",
-                path=", ".join(targets) if targets else "N/A",
-                scheduled=True,
-            )
-            log_manager.save_log(log_entry)
+    battery_status = ctx.battery_manager.get_status()
+    percent = battery_status.percent or 0
+    log_message(f"Skipping scan: running on battery power ({percent:.0f}%)", ctx.verbose)
 
-            return 0
+    log_entry = LogEntry.create(
+        log_type="scan",
+        status="skipped",
+        summary="Scheduled scan skipped (on battery power)",
+        details=f"Battery level: {percent:.0f}%\nScan skipped due to battery-aware settings.",
+        path=", ".join(ctx.targets) if ctx.targets else "N/A",
+        scheduled=True,
+    )
+    ctx.log_manager.save_log(log_entry)
 
-    # Validate targets
+    return 0
+
+
+def _validate_targets(targets: list[str], verbose: bool) -> tuple[list[str], int | None]:
+    """
+    Validate scan targets and return valid paths.
+
+    Args:
+        targets: List of target paths to validate
+        verbose: Whether to enable verbose logging
+
+    Returns:
+        Tuple of (valid_targets, error_code) where error_code is None if valid
+    """
     if not targets:
         log_message("Error: No scan targets specified", verbose)
-        return 2
+        return [], 2
 
     valid_targets = []
     for target in targets:
@@ -224,135 +268,213 @@ def run_scheduled_scan(
 
     if not valid_targets:
         log_message("Error: No valid scan targets found", verbose)
-        return 2
+        return [], 2
 
-    log_message(f"Scanning {len(valid_targets)} target(s)...", verbose)
+    return valid_targets, None
+
+
+def _handle_dry_run(ctx: ScanContext, valid_targets: list[str]) -> int:
+    """
+    Handle dry run mode by logging what would be done.
+
+    Args:
+        ctx: Scan context with configuration
+        valid_targets: List of validated target paths
+
+    Returns:
+        Exit code (0 for dry run)
+    """
+    log_message("Dry run mode - scan not executed", ctx.verbose)
+    log_message(f"  Skip on battery: {ctx.skip_on_battery}", ctx.verbose)
+    log_message(f"  Auto quarantine: {ctx.auto_quarantine}", ctx.verbose)
+    log_message(f"  Targets: {valid_targets}", ctx.verbose)
+    return 0
+
+
+def _check_clamav_availability(
+    ctx: ScanContext, valid_targets: list[str]
+) -> tuple[str | None, int | None]:
+    """
+    Check ClamAV availability and return version or error.
+
+    Args:
+        ctx: Scan context with scanner
+        valid_targets: List of validated target paths
+
+    Returns:
+        Tuple of (version_string, error_code) where error_code is None if available
+    """
+    is_available, version_or_error = ctx.scanner.check_available()
+
+    if is_available:
+        log_message(f"ClamAV version: {version_or_error}", ctx.verbose, is_verbose=True)
+        return version_or_error, None
+
+    log_message(f"Error: ClamAV not available - {version_or_error}", ctx.verbose)
+
+    log_entry = LogEntry.create(
+        log_type="scan",
+        status="error",
+        summary="Scheduled scan failed: ClamAV not available",
+        details=version_or_error or "ClamAV is not installed or not accessible",
+        path=", ".join(valid_targets),
+        scheduled=True,
+    )
+    ctx.log_manager.save_log(log_entry)
+
+    send_notification(
+        "Scheduled Scan Failed",
+        "ClamAV is not available. Please install ClamAV.",
+        urgency="critical",
+    )
+    return None, 2
+
+
+def _execute_scans(ctx: ScanContext, valid_targets: list[str]) -> ScanAggregateResult:
+    """
+    Execute scans on all valid targets.
+
+    Args:
+        ctx: Scan context with scanner
+        valid_targets: List of validated target paths
+
+    Returns:
+        Aggregated scan results
+    """
+    log_message(f"Scanning {len(valid_targets)} target(s)...", ctx.verbose)
     for target in valid_targets:
-        log_message(f"  - {target}", verbose, is_verbose=True)
+        log_message(f"  - {target}", ctx.verbose, is_verbose=True)
 
-    if dry_run:
-        log_message("Dry run mode - scan not executed", verbose)
-        log_message(f"  Skip on battery: {skip_on_battery}", verbose)
-        log_message(f"  Auto quarantine: {auto_quarantine}", verbose)
-        log_message(f"  Targets: {valid_targets}", verbose)
-        return 0
-
-    # Check ClamAV availability
-    is_available, version_or_error = scanner.check_available()
-    if not is_available:
-        log_message(f"Error: ClamAV not available - {version_or_error}", verbose)
-
-        log_entry = LogEntry.create(
-            log_type="scan",
-            status="error",
-            summary="Scheduled scan failed: ClamAV not available",
-            details=version_or_error or "ClamAV is not installed or not accessible",
-            path=", ".join(valid_targets),
-            scheduled=True,
-        )
-        log_manager.save_log(log_entry)
-
-        send_notification(
-            "Scheduled Scan Failed",
-            "ClamAV is not available. Please install ClamAV.",
-            urgency="critical",
-        )
-        return 2
-
-    log_message(f"ClamAV version: {version_or_error}", verbose, is_verbose=True)
-
-    # Execute scans
+    agg = ScanAggregateResult(valid_targets=valid_targets)
     start_time = time.monotonic()
-    total_scanned = 0
-    total_infected = 0
-    all_infected_files: list[str] = []
-    all_results: list[ScanResult] = []
-    has_errors = False
 
     for target in valid_targets:
-        log_message(f"Scanning: {target}", verbose)
-        result = scanner.scan_sync(target, recursive=True)
-        all_results.append(result)
+        log_message(f"Scanning: {target}", ctx.verbose)
+        result = ctx.scanner.scan_sync(target, recursive=True)
+        agg.all_results.append(result)
 
-        total_scanned += result.scanned_files
-        total_infected += result.infected_count
-        all_infected_files.extend(result.infected_files)
+        agg.total_scanned += result.scanned_files
+        agg.total_infected += result.infected_count
+        agg.all_infected_files.extend(result.infected_files)
 
         if result.status == ScanStatus.ERROR:
-            has_errors = True
-            log_message(f"  Error: {result.error_message}", verbose)
+            agg.has_errors = True
+            log_message(f"  Error: {result.error_message}", ctx.verbose)
         elif result.status == ScanStatus.INFECTED:
-            log_message(f"  Found {result.infected_count} threat(s)", verbose)
+            log_message(f"  Found {result.infected_count} threat(s)", ctx.verbose)
         else:
-            log_message(f"  Clean ({result.scanned_files} files scanned)", verbose)
+            log_message(f"  Clean ({result.scanned_files} files scanned)", ctx.verbose)
 
-    duration = time.monotonic() - start_time
+    agg.duration = time.monotonic() - start_time
+    return agg
 
-    # Handle quarantine if threats found and auto_quarantine enabled
-    quarantined_count = 0
-    quarantine_failed: list[tuple[str, str]] = []
 
-    if all_infected_files and auto_quarantine:
-        log_message(f"Quarantining {len(all_infected_files)} infected file(s)...", verbose)
+def _process_quarantine(ctx: ScanContext, agg: ScanAggregateResult) -> QuarantineResult:
+    """
+    Process quarantine for infected files if auto_quarantine is enabled.
 
-        # Initialize QuarantineManager and process each threat
-        quarantine_manager = QuarantineManager()
+    Args:
+        ctx: Scan context with configuration
+        agg: Aggregated scan results
 
-        # Collect all threat details from scan results
-        all_threat_details = []
-        for result in all_results:
-            all_threat_details.extend(result.threat_details)
+    Returns:
+        Quarantine processing results
+    """
+    qr = QuarantineResult()
 
-        # Quarantine each infected file with its threat name
-        for threat in all_threat_details:
-            quarantine_result = quarantine_manager.quarantine_file(
-                threat.file_path, threat.threat_name
-            )
-            if quarantine_result.is_success:
-                quarantined_count += 1
-            else:
-                error_msg = quarantine_result.error_message or str(quarantine_result.status.value)
-                quarantine_failed.append((threat.file_path, error_msg))
+    if not agg.all_infected_files or not ctx.auto_quarantine:
+        return qr
 
-        if quarantined_count > 0:
-            log_message(f"  Successfully quarantined: {quarantined_count} file(s)", verbose)
-        if quarantine_failed:
-            log_message(f"  Failed to quarantine: {len(quarantine_failed)} file(s)", verbose)
-            for file_path, error in quarantine_failed:
-                log_message(f"    - {file_path}: {error}", verbose, is_verbose=True)
+    log_message(f"Quarantining {len(agg.all_infected_files)} infected file(s)...", ctx.verbose)
 
-    # Build summary and details for logging
-    if total_infected > 0:
-        if auto_quarantine and quarantined_count > 0:
+    quarantine_manager = QuarantineManager()
+
+    # Collect all threat details from scan results
+    all_threat_details = []
+    for result in agg.all_results:
+        all_threat_details.extend(result.threat_details)
+
+    # Quarantine each infected file with its threat name
+    for threat in all_threat_details:
+        quarantine_result = quarantine_manager.quarantine_file(threat.file_path, threat.threat_name)
+        if quarantine_result.is_success:
+            qr.quarantined_count += 1
+        else:
+            error_msg = quarantine_result.error_message or str(quarantine_result.status.value)
+            qr.failed.append((threat.file_path, error_msg))
+
+    if qr.quarantined_count > 0:
+        log_message(f"  Successfully quarantined: {qr.quarantined_count} file(s)", ctx.verbose)
+    if qr.failed:
+        log_message(f"  Failed to quarantine: {len(qr.failed)} file(s)", ctx.verbose)
+        for file_path, error in qr.failed:
+            log_message(f"    - {file_path}: {error}", ctx.verbose, is_verbose=True)
+
+    return qr
+
+
+def _build_summary_and_status(
+    agg: ScanAggregateResult, qr: QuarantineResult, auto_quarantine: bool
+) -> tuple[str, str]:
+    """
+    Build summary message and status string for logging.
+
+    Args:
+        agg: Aggregated scan results
+        qr: Quarantine processing results
+        auto_quarantine: Whether auto-quarantine was enabled
+
+    Returns:
+        Tuple of (summary, status)
+    """
+    if agg.total_infected > 0:
+        if auto_quarantine and qr.quarantined_count > 0:
             summary = (
-                f"Scheduled scan found {total_infected} threat(s), {quarantined_count} quarantined"
+                f"Scheduled scan found {agg.total_infected} threat(s), "
+                f"{qr.quarantined_count} quarantined"
             )
         else:
-            summary = f"Scheduled scan found {total_infected} threat(s)"
+            summary = f"Scheduled scan found {agg.total_infected} threat(s)"
         status = "infected"
-    elif has_errors:
+    elif agg.has_errors:
         summary = "Scheduled scan completed with errors"
         status = "error"
     else:
-        summary = f"Scheduled scan completed - {total_scanned} files scanned, no threats"
+        summary = f"Scheduled scan completed - {agg.total_scanned} files scanned, no threats"
         status = "clean"
 
-    # Build detailed log output
+    return summary, status
+
+
+def _build_log_details(
+    agg: ScanAggregateResult, qr: QuarantineResult, auto_quarantine: bool
+) -> str:
+    """
+    Build detailed log output string.
+
+    Args:
+        agg: Aggregated scan results
+        qr: Quarantine processing results
+        auto_quarantine: Whether auto-quarantine was enabled
+
+    Returns:
+        Detailed log string
+    """
     details_parts = [
-        f"Scan Duration: {duration:.1f} seconds",
-        f"Files Scanned: {total_scanned}",
-        f"Threats Found: {total_infected}",
-        f"Targets: {', '.join(valid_targets)}",
+        f"Scan Duration: {agg.duration:.1f} seconds",
+        f"Files Scanned: {agg.total_scanned}",
+        f"Threats Found: {agg.total_infected}",
+        f"Targets: {', '.join(agg.valid_targets)}",
     ]
 
-    if auto_quarantine and all_infected_files:
-        details_parts.append(f"Quarantined: {quarantined_count}")
-        if quarantine_failed:
-            details_parts.append(f"Quarantine Failed: {len(quarantine_failed)}")
+    if auto_quarantine and agg.all_infected_files:
+        details_parts.append(f"Quarantined: {qr.quarantined_count}")
+        if qr.failed:
+            details_parts.append(f"Quarantine Failed: {len(qr.failed)}")
 
-    if all_infected_files:
+    if agg.all_infected_files:
         details_parts.append("\n--- Infected Files ---")
-        for result in all_results:
+        for result in agg.all_results:
             for threat in result.threat_details:
                 details_parts.append(
                     f"  {threat.file_path}: {threat.threat_name} "
@@ -360,59 +482,173 @@ def run_scheduled_scan(
                 )
 
     # Combine stdout from all scan results
-    for i, result in enumerate(all_results):
+    for i, result in enumerate(agg.all_results):
         if result.stdout.strip():
-            details_parts.append(f"\n--- Scan Output ({valid_targets[i]}) ---")
+            details_parts.append(f"\n--- Scan Output ({agg.valid_targets[i]}) ---")
             details_parts.append(result.stdout)
         if result.stderr.strip():
-            details_parts.append(f"\n--- Errors ({valid_targets[i]}) ---")
+            details_parts.append(f"\n--- Errors ({agg.valid_targets[i]}) ---")
             details_parts.append(result.stderr)
 
-    details = "\n".join(details_parts)
+    return "\n".join(details_parts)
 
-    # Create and save log entry with scheduled=True
+
+def _save_scan_log(
+    ctx: ScanContext,
+    agg: ScanAggregateResult,
+    qr: QuarantineResult,
+    summary: str,
+    status: str,
+    details: str,
+) -> None:
+    """
+    Create and save the scan log entry.
+
+    Args:
+        ctx: Scan context with log manager
+        agg: Aggregated scan results
+        qr: Quarantine processing results
+        summary: Summary message
+        status: Status string
+        details: Detailed log string
+    """
     log_entry = LogEntry.create(
         log_type="scan",
         status=status,
         summary=summary,
         details=details,
-        path=", ".join(valid_targets),
-        duration=duration,
+        path=", ".join(agg.valid_targets),
+        duration=agg.duration,
         scheduled=True,
     )
-    log_manager.save_log(log_entry)
+    ctx.log_manager.save_log(log_entry)
 
-    # Send notification
-    if settings.get("notifications_enabled", True):
-        if total_infected > 0:
-            if quarantined_count > 0:
-                body = f"{total_infected} infected file(s) found, {quarantined_count} quarantined"
-            else:
-                body = f"{total_infected} infected file(s) found"
-            send_notification("Scheduled Scan: Threats Detected!", body, urgency="critical")
-        elif has_errors:
-            send_notification(
-                "Scheduled Scan Completed",
-                "Scan completed with some errors. Check logs for details.",
-                urgency="normal",
+
+def _send_scan_notification(
+    ctx: ScanContext, agg: ScanAggregateResult, qr: QuarantineResult
+) -> None:
+    """
+    Send completion notification based on scan results.
+
+    Args:
+        ctx: Scan context with settings
+        agg: Aggregated scan results
+        qr: Quarantine processing results
+    """
+    if not ctx.settings.get("notifications_enabled", True):
+        return
+
+    if agg.total_infected > 0:
+        if qr.quarantined_count > 0:
+            body = (
+                f"{agg.total_infected} infected file(s) found, {qr.quarantined_count} quarantined"
             )
         else:
-            send_notification(
-                "Scheduled Scan Complete",
-                f"No threats found ({total_scanned} files scanned)",
-                urgency="low",
-            )
+            body = f"{agg.total_infected} infected file(s) found"
+        send_notification("Scheduled Scan: Threats Detected!", body, urgency="critical")
+    elif agg.has_errors:
+        send_notification(
+            "Scheduled Scan Completed",
+            "Scan completed with some errors. Check logs for details.",
+            urgency="normal",
+        )
+    else:
+        send_notification(
+            "Scheduled Scan Complete",
+            f"No threats found ({agg.total_scanned} files scanned)",
+            urgency="low",
+        )
 
-    log_message(f"Scan completed in {duration:.1f} seconds", verbose)
-    log_message(summary, verbose)
 
-    # Return appropriate exit code
-    if total_infected > 0:
+def _determine_exit_code(agg: ScanAggregateResult) -> int:
+    """
+    Determine appropriate exit code based on scan results.
+
+    Args:
+        agg: Aggregated scan results
+
+    Returns:
+        Exit code (0=clean, 1=infected, 2=error)
+    """
+    if agg.total_infected > 0:
         return 1
-    elif has_errors:
+    elif agg.has_errors:
         return 2
     else:
         return 0
+
+
+def run_scheduled_scan(
+    targets: list[str],
+    skip_on_battery: bool,
+    auto_quarantine: bool,
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> int:
+    """
+    Execute a scheduled scan.
+
+    This function orchestrates the scheduled scan workflow by delegating
+    to focused helper functions for each stage of the process.
+
+    Args:
+        targets: List of paths to scan
+        skip_on_battery: Whether to skip scan if on battery
+        auto_quarantine: Whether to quarantine detected threats
+        dry_run: If True, show what would be done without executing
+        verbose: Enable verbose output
+
+    Returns:
+        Exit code (0 for success/clean, 1 for threats found, 2 for error)
+    """
+    # Initialize context with all managers and configuration
+    ctx = ScanContext(
+        targets=targets,
+        skip_on_battery=skip_on_battery,
+        auto_quarantine=auto_quarantine,
+        dry_run=dry_run,
+        verbose=verbose,
+    )
+
+    log_message("ClamUI scheduled scan starting...", verbose)
+
+    # Check battery status
+    battery_result = _check_battery_status(ctx)
+    if battery_result is not None:
+        return battery_result
+
+    # Validate targets
+    valid_targets, error_code = _validate_targets(targets, verbose)
+    if error_code is not None:
+        return error_code
+
+    # Handle dry run mode
+    if dry_run:
+        return _handle_dry_run(ctx, valid_targets)
+
+    # Check ClamAV availability
+    _, clamav_error = _check_clamav_availability(ctx, valid_targets)
+    if clamav_error is not None:
+        return clamav_error
+
+    # Execute scans
+    agg = _execute_scans(ctx, valid_targets)
+
+    # Process quarantine if needed
+    qr = _process_quarantine(ctx, agg)
+
+    # Build log entry components
+    summary, status = _build_summary_and_status(agg, qr, auto_quarantine)
+    details = _build_log_details(agg, qr, auto_quarantine)
+
+    # Save log and send notification
+    _save_scan_log(ctx, agg, qr, summary, status, details)
+    _send_scan_notification(ctx, agg, qr)
+
+    log_message(f"Scan completed in {agg.duration:.1f} seconds", verbose)
+    log_message(summary, verbose)
+
+    return _determine_exit_code(agg)
 
 
 def main() -> int:

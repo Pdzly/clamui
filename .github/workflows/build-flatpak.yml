@@ -16,6 +16,9 @@ jobs:
         arch: [x86_64, aarch64]
       fail-fast: false
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged -v /var/run/docker.sock:/var/run/docker.sock
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

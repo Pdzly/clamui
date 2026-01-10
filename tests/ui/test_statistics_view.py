@@ -508,7 +508,8 @@ class TestStatisticsViewUpdateChart:
 
         view._update_chart([])
 
-        view._figure.clear.assert_called_once()
+        # With incremental updates, we don't clear the figure for empty data
+        # since the canvas is hidden anyway - this is more efficient
         view._canvas.set_visible.assert_called_with(False)
         view._chart_empty_state.set_visible.assert_called_with(True)
 
@@ -540,6 +541,11 @@ class TestStatisticsViewUpdateChart:
         )
         view._chart_empty_state = mock.MagicMock()
         view._chart_group = mock.MagicMock()
+        # Initialize incremental chart state variables
+        view._chart_ax = None
+        view._chart_bars_scans = None
+        view._chart_bars_threats = None
+        view._chart_initialized = False
 
         # Data with some scans
         data = [
@@ -550,6 +556,96 @@ class TestStatisticsViewUpdateChart:
 
         view._canvas.set_visible.assert_called_with(True)
         view._chart_empty_state.set_visible.assert_called_with(False)
+
+    def test_update_chart_incremental_update_reuses_bars(self, statistics_view_class):
+        """Test that incremental updates reuse existing bar containers."""
+        view = object.__new__(statistics_view_class)
+        view._figure = mock.MagicMock()
+        mock_ax = mock.MagicMock()
+        # Create mock bar containers with the right length (2 bars each)
+        mock_bar1 = mock.MagicMock()
+        mock_bar2 = mock.MagicMock()
+        mock_bars_scans = [mock_bar1, mock_bar2]
+        mock_bars_threats = [mock_bar1, mock_bar2]
+        mock_ax.bar.side_effect = [mock_bars_scans, mock_bars_threats]
+        view._figure.add_subplot.return_value = mock_ax
+        view._canvas = mock.MagicMock()
+        view._canvas.get_style_context.return_value.get_color.return_value = mock.MagicMock(
+            red=0.1, green=0.1, blue=0.1
+        )
+        view._chart_empty_state = mock.MagicMock()
+        view._chart_group = mock.MagicMock()
+        # Initialize incremental chart state variables
+        view._chart_ax = None
+        view._chart_bars_scans = None
+        view._chart_bars_threats = None
+        view._chart_initialized = False
+
+        # First update: should do full initialization
+        data1 = [
+            {"date": "2024-01-01T00:00:00", "scans": 5, "threats": 1},
+            {"date": "2024-01-02T00:00:00", "scans": 3, "threats": 0},
+        ]
+        view._update_chart(data1)
+
+        # Verify figure.clear and add_subplot were called (full init)
+        view._figure.clear.assert_called_once()
+        view._figure.add_subplot.assert_called_once()
+        assert view._chart_initialized is True
+
+        # Reset mocks for second update
+        view._figure.clear.reset_mock()
+        view._figure.add_subplot.reset_mock()
+
+        # Second update with same number of data points: should do incremental update
+        data2 = [
+            {"date": "2024-01-03T00:00:00", "scans": 7, "threats": 2},
+            {"date": "2024-01-04T00:00:00", "scans": 4, "threats": 1},
+        ]
+        view._update_chart(data2)
+
+        # Verify figure.clear and add_subplot were NOT called (incremental)
+        view._figure.clear.assert_not_called()
+        view._figure.add_subplot.assert_not_called()
+
+    def test_update_chart_reinitializes_when_data_points_change(self, statistics_view_class):
+        """Test that chart reinitializes when number of data points changes."""
+        view = object.__new__(statistics_view_class)
+        view._figure = mock.MagicMock()
+        mock_ax = mock.MagicMock()
+        view._figure.add_subplot.return_value = mock_ax
+        view._canvas = mock.MagicMock()
+        view._canvas.get_style_context.return_value.get_color.return_value = mock.MagicMock(
+            red=0.1, green=0.1, blue=0.1
+        )
+        view._chart_empty_state = mock.MagicMock()
+        view._chart_group = mock.MagicMock()
+        # Initialize incremental chart state variables
+        view._chart_ax = None
+        view._chart_bars_scans = None
+        view._chart_bars_threats = None
+        view._chart_initialized = False
+
+        # First update with 2 data points
+        data1 = [
+            {"date": "2024-01-01T00:00:00", "scans": 5, "threats": 1},
+            {"date": "2024-01-02T00:00:00", "scans": 3, "threats": 0},
+        ]
+        view._update_chart(data1)
+        view._figure.clear.reset_mock()
+        view._figure.add_subplot.reset_mock()
+
+        # Second update with 3 data points: should reinitialize
+        data2 = [
+            {"date": "2024-01-01T00:00:00", "scans": 5, "threats": 1},
+            {"date": "2024-01-02T00:00:00", "scans": 3, "threats": 0},
+            {"date": "2024-01-03T00:00:00", "scans": 7, "threats": 2},
+        ]
+        view._update_chart(data2)
+
+        # Verify figure.clear and add_subplot were called (reinit due to different count)
+        view._figure.clear.assert_called_once()
+        view._figure.add_subplot.assert_called_once()
 
 
 class TestStatisticsViewUpdateProtectionDisplay:

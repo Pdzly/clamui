@@ -739,3 +739,1613 @@ def test_scan_view_multi_path_basic(mock_gi_modules):
         assert paths_copy is not view._selected_paths
 
         # All tests passed
+
+
+# =============================================================================
+# Scan Worker Tests
+# =============================================================================
+
+
+class TestScanWorker:
+    """Tests for the _scan_worker method that performs actual scanning."""
+
+    def _setup_scan_mocks(self, mock_scan_view):
+        """Helper to set up common mocks for scan worker tests."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._paths_listbox.get_first_child.return_value = None
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+
+    def test_scan_worker_single_file_clean(self, mock_scan_view):
+        """Test scan worker with a single clean file."""
+        self._setup_scan_mocks(mock_scan_view)
+
+        # Create mock ScanResult and ScanStatus
+        from unittest.mock import MagicMock
+
+        mock_status = MagicMock()
+        mock_status.CLEAN = "clean"
+        mock_status.INFECTED = "infected"
+        mock_status.ERROR = "error"
+        mock_status.CANCELLED = "cancelled"
+
+        mock_result = MagicMock()
+        mock_result.status = mock_status.CLEAN
+        mock_result.scanned_files = 10
+        mock_result.scanned_dirs = 1
+        mock_result.infected_count = 0
+        mock_result.infected_files = []
+        mock_result.threat_details = []
+        mock_result.stdout = "Scanned 10 files"
+        mock_result.stderr = ""
+        mock_result.error_message = None
+
+        mock_scan_view._scanner.scan_sync.return_value = mock_result
+        mock_scan_view._selected_paths = ["/home/user/test.txt"]
+
+        # Mock GLib.idle_add to call the callback directly
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            captured_callbacks = []
+
+            def capture_idle_add(callback, *args):
+                captured_callbacks.append((callback, args))
+                return True
+
+            mock_glib.idle_add.side_effect = capture_idle_add
+
+            # Import the module fresh
+            mock_scan_view._scan_worker()
+
+            # Verify scanner was called with the correct path
+            mock_scan_view._scanner.scan_sync.assert_called_once_with("/home/user/test.txt")
+
+            # Verify _on_scan_complete was scheduled
+            assert len(captured_callbacks) >= 1
+
+    def test_scan_worker_no_paths_returns_error(self, mock_scan_view):
+        """Test scan worker with no paths returns an error result."""
+        self._setup_scan_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = []
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            with mock.patch("src.ui.scan_view.ScanResult") as mock_scan_result:
+                with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+                    mock_scan_status.ERROR = "error"
+
+                    captured_results = []
+
+                    def capture_idle_add(callback, *args):
+                        if args:
+                            captured_results.append(args[0])
+                        return True
+
+                    mock_glib.idle_add.side_effect = capture_idle_add
+
+                    mock_scan_view._scan_worker()
+
+                    # Scanner should not be called
+                    mock_scan_view._scanner.scan_sync.assert_not_called()
+
+                    # ScanResult should be constructed with error message
+                    mock_scan_result.assert_called_once()
+                    call_kwargs = mock_scan_result.call_args[1]
+                    assert call_kwargs["error_message"] == "No paths selected for scanning"
+
+    def test_scan_worker_exception_calls_error_handler(self, mock_scan_view):
+        """Test scan worker handles exceptions properly."""
+        self._setup_scan_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/home/user/test.txt"]
+        mock_scan_view._scanner.scan_sync.side_effect = RuntimeError("Scan failed")
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            captured_errors = []
+
+            def capture_idle_add(callback, *args):
+                if args and isinstance(args[0], str):
+                    captured_errors.append(args[0])
+                return True
+
+            mock_glib.idle_add.side_effect = capture_idle_add
+
+            mock_scan_view._scan_worker()
+
+            # Error handler should be called
+            assert len(captured_errors) == 1
+            assert "Scan failed" in captured_errors[0]
+
+
+class TestMultiTargetScanning:
+    """Tests for multi-target scanning functionality."""
+
+    def _setup_multi_scan_mocks(self, mock_scan_view):
+        """Helper to set up mocks for multi-target scan tests."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._paths_listbox.get_first_child.return_value = None
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+
+    def test_multi_target_scan_iterates_all_paths(self, mock_scan_view):
+        """Test that multi-target scan processes all paths."""
+        self._setup_multi_scan_mocks(mock_scan_view)
+
+        # Create mock results
+        mock_result = mock.MagicMock()
+        mock_result.status = mock.MagicMock()
+        mock_result.status.value = "clean"
+        mock_result.scanned_files = 5
+        mock_result.scanned_dirs = 1
+        mock_result.infected_count = 0
+        mock_result.infected_files = []
+        mock_result.threat_details = []
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_result.error_message = None
+
+        # Make status comparisons work (return False so status != CANCELLED)
+        mock_result.status.__eq__ = mock.MagicMock(return_value=False)
+
+        mock_scan_view._scanner.scan_sync.return_value = mock_result
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+        mock_scan_view._cancel_all_requested = False
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_glib.idle_add.side_effect = lambda callback, *args: True
+
+            # Need to import and patch ScanStatus
+            with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+                mock_scan_status.CLEAN = "clean"
+                mock_scan_status.INFECTED = "infected"
+                mock_scan_status.ERROR = "error"
+                mock_scan_status.CANCELLED = "cancelled"
+
+                mock_scan_view._scan_worker()
+
+            # Scanner should be called for each path
+            assert mock_scan_view._scanner.scan_sync.call_count == 3
+            calls = mock_scan_view._scanner.scan_sync.call_args_list
+            assert calls[0][0][0] == "/path1"
+            assert calls[1][0][0] == "/path2"
+            assert calls[2][0][0] == "/path3"
+
+    def test_multi_target_scan_aggregates_results(self, mock_scan_view):
+        """Test that multi-target scan aggregates results correctly."""
+        self._setup_multi_scan_mocks(mock_scan_view)
+
+        # Create results with different stats
+        def create_result(files, infected):
+            result = mock.MagicMock()
+            result.status = mock.MagicMock()
+            result.scanned_files = files
+            result.scanned_dirs = 1
+            result.infected_count = infected
+            result.infected_files = [f"infected_{i}" for i in range(infected)]
+            result.threat_details = []
+            result.stdout = f"scanned {files}"
+            result.stderr = ""
+            result.error_message = None
+            return result
+
+        results = [create_result(10, 0), create_result(20, 1), create_result(5, 0)]
+
+        mock_scan_view._scanner.scan_sync.side_effect = results
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+        mock_scan_view._cancel_all_requested = False
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            with mock.patch("src.ui.scan_view.ScanResult") as mock_scan_result_class:
+
+                def capture_idle_add(callback, *args):
+                    return True
+
+                mock_glib.idle_add.side_effect = capture_idle_add
+
+                with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+                    mock_scan_status.CLEAN = "clean"
+                    mock_scan_status.INFECTED = "infected"
+                    mock_scan_status.ERROR = "error"
+                    mock_scan_status.CANCELLED = "cancelled"
+
+                    mock_scan_view._scan_worker()
+
+                # Check aggregated result was constructed correctly
+                mock_scan_result_class.assert_called_once()
+                call_kwargs = mock_scan_result_class.call_args[1]
+                assert call_kwargs["scanned_files"] == 35  # 10 + 20 + 5
+                assert call_kwargs["infected_count"] == 1
+
+
+class TestCancelScan:
+    """Tests for scan cancellation functionality."""
+
+    def _setup_cancel_mocks(self, mock_scan_view):
+        """Helper to set up mocks for cancel tests."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._paths_listbox.get_first_child.return_value = None
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+
+    def test_cancel_click_sets_cancel_flag(self, mock_scan_view):
+        """Test that cancel button click sets the cancel flag."""
+        self._setup_cancel_mocks(mock_scan_view)
+
+        mock_scan_view._cancel_all_requested = False
+
+        mock_scan_view._on_cancel_clicked(mock.MagicMock())
+
+        assert mock_scan_view._cancel_all_requested is True
+        mock_scan_view._scanner.cancel.assert_called_once()
+
+    def test_cancel_all_stops_multi_target_scan(self, mock_scan_view):
+        """Test that cancel all stops processing remaining targets."""
+        self._setup_cancel_mocks(mock_scan_view)
+
+        mock_result = mock.MagicMock()
+        mock_result.status = mock.MagicMock()
+        mock_result.scanned_files = 5
+        mock_result.scanned_dirs = 1
+        mock_result.infected_count = 0
+        mock_result.infected_files = []
+        mock_result.threat_details = []
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_result.error_message = None
+
+        mock_scan_view._scanner.scan_sync.return_value = mock_result
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+        mock_scan_view._cancel_all_requested = True  # Already cancelled
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_glib.idle_add.side_effect = lambda callback, *args: True
+
+            with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+                mock_scan_status.CLEAN = "clean"
+                mock_scan_status.INFECTED = "infected"
+                mock_scan_status.ERROR = "error"
+                mock_scan_status.CANCELLED = "cancelled"
+
+                mock_scan_view._scan_worker()
+
+            # Scanner should not be called at all (cancel was set before first scan)
+            mock_scan_view._scanner.scan_sync.assert_not_called()
+
+    def test_cancel_during_scan_stops_at_current_target(self, mock_scan_view):
+        """Test that cancelling during scan stops after current target."""
+        self._setup_cancel_mocks(mock_scan_view)
+
+        # Mock ScanStatus
+        mock_cancelled_status = mock.MagicMock()
+
+        def create_result_and_cancel(path):
+            """Create result and set cancel flag after first scan."""
+            mock_scan_view._cancel_all_requested = True
+            result = mock.MagicMock()
+            result.status = mock_cancelled_status
+            result.scanned_files = 5
+            result.scanned_dirs = 1
+            result.infected_count = 0
+            result.infected_files = []
+            result.threat_details = []
+            result.stdout = ""
+            result.stderr = ""
+            result.error_message = None
+            return result
+
+        mock_scan_view._scanner.scan_sync.side_effect = create_result_and_cancel
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+        mock_scan_view._cancel_all_requested = False
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_glib.idle_add.side_effect = lambda callback, *args: True
+
+            with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+                mock_scan_status.CLEAN = "clean"
+                mock_scan_status.INFECTED = "infected"
+                mock_scan_status.ERROR = "error"
+                mock_scan_status.CANCELLED = mock_cancelled_status
+
+                mock_scan_view._scan_worker()
+
+            # Should only scan first target before cancel takes effect
+            assert mock_scan_view._scanner.scan_sync.call_count == 1
+
+
+class TestScanComplete:
+    """Tests for scan completion handling."""
+
+    def _setup_complete_mocks(self, mock_scan_view):
+        """Helper to set up mocks for scan complete tests."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._paths_listbox.get_first_child.return_value = None
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+        mock_scan_view._show_view_results = mock.MagicMock()
+        mock_scan_view._hide_view_results = mock.MagicMock()
+
+    def test_on_scan_complete_clean_result(self, mock_scan_view):
+        """Test scan complete handler with clean result."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        # Create a clean result enum-like object
+        clean_status = mock.MagicMock()
+        clean_status.value = "clean"
+
+        result = mock.MagicMock()
+        result.status = clean_status
+        result.infected_count = 0
+        result.error_message = None
+        result.stderr = ""
+
+        # Make status comparison work for CLEAN
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = clean_status
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = mock.MagicMock()
+            mock_scan_status.CANCELLED = mock.MagicMock()
+
+            mock_scan_view._on_scan_complete(result)
+
+        # Verify UI state updates
+        assert mock_scan_view._is_scanning is False
+        mock_scan_view._scan_button.set_sensitive.assert_called_with(True)
+        mock_scan_view._eicar_button.set_sensitive.assert_called_with(True)
+        mock_scan_view._selection_group.set_sensitive.assert_called_with(True)
+        mock_scan_view._cancel_button.set_visible.assert_called_with(False)
+        mock_scan_view._stop_progress_pulse.assert_called_once()
+        mock_scan_view._show_view_results.assert_called_once_with(0)
+
+    def test_on_scan_complete_infected_result(self, mock_scan_view):
+        """Test scan complete handler with infected result."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        infected_status = mock.MagicMock()
+        infected_status.value = "infected"
+
+        result = mock.MagicMock()
+        result.status = infected_status
+        result.infected_count = 3
+        result.error_message = None
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = mock.MagicMock()
+            mock_scan_status.INFECTED = infected_status
+            mock_scan_status.ERROR = mock.MagicMock()
+
+            mock_scan_view._on_scan_complete(result)
+
+        mock_scan_view._show_view_results.assert_called_once_with(3)
+        # Status banner should show warning about threats
+        mock_scan_view._status_banner.set_title.assert_called()
+        call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+        assert "3 threat" in call_arg
+
+    def test_on_scan_complete_error_result(self, mock_scan_view):
+        """Test scan complete handler with error result."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        error_status = mock.MagicMock()
+        error_status.value = "error"
+
+        result = mock.MagicMock()
+        result.status = error_status
+        result.infected_count = 0
+        result.error_message = "ClamAV not found"
+        result.stderr = ""
+        result.stdout = ""
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = mock.MagicMock()
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = error_status
+
+            mock_scan_view._on_scan_complete(result)
+
+        # Status banner should show error
+        mock_scan_view._status_banner.set_title.assert_called()
+        call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+        assert "error" in call_arg.lower()
+
+    def test_on_scan_complete_cleans_eicar_file(self, mock_scan_view, tmp_path):
+        """Test that scan complete cleans up EICAR temp file."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        # Create actual temp file
+        eicar_file = tmp_path / "eicar_test.txt"
+        eicar_file.write_text("test content")
+        mock_scan_view._eicar_temp_path = str(eicar_file)
+
+        clean_status = mock.MagicMock()
+        result = mock.MagicMock()
+        result.status = clean_status
+        result.infected_count = 0
+        result.error_message = None
+        result.stderr = ""
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = clean_status
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = mock.MagicMock()
+
+            mock_scan_view._on_scan_complete(result)
+
+        # EICAR file should be deleted
+        assert not eicar_file.exists()
+        assert mock_scan_view._eicar_temp_path == ""
+
+    def test_on_scan_complete_notifies_state_change_callback(self, mock_scan_view):
+        """Test that scan complete notifies external state change callback."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        callback = mock.MagicMock()
+        mock_scan_view._on_scan_state_changed = callback
+        mock_scan_view._is_scanning = True
+
+        clean_status = mock.MagicMock()
+        result = mock.MagicMock()
+        result.status = clean_status
+        result.infected_count = 0
+        result.error_message = None
+        result.stderr = ""
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = clean_status
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = mock.MagicMock()
+
+            mock_scan_view._on_scan_complete(result)
+
+        callback.assert_called_once_with(False)
+
+
+class TestScanError:
+    """Tests for scan error handling."""
+
+    def _setup_error_mocks(self, mock_scan_view):
+        """Helper to set up mocks for error tests."""
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+
+    def test_on_scan_error_updates_ui_state(self, mock_scan_view):
+        """Test that scan error handler updates UI state correctly."""
+        self._setup_error_mocks(mock_scan_view)
+        mock_scan_view._is_scanning = True
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._on_scan_error("Test error message")
+
+        assert mock_scan_view._is_scanning is False
+        mock_scan_view._scan_button.set_sensitive.assert_called_with(True)
+        mock_scan_view._eicar_button.set_sensitive.assert_called_with(True)
+        mock_scan_view._selection_group.set_sensitive.assert_called_with(True)
+        mock_scan_view._cancel_button.set_visible.assert_called_with(False)
+        mock_scan_view._stop_progress_pulse.assert_called_once()
+
+    def test_on_scan_error_shows_error_message(self, mock_scan_view):
+        """Test that scan error displays error message in status banner."""
+        self._setup_error_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._on_scan_error("ClamAV process crashed")
+
+        mock_scan_view._status_banner.set_title.assert_called()
+        call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+        assert "ClamAV process crashed" in call_arg
+
+    def test_on_scan_error_cleans_eicar_file(self, mock_scan_view, tmp_path):
+        """Test that scan error cleans up EICAR temp file."""
+        self._setup_error_mocks(mock_scan_view)
+
+        eicar_file = tmp_path / "eicar_error_test.txt"
+        eicar_file.write_text("test")
+        mock_scan_view._eicar_temp_path = str(eicar_file)
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._on_scan_error("Error")
+
+        assert not eicar_file.exists()
+        assert mock_scan_view._eicar_temp_path == ""
+
+
+class TestProgressUpdates:
+    """Tests for progress bar and label updates."""
+
+    def _setup_progress_mocks(self, mock_scan_view):
+        """Helper to set up mocks for progress tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+
+    def test_start_progress_pulse_creates_timeout(self, mock_scan_view):
+        """Test that starting progress pulse creates a GLib timeout."""
+        self._setup_progress_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_glib.timeout_add.return_value = 123
+
+            mock_scan_view._start_progress_pulse()
+
+            mock_glib.timeout_add.assert_called_once()
+            assert mock_scan_view._pulse_timeout_id == 123
+
+    def test_start_progress_pulse_no_double_start(self, mock_scan_view):
+        """Test that starting progress pulse when already pulsing does nothing."""
+        self._setup_progress_mocks(mock_scan_view)
+        mock_scan_view._pulse_timeout_id = 456  # Already pulsing
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_scan_view._start_progress_pulse()
+
+            mock_glib.timeout_add.assert_not_called()
+            assert mock_scan_view._pulse_timeout_id == 456
+
+    def test_stop_progress_pulse_removes_timeout(self, mock_scan_view):
+        """Test that stopping progress pulse removes the timeout."""
+        self._setup_progress_mocks(mock_scan_view)
+        mock_scan_view._pulse_timeout_id = 789
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_scan_view._stop_progress_pulse()
+
+            mock_glib.source_remove.assert_called_once_with(789)
+            assert mock_scan_view._pulse_timeout_id is None
+
+    def test_stop_progress_pulse_hides_section(self, mock_scan_view):
+        """Test that stopping progress pulse hides the progress section."""
+        self._setup_progress_mocks(mock_scan_view)
+        mock_scan_view._pulse_timeout_id = None
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            mock_scan_view._stop_progress_pulse()
+
+            mock_scan_view._progress_section.set_visible.assert_called_with(False)
+
+    def test_update_scan_progress_single_target(self, mock_scan_view):
+        """Test progress update for single target scan."""
+        self._setup_progress_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+            mock_scan_view._update_scan_progress(1, 1, "/test/path")
+
+        mock_scan_view._progress_label.set_label.assert_called_once()
+        label = mock_scan_view._progress_label.set_label.call_args[0][0]
+        assert "Scanning" in label
+
+    def test_update_scan_progress_multi_target(self, mock_scan_view):
+        """Test progress update for multi-target scan."""
+        self._setup_progress_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+            mock_scan_view._update_scan_progress(2, 5, "/test/path")
+
+        label = mock_scan_view._progress_label.set_label.call_args[0][0]
+        assert "2/5" in label
+
+    def test_update_scan_progress_truncates_long_path(self, mock_scan_view):
+        """Test that progress update truncates very long paths."""
+        self._setup_progress_mocks(mock_scan_view)
+
+        long_path = "/very/long/path/that/exceeds/forty/characters/limit/completely"
+        with mock.patch("src.ui.scan_view.format_scan_path", return_value=long_path):
+            mock_scan_view._update_scan_progress(1, 1, long_path)
+
+        label = mock_scan_view._progress_label.set_label.call_args[0][0]
+        # Label should be truncated (contains "...")
+        assert "..." in label or len(label) < len(long_path) + 20
+
+
+class TestStartScanning:
+    """Tests for the _start_scanning method that initiates scans."""
+
+    def _setup_start_mocks(self, mock_scan_view):
+        """Helper to set up mocks for start scanning tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._hide_view_results = mock.MagicMock()
+        mock_scan_view._start_progress_pulse = mock.MagicMock()
+
+    def test_start_scanning_sets_scanning_state(self, mock_scan_view):
+        """Test that start scanning sets the is_scanning flag."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        assert mock_scan_view._is_scanning is True
+        assert mock_scan_view._cancel_all_requested is False
+
+    def test_start_scanning_disables_buttons(self, mock_scan_view):
+        """Test that start scanning disables scan and EICAR buttons."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._scan_button.set_sensitive.assert_called_with(False)
+        mock_scan_view._eicar_button.set_sensitive.assert_called_with(False)
+        mock_scan_view._selection_group.set_sensitive.assert_called_with(False)
+
+    def test_start_scanning_shows_cancel_button(self, mock_scan_view):
+        """Test that start scanning shows the cancel button."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._cancel_button.set_visible.assert_called_with(True)
+
+    def test_start_scanning_multi_target_sets_cancel_all_label(self, mock_scan_view):
+        """Test that multi-target scan shows 'Cancel All' button label."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._cancel_button.set_label.assert_called_with("Cancel All")
+
+    def test_start_scanning_single_target_sets_cancel_label(self, mock_scan_view):
+        """Test that single target scan shows 'Cancel' button label."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/single/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/single/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._cancel_button.set_label.assert_called_with("Cancel")
+
+    def test_start_scanning_hides_previous_results(self, mock_scan_view):
+        """Test that start scanning hides any previous results."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._hide_view_results.assert_called_once()
+
+    def test_start_scanning_notifies_state_callback(self, mock_scan_view):
+        """Test that start scanning notifies external state callback."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+        callback = mock.MagicMock()
+        mock_scan_view._on_scan_state_changed = callback
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        callback.assert_called_once_with(True)
+
+    def test_start_scanning_shows_progress_section(self, mock_scan_view):
+        """Test that start scanning shows the progress section."""
+        self._setup_start_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scanning()
+
+        mock_scan_view._progress_section.set_visible.assert_called_with(True)
+        mock_scan_view._start_progress_pulse.assert_called_once()
+
+
+class TestOnScanClicked:
+    """Tests for the _on_scan_clicked handler."""
+
+    def _setup_click_mocks(self, mock_scan_view):
+        """Helper to set up mocks for scan click tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._hide_view_results = mock.MagicMock()
+        mock_scan_view._start_progress_pulse = mock.MagicMock()
+
+    def test_scan_click_with_no_paths_shows_warning(self, mock_scan_view):
+        """Test that clicking scan with no paths shows a warning."""
+        self._setup_click_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = []
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._on_scan_clicked(mock.MagicMock())
+
+        mock_scan_view._status_banner.set_title.assert_called()
+        call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+        assert "select" in call_arg.lower()
+        mock_scan_view._status_banner.set_revealed.assert_called_with(True)
+
+    def test_scan_click_with_paths_starts_scan(self, mock_scan_view):
+        """Test that clicking scan with paths starts scanning."""
+        self._setup_click_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._on_scan_clicked(mock.MagicMock())
+
+        assert mock_scan_view._is_scanning is True
+
+
+class TestViewResults:
+    """Tests for view results functionality."""
+
+    def test_show_view_results_no_threats(self, mock_scan_view):
+        """Test showing view results button with no threats."""
+        mock_scan_view._show_view_results(0)
+
+        mock_scan_view._view_results_button.set_label.assert_called()
+        label = mock_scan_view._view_results_button.set_label.call_args[0][0]
+        assert "Results" in label
+        mock_scan_view._view_results_section.set_visible.assert_called_with(True)
+
+    def test_show_view_results_with_threats(self, mock_scan_view):
+        """Test showing view results button with threats."""
+        mock_scan_view._show_view_results(5)
+
+        label = mock_scan_view._view_results_button.set_label.call_args[0][0]
+        assert "5" in label
+        assert "Threat" in label
+
+    def test_hide_view_results(self, mock_scan_view):
+        """Test hiding view results section."""
+        mock_scan_view._hide_view_results()
+
+        mock_scan_view._view_results_section.set_visible.assert_called_with(False)
+
+    def test_on_view_results_clicked_no_result(self, mock_scan_view):
+        """Test view results click with no current result."""
+        mock_scan_view._current_result = None
+
+        # Should return without error
+        mock_scan_view._on_view_results_clicked(mock.MagicMock())
+        # No crash is the success condition
+
+    def test_on_view_results_clicked_no_root(self, mock_scan_view):
+        """Test view results click with no root window."""
+        mock_scan_view._current_result = mock.MagicMock()
+        mock_scan_view.get_root.return_value = None
+
+        # Should return without error
+        mock_scan_view._on_view_results_clicked(mock.MagicMock())
+
+
+class TestEicarTest:
+    """Tests for EICAR test functionality."""
+
+    def _setup_eicar_mocks(self, mock_scan_view):
+        """Helper to set up mocks for EICAR tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._hide_view_results = mock.MagicMock()
+        mock_scan_view._start_progress_pulse = mock.MagicMock()
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._paths_listbox.get_first_child.return_value = None
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+
+    def test_eicar_test_creates_temp_file(self, mock_scan_view, tmp_path):
+        """Test that EICAR test creates a temporary test file."""
+        self._setup_eicar_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.tempfile") as mock_tempfile:
+            mock_file = mock.MagicMock()
+            mock_file.name = str(tmp_path / "eicar_test.txt")
+            mock_file.__enter__ = mock.MagicMock(return_value=mock_file)
+            mock_file.__exit__ = mock.MagicMock(return_value=False)
+            mock_tempfile.NamedTemporaryFile.return_value = mock_file
+
+            with mock.patch("src.ui.scan_view.is_flatpak", return_value=False):
+                with mock.patch("src.ui.scan_view.GLib"):
+                    with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test"):
+                        mock_scan_view._on_eicar_test_clicked(mock.MagicMock())
+
+            # Verify temp file was created
+            mock_tempfile.NamedTemporaryFile.assert_called_once()
+            call_kwargs = mock_tempfile.NamedTemporaryFile.call_args[1]
+            assert call_kwargs["delete"] is False
+            assert ".txt" in call_kwargs["suffix"]
+
+    def test_eicar_test_uses_tmp_in_flatpak(self, mock_scan_view, tmp_path):
+        """Test that EICAR test uses /tmp directory in Flatpak."""
+        self._setup_eicar_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.tempfile") as mock_tempfile:
+            mock_file = mock.MagicMock()
+            mock_file.name = "/tmp/eicar_test.txt"
+            mock_file.__enter__ = mock.MagicMock(return_value=mock_file)
+            mock_file.__exit__ = mock.MagicMock(return_value=False)
+            mock_tempfile.NamedTemporaryFile.return_value = mock_file
+
+            with mock.patch("src.ui.scan_view.is_flatpak", return_value=True):
+                with mock.patch("src.ui.scan_view.GLib"):
+                    with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test"):
+                        mock_scan_view._on_eicar_test_clicked(mock.MagicMock())
+
+            # Verify /tmp was used
+            call_kwargs = mock_tempfile.NamedTemporaryFile.call_args[1]
+            assert call_kwargs["dir"] == "/tmp"
+
+    def test_eicar_test_handles_oserror(self, mock_scan_view):
+        """Test that EICAR test handles OSError gracefully."""
+        self._setup_eicar_mocks(mock_scan_view)
+
+        with mock.patch("src.ui.scan_view.tempfile") as mock_tempfile:
+            mock_tempfile.NamedTemporaryFile.side_effect = OSError("Permission denied")
+
+            with mock.patch("src.ui.scan_view.is_flatpak", return_value=False):
+                with mock.patch("src.ui.scan_view.set_status_class"):
+                    mock_scan_view._on_eicar_test_clicked(mock.MagicMock())
+
+            # Should show error in status banner
+            mock_scan_view._status_banner.set_title.assert_called()
+            call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+            assert "Failed" in call_arg or "error" in call_arg.lower()
+
+
+class TestBackendIndicator:
+    """Tests for backend indicator functionality."""
+
+    def test_update_backend_label_daemon(self, mock_scan_view):
+        """Test backend label shows daemon name."""
+        mock_scan_view._scanner.get_active_backend.return_value = "daemon"
+
+        mock_scan_view._update_backend_label()
+
+        mock_scan_view._backend_label.set_label.assert_called()
+        label = mock_scan_view._backend_label.set_label.call_args[0][0]
+        assert "daemon" in label.lower() or "clamd" in label.lower()
+
+    def test_update_backend_label_clamscan(self, mock_scan_view):
+        """Test backend label shows clamscan name."""
+        mock_scan_view._scanner.get_active_backend.return_value = "clamscan"
+
+        mock_scan_view._update_backend_label()
+
+        label = mock_scan_view._backend_label.set_label.call_args[0][0]
+        assert "clamscan" in label.lower()
+
+
+class TestScanStateCallbacks:
+    """Tests for scan state change callback functionality."""
+
+    def test_set_on_scan_state_changed(self, mock_scan_view):
+        """Test setting scan state change callback."""
+        callback = mock.MagicMock()
+
+        mock_scan_view.set_on_scan_state_changed(callback)
+
+        assert mock_scan_view._on_scan_state_changed == callback
+
+    def test_set_scan_state_changed_callback_alias(self, mock_scan_view):
+        """Test the backwards compatibility alias."""
+        callback = mock.MagicMock()
+
+        mock_scan_view.set_scan_state_changed_callback(callback)
+
+        assert mock_scan_view._on_scan_state_changed == callback
+
+
+class TestSelectedProfile:
+    """Tests for profile selection getters and setters."""
+
+    def test_get_selected_profile(self, mock_scan_view):
+        """Test getting selected profile."""
+        mock_profile = mock.MagicMock()
+        mock_scan_view._selected_profile = mock_profile
+
+        result = mock_scan_view.get_selected_profile()
+
+        assert result == mock_profile
+
+    def test_get_selected_profile_none(self, mock_scan_view):
+        """Test getting selected profile when none selected."""
+        mock_scan_view._selected_profile = None
+
+        result = mock_scan_view.get_selected_profile()
+
+        assert result is None
+
+    def test_set_selected_profile_found(self, mock_scan_view):
+        """Test setting selected profile by ID when found."""
+        mock_profile = mock.MagicMock()
+        mock_profile.id = "test-profile-id"
+        mock_scan_view._profile_list = [mock_profile]
+
+        result = mock_scan_view.set_selected_profile("test-profile-id")
+
+        assert result is True
+        assert mock_scan_view._selected_profile == mock_profile
+        mock_scan_view._profile_dropdown.set_selected.assert_called_with(1)
+
+    def test_set_selected_profile_not_found(self, mock_scan_view):
+        """Test setting selected profile by ID when not found."""
+        mock_profile = mock.MagicMock()
+        mock_profile.id = "other-id"
+        mock_scan_view._profile_list = [mock_profile]
+
+        result = mock_scan_view.set_selected_profile("nonexistent-id")
+
+        assert result is False
+
+    def test_set_selected_profile_no_dropdown(self, mock_scan_view):
+        """Test setting profile with no dropdown returns False."""
+        mock_scan_view._profile_dropdown = None
+
+        result = mock_scan_view.set_selected_profile("any-id")
+
+        assert result is False
+
+    def test_set_selected_profile_empty_list(self, mock_scan_view):
+        """Test setting profile with empty list returns False."""
+        mock_scan_view._profile_list = []
+
+        result = mock_scan_view.set_selected_profile("any-id")
+
+        assert result is False
+
+
+class TestDragDropVisualFeedback:
+    """Tests for drag-and-drop visual feedback."""
+
+    def test_on_drag_enter_adds_css_class(self, mock_scan_view):
+        """Test that drag enter adds visual feedback CSS class."""
+        mock_scan_view._on_drag_enter(None, 0, 0)
+
+        mock_scan_view.add_css_class.assert_called_with("drop-active")
+
+    def test_on_drag_leave_removes_css_class(self, mock_scan_view):
+        """Test that drag leave removes visual feedback CSS class."""
+        mock_scan_view._on_drag_leave(None)
+
+        mock_scan_view.remove_css_class.assert_called_with("drop-active")
+
+
+class TestStatusBanner:
+    """Tests for status banner functionality."""
+
+    def test_on_status_banner_dismissed(self, mock_scan_view):
+        """Test that dismissing status banner hides it."""
+        mock_banner = mock.MagicMock()
+
+        mock_scan_view._on_status_banner_dismissed(mock_banner)
+
+        mock_banner.set_revealed.assert_called_once_with(False)
+
+
+class TestShowToast:
+    """Tests for toast notification functionality."""
+
+    def test_show_toast_no_root(self, mock_scan_view):
+        """Test show toast when no root window."""
+        mock_scan_view.get_root.return_value = None
+
+        # Should not raise
+        mock_scan_view._show_toast("Test message")
+
+    def test_show_toast_with_root_no_add_toast(self, mock_scan_view):
+        """Test show toast when root has no add_toast method."""
+        mock_root = mock.MagicMock(spec=[])  # No add_toast method
+        mock_scan_view.get_root.return_value = mock_root
+
+        # Should not raise
+        mock_scan_view._show_toast("Test message")
+
+    def test_show_toast_with_add_toast(self, mock_scan_view):
+        """Test show toast when root has add_toast method."""
+        mock_root = mock.MagicMock()
+        mock_scan_view.get_root.return_value = mock_root
+
+        with mock.patch("src.ui.scan_view.Adw") as mock_adw:
+            mock_toast = mock.MagicMock()
+            mock_adw.Toast.new.return_value = mock_toast
+
+            mock_scan_view._show_toast("Test message")
+
+            mock_adw.Toast.new.assert_called_once_with("Test message")
+            mock_root.add_toast.assert_called_once_with(mock_toast)
+
+
+class TestStartScan:
+    """Tests for the _start_scan method."""
+
+    def _setup_start_scan_mocks(self, mock_scan_view):
+        """Helper to set up mocks for start scan tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._hide_view_results = mock.MagicMock()
+        mock_scan_view._start_progress_pulse = mock.MagicMock()
+
+    def test_start_scan_calls_on_scan_clicked(self, mock_scan_view):
+        """Test that _start_scan calls _on_scan_clicked."""
+        self._setup_start_scan_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        # Track if _on_scan_clicked was called via the is_scanning flag
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test/path"):
+                mock_scan_view._start_scan()
+
+        # Verify scanning was started
+        assert mock_scan_view._is_scanning is True
+
+
+class TestUpdateSelectionHeader:
+    """Tests for the _update_selection_header method."""
+
+    def _setup_header_mocks(self, mock_scan_view):
+        """Helper to set up mocks for header tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._clear_all_button = mock.MagicMock()
+
+    def test_update_header_zero_paths(self, mock_scan_view):
+        """Test header update with no paths selected."""
+        self._setup_header_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = []
+
+        mock_scan_view._update_selection_header()
+
+        mock_scan_view._selection_group.set_title.assert_called()
+        title = mock_scan_view._selection_group.set_title.call_args[0][0]
+        assert "Target" in title
+        mock_scan_view._clear_all_button.set_visible.assert_called_with(False)
+
+    def test_update_header_one_path(self, mock_scan_view):
+        """Test header update with one path selected."""
+        self._setup_header_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        mock_scan_view._update_selection_header()
+
+        title = mock_scan_view._selection_group.set_title.call_args[0][0]
+        assert "1" in title
+        mock_scan_view._clear_all_button.set_visible.assert_called_with(False)
+
+    def test_update_header_multiple_paths(self, mock_scan_view):
+        """Test header update with multiple paths selected."""
+        self._setup_header_mocks(mock_scan_view)
+        mock_scan_view._selected_paths = ["/path1", "/path2", "/path3"]
+
+        mock_scan_view._update_selection_header()
+
+        title = mock_scan_view._selection_group.set_title.call_args[0][0]
+        assert "3" in title
+        mock_scan_view._clear_all_button.set_visible.assert_called_with(True)
+
+
+class TestShowDropError:
+    """Tests for the _show_drop_error method."""
+
+    def test_show_drop_error_sets_banner(self, mock_scan_view):
+        """Test that drop error sets status banner."""
+        mock_scan_view._show_toast = mock.MagicMock()
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._show_drop_error("Test error message")
+
+        mock_scan_view._status_banner.set_title.assert_called_with("Test error message")
+        mock_scan_view._status_banner.set_revealed.assert_called_with(True)
+
+    def test_show_drop_error_shows_toast(self, mock_scan_view):
+        """Test that drop error shows toast notification."""
+        mock_scan_view._show_toast = mock.MagicMock()
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._show_drop_error("Error message")
+
+        mock_scan_view._show_toast.assert_called_with("Error message")
+
+
+class TestRefreshProfiles:
+    """Tests for the refresh_profiles method."""
+
+    def _setup_profile_refresh_mocks(self, mock_scan_view):
+        """Helper to set up mocks for profile refresh tests."""
+        mock_scan_view._profile_string_list = mock.MagicMock()
+        mock_scan_view._profile_string_list.get_n_items.return_value = 2
+
+    def test_refresh_profiles_no_manager(self, mock_scan_view):
+        """Test refresh profiles when no profile manager available."""
+        self._setup_profile_refresh_mocks(mock_scan_view)
+        mock_scan_view._get_profile_manager = mock.MagicMock(return_value=None)
+
+        # Should not raise
+        mock_scan_view.refresh_profiles()
+
+    def test_refresh_profiles_clears_and_rebuilds_list(self, mock_scan_view):
+        """Test that refresh profiles clears and rebuilds the dropdown."""
+        self._setup_profile_refresh_mocks(mock_scan_view)
+        # Make get_n_items return a proper int (not MagicMock)
+        mock_scan_view._profile_string_list.get_n_items.return_value = 2
+        # Make get_selected return an int (not MagicMock)
+        mock_scan_view._profile_dropdown.get_selected.return_value = 0
+
+        mock_profile_manager = mock.MagicMock()
+        mock_profile1 = mock.MagicMock()
+        mock_profile1.name = "Quick Scan"
+        mock_profile1.id = "quick"
+        mock_profile2 = mock.MagicMock()
+        mock_profile2.name = "Full Scan"
+        mock_profile2.id = "full"
+        mock_profile_manager.list_profiles.return_value = [mock_profile1, mock_profile2]
+
+        mock_scan_view._get_profile_manager = mock.MagicMock(return_value=mock_profile_manager)
+
+        mock_scan_view.refresh_profiles()
+
+        # Should remove old items (called for items in the list)
+        assert mock_scan_view._profile_string_list.remove.called
+        # Should append "No Profile" + 2 profiles
+        assert mock_scan_view._profile_string_list.append.called
+
+    def test_refresh_profiles_restores_selection(self, mock_scan_view):
+        """Test that refresh profiles tries to restore previous selection."""
+        self._setup_profile_refresh_mocks(mock_scan_view)
+
+        mock_profile = mock.MagicMock()
+        mock_profile.name = "Test Profile"
+        mock_profile.id = "test-id"
+
+        mock_profile_manager = mock.MagicMock()
+        mock_profile_manager.list_profiles.return_value = [mock_profile]
+
+        mock_scan_view._get_profile_manager = mock.MagicMock(return_value=mock_profile_manager)
+        mock_scan_view._profile_list = [mock_profile]
+
+        # Set current selection to the test profile
+        mock_scan_view._profile_dropdown.get_selected.return_value = 1
+
+        mock_scan_view.refresh_profiles()
+
+        # Should try to restore the profile selection
+        mock_scan_view._profile_dropdown.set_selected.assert_called()
+
+
+class TestGetProfileManager:
+    """Tests for the _get_profile_manager method."""
+
+    def test_get_profile_manager_no_root(self, mock_scan_view):
+        """Test getting profile manager with no root window."""
+        mock_scan_view.get_root.return_value = None
+
+        result = mock_scan_view._get_profile_manager()
+
+        assert result is None
+
+    def test_get_profile_manager_root_no_app(self, mock_scan_view):
+        """Test getting profile manager with root but no application."""
+        mock_root = mock.MagicMock()
+        mock_root.get_application.return_value = None
+        mock_scan_view.get_root.return_value = mock_root
+
+        result = mock_scan_view._get_profile_manager()
+
+        assert result is None
+
+    def test_get_profile_manager_app_no_profile_manager(self, mock_scan_view):
+        """Test getting profile manager when app has no profile_manager."""
+        mock_root = mock.MagicMock()
+        mock_app = mock.MagicMock(spec=[])  # No profile_manager attribute
+        mock_root.get_application.return_value = mock_app
+        mock_scan_view.get_root.return_value = mock_root
+
+        result = mock_scan_view._get_profile_manager()
+
+        assert result is None
+
+    def test_get_profile_manager_success(self, mock_scan_view):
+        """Test getting profile manager successfully."""
+        mock_root = mock.MagicMock()
+        mock_app = mock.MagicMock()
+        mock_profile_manager = mock.MagicMock()
+        mock_app.profile_manager = mock_profile_manager
+        mock_root.get_application.return_value = mock_app
+        mock_scan_view.get_root.return_value = mock_root
+
+        result = mock_scan_view._get_profile_manager()
+
+        assert result == mock_profile_manager
+
+
+class TestOnManageProfilesClicked:
+    """Tests for the _on_manage_profiles_clicked handler."""
+
+    def test_manage_profiles_no_root(self, mock_scan_view):
+        """Test manage profiles button with no root window."""
+        mock_scan_view.get_root.return_value = None
+
+        # Should not raise
+        mock_scan_view._on_manage_profiles_clicked(mock.MagicMock())
+
+    def test_manage_profiles_root_not_window(self, mock_scan_view):
+        """Test manage profiles button when root is not a Gtk.Window."""
+        mock_root = mock.MagicMock()
+        mock_scan_view.get_root.return_value = mock_root
+
+        with mock.patch("src.ui.scan_view.Gtk") as mock_gtk:
+            mock_gtk.Window = type("Window", (), {})  # Different class
+            # Should not raise
+            mock_scan_view._on_manage_profiles_clicked(mock.MagicMock())
+
+
+class TestOnProfilesDialogClosed:
+    """Tests for the _on_profiles_dialog_closed handler."""
+
+    def test_profiles_dialog_closed_refreshes(self, mock_scan_view):
+        """Test that closing profiles dialog refreshes the dropdown."""
+        mock_scan_view.refresh_profiles = mock.MagicMock()
+
+        mock_scan_view._on_profiles_dialog_closed(mock.MagicMock())
+
+        mock_scan_view.refresh_profiles.assert_called_once()
+
+
+class TestOnProfileRunFromDialog:
+    """Tests for the _on_profile_run_from_dialog handler."""
+
+    def _setup_run_mocks(self, mock_scan_view):
+        """Helper to set up mocks for profile run tests."""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._hide_view_results = mock.MagicMock()
+        mock_scan_view._start_progress_pulse = mock.MagicMock()
+
+    def test_profile_run_from_dialog(self, mock_scan_view):
+        """Test running a profile from the dialog."""
+        self._setup_run_mocks(mock_scan_view)
+        mock_scan_view.refresh_profiles = mock.MagicMock()
+        mock_scan_view.set_selected_profile = mock.MagicMock(return_value=True)
+        mock_scan_view._selected_paths = ["/test/path"]
+
+        mock_profile = mock.MagicMock()
+        mock_profile.id = "test-profile"
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            with mock.patch("src.ui.scan_view.format_scan_path", return_value="/test"):
+                mock_scan_view._on_profile_run_from_dialog(mock_profile)
+
+        mock_scan_view.refresh_profiles.assert_called_once()
+        mock_scan_view.set_selected_profile.assert_called_once_with("test-profile")
+
+
+class TestOnRealizeLoadProfiles:
+    """Tests for the _on_realize_load_profiles handler."""
+
+    def test_realize_loads_profiles(self, mock_scan_view):
+        """Test that realizing the widget loads profiles."""
+        mock_scan_view.refresh_profiles = mock.MagicMock()
+
+        mock_scan_view._on_realize_load_profiles(mock.MagicMock())
+
+        mock_scan_view.refresh_profiles.assert_called_once()
+
+
+class TestRunScanAsync:
+    """Tests for the _run_scan_async method."""
+
+    def test_run_scan_async_starts_thread(self, mock_scan_view):
+        """Test that run_scan_async starts a background thread."""
+        mock_scan_view._scan_worker = mock.MagicMock()
+
+        import threading
+
+        with mock.patch.object(threading, "Thread") as mock_thread_class:
+            mock_thread = mock.MagicMock()
+            mock_thread_class.return_value = mock_thread
+
+            result = mock_scan_view._run_scan_async()
+
+            mock_thread_class.assert_called_once()
+            mock_thread.start.assert_called_once()
+            assert result is False  # Should return False to not repeat
+
+
+class TestDropWithValidationErrors:
+    """Tests for drop handling with validation errors."""
+
+    def _setup_drop_mocks(self, mock_scan_view):
+        """Helper to set up mocks for drop tests."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._show_drop_error = mock.MagicMock()
+
+    def test_drop_with_validation_errors_shows_first_error(self, mock_scan_view):
+        """Test that drop with validation errors shows the first error."""
+        self._setup_drop_mocks(mock_scan_view)
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = "/remote/file"
+
+        mock_file_list = mock.MagicMock()
+        mock_file_list.get_files.return_value = [mock_file]
+
+        with mock.patch("src.ui.scan_view.validate_dropped_files") as mock_validate:
+            mock_validate.return_value = ([], ["File not accessible", "Path error"])
+
+            result = mock_scan_view._on_drop(None, mock_file_list, 0, 0)
+
+        assert result is False
+        mock_scan_view._show_drop_error.assert_called_with("File not accessible")
+
+    def test_drop_no_valid_paths_no_errors(self, mock_scan_view):
+        """Test drop with no valid paths and no specific errors."""
+        self._setup_drop_mocks(mock_scan_view)
+
+        mock_file = mock.MagicMock()
+        mock_file.get_path.return_value = None
+
+        mock_file_list = mock.MagicMock()
+        mock_file_list.get_files.return_value = [mock_file]
+
+        with mock.patch("src.ui.scan_view.validate_dropped_files") as mock_validate:
+            mock_validate.return_value = ([], [])
+
+            result = mock_scan_view._on_drop(None, mock_file_list, 0, 0)
+
+        assert result is False
+        mock_scan_view._show_drop_error.assert_called_with("Unable to accept dropped files")
+
+
+class TestProgressLabelNone:
+    """Tests for handling None progress label."""
+
+    def test_update_scan_progress_no_label(self, mock_scan_view):
+        """Test progress update when label is None."""
+        mock_scan_view._progress_label = None
+
+        # Should not raise
+        mock_scan_view._update_scan_progress(1, 1, "/test/path")
+
+
+class TestShowViewResultsNone:
+    """Tests for show_view_results when components are None."""
+
+    def test_show_view_results_button_none(self, mock_scan_view):
+        """Test show view results when button is None."""
+        mock_scan_view._view_results_button = None
+        mock_scan_view._view_results_section = mock.MagicMock()
+
+        # Should return early without error
+        mock_scan_view._show_view_results(0)
+
+    def test_show_view_results_section_none(self, mock_scan_view):
+        """Test show view results when section is None."""
+        mock_scan_view._view_results_button = mock.MagicMock()
+        mock_scan_view._view_results_section = None
+
+        # Should return early without error
+        mock_scan_view._show_view_results(0)
+
+
+class TestHideViewResultsNone:
+    """Tests for hide_view_results when section is None."""
+
+    def test_hide_view_results_section_none(self, mock_scan_view):
+        """Test hide view results when section is None."""
+        mock_scan_view._view_results_section = None
+
+        # Should not raise
+        mock_scan_view._hide_view_results()
+
+
+class TestStopProgressPulseNoId:
+    """Tests for stop_progress_pulse when no timeout is set."""
+
+    def test_stop_progress_pulse_no_timeout_id(self, mock_scan_view):
+        """Test stopping progress pulse when no timeout ID exists."""
+        mock_scan_view._pulse_timeout_id = None
+
+        with mock.patch("src.ui.scan_view.GLib") as mock_glib:
+            mock_scan_view._stop_progress_pulse()
+
+            # source_remove should not be called
+            mock_glib.source_remove.assert_not_called()
+
+    def test_stop_progress_pulse_section_none(self, mock_scan_view):
+        """Test stopping progress pulse when section is None."""
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._progress_section = None
+
+        with mock.patch("src.ui.scan_view.GLib"):
+            # Should not raise
+            mock_scan_view._stop_progress_pulse()
+
+
+class TestOnRemovePathClicked:
+    """Tests for the _on_remove_path_clicked handler."""
+
+    def test_remove_path_clicked_calls_remove_path(self, mock_scan_view):
+        """Test that clicking remove calls _remove_path."""
+        mock_scan_view._remove_path = mock.MagicMock()
+        mock_row = mock.MagicMock()
+
+        mock_scan_view._on_remove_path_clicked("/test/path", mock_row)
+
+        mock_scan_view._remove_path.assert_called_once_with("/test/path")
+
+
+class TestOnClearAllClicked:
+    """Tests for the _on_clear_all_clicked handler."""
+
+    def test_clear_all_clicked_calls_clear_paths(self, mock_scan_view):
+        """Test that clicking clear all calls _clear_paths."""
+        mock_scan_view._clear_paths = mock.MagicMock()
+
+        mock_scan_view._on_clear_all_clicked(mock.MagicMock())
+
+        mock_scan_view._clear_paths.assert_called_once()
+
+
+class TestScanCompleteOtherStatus:
+    """Tests for scan complete with unexpected status."""
+
+    def _setup_complete_mocks(self, mock_scan_view):
+        """Helper to set up mocks."""
+        mock_scan_view._paths_placeholder = mock.MagicMock()
+        mock_scan_view._paths_listbox = mock.MagicMock()
+        mock_scan_view._create_path_row = mock.MagicMock()
+        mock_scan_view._update_selection_header = mock.MagicMock()
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+        mock_scan_view._show_view_results = mock.MagicMock()
+
+    def test_on_scan_complete_other_status(self, mock_scan_view):
+        """Test scan complete with status not matching CLEAN/INFECTED/ERROR."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        cancelled_status = mock.MagicMock()
+        cancelled_status.value = "cancelled"
+
+        result = mock.MagicMock()
+        result.status = cancelled_status
+        result.infected_count = 0
+        result.error_message = None
+        result.stderr = ""
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = mock.MagicMock()
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = mock.MagicMock()
+
+            with mock.patch("src.ui.scan_view.set_status_class"):
+                mock_scan_view._on_scan_complete(result)
+
+        # Should show view results with 0 threats
+        mock_scan_view._show_view_results.assert_called_with(0)
+        # Should set banner title with status
+        mock_scan_view._status_banner.set_title.assert_called()
+        call_arg = mock_scan_view._status_banner.set_title.call_args[0][0]
+        assert "cancelled" in call_arg.lower()
+
+
+class TestScanCompleteEicarCleanupError:
+    """Tests for EICAR file cleanup errors during scan complete."""
+
+    def _setup_complete_mocks(self, mock_scan_view):
+        """Helper to set up mocks."""
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._current_result = None
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+        mock_scan_view._show_view_results = mock.MagicMock()
+
+    def test_on_scan_complete_eicar_cleanup_oserror(self, mock_scan_view, tmp_path):
+        """Test scan complete handles OSError during EICAR cleanup."""
+        self._setup_complete_mocks(mock_scan_view)
+
+        # Create a path that we'll make fail on deletion
+        fake_path = str(tmp_path / "nonexistent_eicar.txt")
+        mock_scan_view._eicar_temp_path = fake_path
+
+        clean_status = mock.MagicMock()
+        result = mock.MagicMock()
+        result.status = clean_status
+        result.infected_count = 0
+        result.error_message = None
+        result.stderr = ""
+
+        with mock.patch("src.ui.scan_view.ScanStatus") as mock_scan_status:
+            mock_scan_status.CLEAN = clean_status
+            mock_scan_status.INFECTED = mock.MagicMock()
+            mock_scan_status.ERROR = mock.MagicMock()
+
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch("os.remove", side_effect=OSError("Permission denied")):
+                    # Should not raise, just log warning
+                    mock_scan_view._on_scan_complete(result)
+
+        # EICAR path should still be cleared
+        assert mock_scan_view._eicar_temp_path == ""
+
+
+class TestScanErrorEicarCleanup:
+    """Tests for EICAR cleanup errors during scan error."""
+
+    def _setup_error_mocks(self, mock_scan_view):
+        """Helper to set up mocks."""
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._on_scan_state_changed = None
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+
+    def test_on_scan_error_eicar_cleanup_oserror(self, mock_scan_view, tmp_path):
+        """Test scan error handles OSError during EICAR cleanup."""
+        self._setup_error_mocks(mock_scan_view)
+
+        fake_path = str(tmp_path / "nonexistent_eicar.txt")
+        mock_scan_view._eicar_temp_path = fake_path
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            with mock.patch("os.path.exists", return_value=True):
+                with mock.patch("os.remove", side_effect=OSError("Permission denied")):
+                    # Should not raise
+                    mock_scan_view._on_scan_error("Test error")
+
+        # EICAR path should still be cleared
+        assert mock_scan_view._eicar_temp_path == ""
+
+
+class TestScanErrorNotifiesCallback:
+    """Tests for scan error notification callback."""
+
+    def _setup_error_mocks(self, mock_scan_view):
+        """Helper to set up mocks."""
+        mock_scan_view._pulse_timeout_id = None
+        mock_scan_view._eicar_temp_path = ""
+        mock_scan_view._selection_group = mock.MagicMock()
+        mock_scan_view._stop_progress_pulse = mock.MagicMock()
+
+    def test_on_scan_error_notifies_callback(self, mock_scan_view):
+        """Test that scan error notifies external callback."""
+        self._setup_error_mocks(mock_scan_view)
+
+        callback = mock.MagicMock()
+        mock_scan_view._on_scan_state_changed = callback
+        mock_scan_view._is_scanning = True
+
+        with mock.patch("src.ui.scan_view.set_status_class"):
+            mock_scan_view._on_scan_error("Error")
+
+        callback.assert_called_once_with(False)

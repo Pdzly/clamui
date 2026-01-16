@@ -3,8 +3,8 @@
 A modern Linux desktop application that provides a graphical user interface for the ClamAV antivirus command-line tool. Built with PyGObject, GTK4, and Adwaita for a native GNOME appearance.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)
-
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)  
+[![Get ClamUI on Flathub](https://flathub.org/api/badge?locale=en)  ](https://flathub.org/en/apps/io.github.linx_systems.ClamUI)
 ![Main View](./screenshots/main_view.png)
 
 ## Features

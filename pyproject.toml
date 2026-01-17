@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clamui"
-version = "0.1.1"
+version = "0.1.1b"
 description = "A modern Linux desktop application that provides a graphical user interface for the ClamAV antivirus command-line tool."
 readme = "README.md"
 license = "MIT"

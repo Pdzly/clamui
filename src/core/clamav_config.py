@@ -463,9 +463,15 @@ def validate_option(key: str, value: str) -> tuple[bool, str | None]:
             return (False, f"{key}: not a valid integer: {value}")
         # Check range constraints
         if "min" in option_spec and int_val < option_spec["min"]:
-            return (False, f"{key}: value {int_val} is below minimum {option_spec['min']}")
+            return (
+                False,
+                f"{key}: value {int_val} is below minimum {option_spec['min']}",
+            )
         if "max" in option_spec and int_val > option_spec["max"]:
-            return (False, f"{key}: value {int_val} exceeds maximum {option_spec['max']}")
+            return (
+                False,
+                f"{key}: value {int_val} exceeds maximum {option_spec['max']}",
+            )
         return (True, None)
 
     elif option_type == "size":
@@ -539,6 +545,9 @@ def validate_config_file(file_path: str) -> tuple[bool, list[str]]:
     if error:
         return (False, [error])
 
+    if config is None:
+        return (False, ["Configuration file could not be parsed"])
+
     errors = []
     for key, value_list in config.values.items():
         for config_value in value_list:
@@ -590,18 +599,21 @@ def get_config_summary(config: ClamAVConfig) -> str:
     return "\n".join(lines)
 
 
-def validate_config(config: ClamAVConfig) -> tuple[bool, list[str]]:
+def validate_config(config: ClamAVConfig | None) -> tuple[bool, list[str]]:
     """
     Validate all options in a ClamAVConfig object.
 
     Args:
-        config: The ClamAVConfig object to validate
+        config: The ClamAVConfig object to validate (can be None if parse failed)
 
     Returns:
         Tuple of (is_valid, list_of_errors):
         - (True, []) if all options are valid
-        - (False, [error1, error2, ...]) if there are validation errors
+        - (False, [error1, error2, ...]) if there are validation errors or config is None
     """
+    if config is None:
+        return (False, ["Configuration is not loaded. Cannot validate."])
+
     errors = []
     for key, value_list in config.values.items():
         for config_value in value_list:

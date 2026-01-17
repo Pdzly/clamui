@@ -100,6 +100,42 @@ class SavePage(PreferencesPageMixin):
         # Store reference to save button
         self._save_button = None
 
+    def _show_error_dialog(self, title: str, message: str):
+        """
+        Show an error dialog to the user.
+
+        Overrides PreferencesPageMixin to use self._window as parent
+        since SavePage is not a GTK widget.
+
+        Args:
+            title: Dialog title
+            message: Error message text
+        """
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(title)
+        dialog.set_body(message)
+        dialog.add_response("ok", "OK")
+        dialog.set_default_response("ok")
+        dialog.present(self._window)
+
+    def _show_success_dialog(self, title: str, message: str):
+        """
+        Show a success dialog to the user.
+
+        Overrides PreferencesPageMixin to use self._window as parent
+        since SavePage is not a GTK widget.
+
+        Args:
+            title: Dialog title
+            message: Success message text
+        """
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(title)
+        dialog.set_body(message)
+        dialog.add_response("ok", "OK")
+        dialog.set_default_response("ok")
+        dialog.present(self._window)
+
     def create_page(self) -> Adw.PreferencesPage:
         """
         Create the Save & Apply preference page.
@@ -189,17 +225,41 @@ class SavePage(PreferencesPageMixin):
 
         # Validate configurations
         if freshclam_updates:
+            if not self._freshclam_config:
+                self._show_error_dialog(
+                    "Configuration Error",
+                    "Cannot save freshclam settings: Configuration failed to load.\n\n"
+                    "This may be due to:\n"
+                    "• Missing configuration file\n"
+                    "• Insufficient permissions\n"
+                    "• Disk space issues (Flatpak)\n\n"
+                    "Check the application logs for details.",
+                )
+                self._is_saving = False
+                button.set_sensitive(True)
+                return
+
             is_valid, errors = validate_config(self._freshclam_config)
             if not is_valid:
-                self._show_error_dialog("Validation Error", errors)
+                self._show_error_dialog("Validation Error", "\n".join(errors))
                 self._is_saving = False
                 button.set_sensitive(True)
                 return
 
         if clamd_updates and self._clamd_available:
+            if not self._clamd_config:
+                self._show_error_dialog(
+                    "Configuration Error",
+                    "Cannot save clamd settings: Configuration failed to load.\n\n"
+                    "Check that /etc/clamav/clamd.conf exists and is readable.",
+                )
+                self._is_saving = False
+                button.set_sensitive(True)
+                return
+
             is_valid, errors = validate_config(self._clamd_config)
             if not is_valid:
-                self._show_error_dialog("Validation Error", errors)
+                self._show_error_dialog("Validation Error", "\n".join(errors))
                 self._is_saving = False
                 button.set_sensitive(True)
                 return
@@ -207,7 +267,13 @@ class SavePage(PreferencesPageMixin):
         # Run save in background thread
         save_thread = threading.Thread(
             target=self._save_configs_thread,
-            args=(freshclam_updates, clamd_updates, onaccess_updates, scheduled_updates, button),
+            args=(
+                freshclam_updates,
+                clamd_updates,
+                onaccess_updates,
+                scheduled_updates,
+                button,
+            ),
         )
         save_thread.daemon = True
         save_thread.start()

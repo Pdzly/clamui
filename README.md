@@ -1,53 +1,110 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/linx-systems/clamui/master/icons/io.github.linx_systems.ClamUI.svg" alt="ClamUI Logo" width="140" height="140">
+
 # ClamUI
 
-A modern Linux desktop application that provides a graphical user interface for the ClamAV antivirus command-line tool. Built with PyGObject, GTK4, and Adwaita for a native GNOME appearance.
+<p align="center">
+  <strong>A modern Linux desktop application for ClamAV antivirus</strong>
+</p>
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)  
-[![Get ClamUI on Flathub](https://flathub.org/api/badge?locale=en)  ](https://flathub.org/en/apps/io.github.linx_systems.ClamUI)
-![Main View](./screenshots/main_view.png)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="#"><img src="https://img.shields.io/badge/platform-Linux-lightgrey.svg" alt="Platform"></a>
+  <a href="https://flathub.org/en/apps/io.github.linx_systems.ClamUI"><img src="https://flathub.org/api/badge?locale=en" alt="Get ClamUI on Flathub"></a>
+</p>
+
+<p align="center">
+  Built with <strong>PyGObject</strong>, <strong>GTK4</strong>, and <strong>Adwaita</strong> for a native GNOME appearance
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#quick-start">Installation</a> •
+  <a href="#documentation">Documentation</a>
+</p>
+
+<br>
+
+<img src="./screenshots/main_view.png" alt="Main View" width="800">
+
+</div>
+
+<br>
+
+---
 
 ## Features
 
-- **Easy File Scanning**: Select files or directories to scan using the native GTK4 file dialog
-- **Async Scanning**: Background scanning keeps the UI responsive
-- **Quarantine Management**: Isolate and manage detected threats safely
-- **Scan Profiles**: Create custom scan configurations for different use cases
-- **Scan History**: Track and review past scan results
-- **Statistics Dashboard**: Monitor your scanning activity and threat detection
-- **VirusTotal Integration**: Optional enhanced threat analysis via VirusTotal API
-- **File Manager Integration**: Right-click "Scan with ClamUI" in Nautilus, Dolphin, and Nemo
-- **System Tray**: Optional tray icon with quick actions and scan progress
-- **Modern UI**: Native Adwaita styling with proper GNOME integration
-
-## Screenshots
+ClamUI provides a comprehensive set of features designed to make antivirus protection on Linux both powerful and user-friendly.
 
 <table>
 <tr>
-<td><img src="./screenshots/main_view_with_scan_result.png" alt="Scan Results" width="400"/></td>
-<td><img src="./screenshots/quarantine_view.png" alt="Quarantine View" width="400"/></td>
+<td width="50%" valign="top">
+
+### Scanning & Protection
+
+- **Easy File Scanning** — Native GTK4 file dialogs for intuitive file selection
+- **Async Scanning** — Background processing keeps the UI responsive during scans
+- **Quarantine Management** — Safely isolate and manage detected threats
+- **Scan Profiles** — Create custom configurations for different use cases
+
+</td>
+<td width="50%" valign="top">
+
+### Management & Integration
+
+- **Scan History** — Track and review all past scan results
+- **Statistics Dashboard** — Monitor scanning activity and threat detections
+- **VirusTotal Integration** — Optional enhanced threat analysis via API
+- **File Manager Integration** — Right-click "Scan with ClamUI" in Nautilus, Dolphin, and Nemo
+
+</td>
 </tr>
 <tr>
-<td align="center"><em>Scan Results</em></td>
-<td align="center"><em>Quarantine Management</em></td>
-</tr>
-<tr>
-<td><img src="./screenshots/components_view.png" alt="Components View" width="400"/></td>
-<td><img src="./screenshots/history_view.png" alt="History View" width="400"/></td>
-</tr>
-<tr>
-<td align="center"><em>ClamAV Components Status</em></td>
-<td align="center"><em>Scan History</em></td>
-</tr>
-<tr>
-<td><img src="./screenshots/profile_management.png" alt="Profile Management" width="400"/></td>
-<td><img src="./screenshots/config_view.png" alt="Settings" width="400"/></td>
-</tr>
-<tr>
-<td align="center"><em>Scan Profiles</em></td>
-<td align="center"><em>Settings</em></td>
+<td width="50%" valign="top">
+
+### User Experience
+
+- **Modern UI** — Native Adwaita styling with proper GNOME integration
+- **System Tray** — Quick access with actions and real-time scan progress
+- **Desktop Notifications** — Stay informed of scan results and updates
+
+</td>
+<td width="50%" valign="top">
+
+### Flexibility
+
+- **Multiple Scan Backends** — Choose between daemon (clamd) or direct (clamscan)
+- **Scheduled Scans** — Configure automatic scanning with systemd or cron
+- **Customizable Settings** — Extensive configuration options for your workflow
+
+</td>
 </tr>
 </table>
+
+---
+
+## Screenshots
+
+<div align="center">
+
+| Scan Results | Quarantine Management |
+|:------------:|:---------------------:|
+| ![Scan Results](./screenshots/main_view_with_scan_result.png) | ![Quarantine View](./screenshots/quarantine_view.png) |
+
+| ClamAV Components Status | Scan History |
+|:------------------------:|:------------:|
+| ![Components View](./screenshots/components_view.png) | ![History View](./screenshots/history_view.png) |
+
+| Scan Profiles | Settings |
+|:-------------:|:--------:|
+| ![Profile Management](./screenshots/profile_management.png) | ![Config View](./screenshots/config_view.png) |
+
+</div>
+
+---
 
 ## Quick Start
 
@@ -67,16 +124,18 @@ uv sync
 uv run clamui
 ```
 
-For detailed installation options including .deb packages and system-wide installation, see the [Installation Guide](./docs/INSTALL.md).
+> **More Installation Options:** See the [Installation Guide](./docs/INSTALL.md) for .deb packages and system-wide installation
+
+---
 
 ## Usage
+
+### GUI Application
 
 1. Launch ClamUI from your application menu or terminal
 2. Select a file or folder to scan
 3. Click "Scan" to start the antivirus scan
 4. View results and take action on any threats detected
-
-For detailed usage instructions, see the [User Guide](./docs/USER_GUIDE.md).
 
 ### Command Line
 
@@ -88,49 +147,142 @@ clamui
 clamui /path/to/file1 /path/to/folder
 ```
 
+> **Detailed Instructions:** See the [User Guide](./docs/USER_GUIDE.md)
+
+---
+
 ## Configuration
 
-ClamUI stores user preferences in `~/.config/clamui/settings.json` and can be configured through the Preferences dialog or by directly editing the JSON file.
+ClamUI stores user preferences and can be configured through the Preferences dialog or by editing the configuration file directly.
+
+**Configuration Location:** `~/.config/clamui/settings.json`
 
 ### Key Configuration Options
 
-- **Scan Backend**: Choose between automatic detection, daemon (clamd), or direct clamscan
-- **Notifications**: Control desktop notifications for scan results and updates
-- **Auto-Quarantine**: Automatically quarantine detected threats
-- **Scheduled Scans**: Configure automatic scanning with systemd or cron
-- **System Tray**: Enable start minimized and minimize to tray options
-- **Scan Profiles**: Create custom scan configurations with exclusion patterns
+<table>
+<tr>
+<th width="25%">Category</th>
+<th width="75%">Description</th>
+</tr>
+<tr>
+<td><strong>Scan Backend</strong></td>
+<td>Choose between automatic detection, daemon (clamd), or direct clamscan</td>
+</tr>
+<tr>
+<td><strong>Notifications</strong></td>
+<td>Control desktop notifications for scan results and updates</td>
+</tr>
+<tr>
+<td><strong>Auto-Quarantine</strong></td>
+<td>Automatically quarantine detected threats</td>
+</tr>
+<tr>
+<td><strong>Scheduled Scans</strong></td>
+<td>Configure automatic scanning with systemd or cron</td>
+</tr>
+<tr>
+<td><strong>System Tray</strong></td>
+<td>Enable start minimized and minimize to tray options</td>
+</tr>
+<tr>
+<td><strong>Scan Profiles</strong></td>
+<td>Create custom scan configurations with exclusion patterns</td>
+</tr>
+</table>
 
-For complete reference including all 15 settings, scan profiles, file locations, and configuration examples, see the [Configuration Reference](./docs/CONFIGURATION.md).
+<br>
+
+> **For complete configuration reference:** See the [Configuration Reference](./docs/CONFIGURATION.md) for all 15 settings and examples
+
+---
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [User Guide](./docs/USER_GUIDE.md) | Complete guide to using ClamUI features |
-| [Installation Guide](./docs/INSTALL.md) | Flatpak, .deb, context menu, and tray setup |
-| [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) | Common issues and solutions |
-| [Development Guide](./docs/DEVELOPMENT.md) | Dev environment, testing, and contributing |
-| [Scan Backend Guide](./docs/SCAN_BACKENDS.md) | Backend options, performance comparison, and selection guide |
-| [Security Policy](./SECURITY.txt) | Security contact and reporting |
+Comprehensive guides to help you get the most out of ClamUI:
+
+<table>
+<tr>
+<th width="30%">Document</th>
+<th width="70%">Description</th>
+</tr>
+<tr>
+<td><a href="./docs/USER_GUIDE.md"><strong>User Guide</strong></a></td>
+<td>Complete guide to using ClamUI features</td>
+</tr>
+<tr>
+<td><a href="./docs/INSTALL.md"><strong>Installation Guide</strong></a></td>
+<td>Flatpak, .deb, context menu, and tray setup</td>
+</tr>
+<tr>
+<td><a href="./docs/TROUBLESHOOTING.md"><strong>Troubleshooting Guide</strong></a></td>
+<td>Common issues and solutions</td>
+</tr>
+<tr>
+<td><a href="./docs/DEVELOPMENT.md"><strong>Development Guide</strong></a></td>
+<td>Dev environment, testing, and contributing</td>
+</tr>
+<tr>
+<td><a href="./docs/SCAN_BACKENDS.md"><strong>Scan Backend Guide</strong></a></td>
+<td>Backend options, performance comparison, and selection guide</td>
+</tr>
+<tr>
+<td><a href="./SECURITY.txt"><strong>Security Policy</strong></a></td>
+<td>Security contact and reporting</td>
+</tr>
+</table>
+
+---
 
 ## Requirements
 
-- **ClamAV**: The `clamscan` command-line tool must be installed
-- **GTK4 + libadwaita**: For the graphical interface
-- **Python 3.x**: With PyGObject bindings
+ClamUI requires the following components to be installed on your system:
 
-See the [Installation Guide](./docs/INSTALL.md) for platform-specific dependency installation.
+<table>
+<tr>
+<th width="30%">Component</th>
+<th width="70%">Description</th>
+</tr>
+<tr>
+<td><strong>ClamAV</strong></td>
+<td>The <code>clamscan</code> command-line tool must be installed</td>
+</tr>
+<tr>
+<td><strong>GTK4 + libadwaita</strong></td>
+<td>For the graphical interface</td>
+</tr>
+<tr>
+<td><strong>Python 3.x</strong></td>
+<td>With PyGObject bindings</td>
+</tr>
+</table>
+
+<br>
+
+> **Platform-specific installation:** See the [Installation Guide](./docs/INSTALL.md) for dependency installation instructions
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please see the [Development Guide](./docs/DEVELOPMENT.md) for:
+Contributions are welcome! Check out the [Development Guide](./docs/DEVELOPMENT.md) for:
 
 - Setting up the development environment
 - Running tests with coverage
 - Code style guidelines
 - Submitting pull requests
 
+---
+
 ## License
 
-This project is open source. See LICENSE file for details.
+This project is open source. See [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**Made with care for the Linux community**
+
+[Star on GitHub](https://github.com/linx-systems/clamui) • [Report Bug](https://github.com/linx-systems/clamui/issues) • [Request Feature](https://github.com/linx-systems/clamui/issues)
+
+</div>

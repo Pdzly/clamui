@@ -739,13 +739,14 @@ class TestGetCliCommandPath:
 
     def test_returns_path_from_which_when_in_path(self, scheduler):
         """Test returns path when clamui-scheduled-scan is in PATH."""
-        with mock.patch("src.core.scheduler.which_host_command") as mock_which:
-            mock_which.return_value = "/usr/bin/clamui-scheduled-scan"
+        with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+            with mock.patch("src.core.scheduler.which_host_command") as mock_which:
+                mock_which.return_value = "/usr/bin/clamui-scheduled-scan"
 
-            result = scheduler._get_cli_command_path()
+                result = scheduler._get_cli_command_path()
 
-            assert result == "/usr/bin/clamui-scheduled-scan"
-            mock_which.assert_called_with("clamui-scheduled-scan")
+                assert result == "/usr/bin/clamui-scheduled-scan"
+                mock_which.assert_called_with("clamui-scheduled-scan")
 
     def test_returns_venv_path_when_exists(self, scheduler):
         """Test returns venv entry point when not in PATH but venv exists."""
@@ -796,26 +797,27 @@ class TestGetCliCommandPath:
 
     def test_correct_module_path_in_fallback(self, scheduler):
         """Test that fallback uses correct module path src.cli.scheduled_scan."""
-        with mock.patch("src.core.scheduler.which_host_command") as mock_which:
-            # Nothing in PATH
-            mock_which.side_effect = lambda x: (
-                "/usr/bin/python3" if x == "python3" else None
-            )
+        with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+            with mock.patch("src.core.scheduler.which_host_command") as mock_which:
+                # Nothing in PATH
+                mock_which.side_effect = lambda x: (
+                    "/usr/bin/python3" if x == "python3" else None
+                )
 
-            # No venvs exist
-            with mock.patch.object(scheduler, "_get_venv_paths", return_value=[]):
-                with mock.patch.object(
-                    scheduler, "_check_path_exists", return_value=False
-                ):
-                    result = scheduler._get_cli_command_path()
+                # No venvs exist
+                with mock.patch.object(scheduler, "_get_venv_paths", return_value=[]):
+                    with mock.patch.object(
+                        scheduler, "_check_path_exists", return_value=False
+                    ):
+                        result = scheduler._get_cli_command_path()
 
-                    # Should use correct module path
-                    assert "src.cli.scheduled_scan" in result
-                    # Should NOT use the old buggy path
-                    assert (
-                        "src.scheduled_scan" not in result
-                        or "src.cli.scheduled_scan" in result
-                    )
+                        # Should use correct module path
+                        assert "src.cli.scheduled_scan" in result
+                        # Should NOT use the old buggy path
+                        assert (
+                            "src.scheduled_scan" not in result
+                            or "src.cli.scheduled_scan" in result
+                        )
 
     def test_prefers_entry_point_over_module(self, scheduler):
         """Test that entry point script is preferred over module execution."""
@@ -847,11 +849,12 @@ class TestGetCliCommandPath:
 
     def test_returns_none_when_nothing_found(self, scheduler):
         """Test returns None when no CLI command can be found."""
-        with mock.patch("src.core.scheduler.which_host_command", return_value=None):
-            with mock.patch.object(scheduler, "_get_venv_paths", return_value=[]):
-                result = scheduler._get_cli_command_path()
+        with mock.patch("src.core.scheduler.is_flatpak", return_value=False):
+            with mock.patch("src.core.scheduler.which_host_command", return_value=None):
+                with mock.patch.object(scheduler, "_get_venv_paths", return_value=[]):
+                    result = scheduler._get_cli_command_path()
 
-                assert result is None
+                    assert result is None
 
     def test_flatpak_returns_flatpak_run_command(self, scheduler):
         """Test that Flatpak mode returns 'flatpak run' command for host systemd."""

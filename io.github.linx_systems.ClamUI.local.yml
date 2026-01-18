@@ -30,6 +30,13 @@ finish-args:
   # GVFS for file browser integration
   - --filesystem=xdg-run/gvfsd
 
+  # Systemd user timers for scheduled scans
+  # Allows writing timer/service files to host's ~/.config/systemd/user/
+  - --filesystem=~/.config/systemd/user:create
+
+  # Allow flatpak-spawn --host for executing systemctl on the host
+  - --talk-name=org.freedesktop.Flatpak
+
 modules:
   # System tray uses StatusNotifierItem D-Bus protocol
 

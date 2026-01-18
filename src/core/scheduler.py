@@ -112,6 +112,16 @@ def _check_systemd_available() -> bool:
         if _systemd_available is not None:
             return _systemd_available
 
+        # In Flatpak, assume systemd is available on the host.
+        # The 'which systemctl' detection fails in the sandbox, but
+        # actual systemctl commands work via flatpak-spawn --host.
+        # Most modern Linux desktops have systemd, and if not,
+        # the enable/disable operations will fail with a clear error.
+        if is_flatpak():
+            logger.debug("Flatpak detected: assuming systemd available on host")
+            _systemd_available = True
+            return True
+
         # Check if systemctl exists
         systemctl_path = which_host_command("systemctl")
         if systemctl_path is None:
@@ -191,7 +201,14 @@ class Scheduler:
             xdg_config_home = os.environ.get("XDG_CONFIG_HOME", "~/.config")
             self._config_dir = Path(xdg_config_home).expanduser()
 
-        self._systemd_dir = self._config_dir / "systemd" / "user"
+        # In Flatpak, systemd files must be written to the HOST's config dir,
+        # not the sandboxed XDG_CONFIG_HOME. Path.home() returns the real home
+        # directory, and we have --filesystem=~/.config/systemd/user:create
+        # permission to write there.
+        if is_flatpak():
+            self._systemd_dir = Path.home() / ".config" / "systemd" / "user"
+        else:
+            self._systemd_dir = self._config_dir / "systemd" / "user"
 
         # Detect available backend
         self._backend = self._detect_backend()
@@ -293,7 +310,9 @@ class Scheduler:
         """
         try:
             result = subprocess.run(
-                wrap_host_command(["systemctl", "--user", "is-active", f"{self.TIMER_NAME}.timer"]),
+                wrap_host_command(
+                    ["systemctl", "--user", "is-active", f"{self.TIMER_NAME}.timer"]
+                ),
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -340,7 +359,10 @@ class Scheduler:
         """
         try:
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
+                wrap_host_command(["crontab", "-l"]),
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
 
             if result.returncode == 0:
@@ -357,7 +379,11 @@ class Scheduler:
             return (False, f"Error checking crontab: {str(e)}")
 
     def _generate_oncalendar(
-        self, frequency: ScheduleFrequency, time: str, day_of_week: int = 0, day_of_month: int = 1
+        self,
+        frequency: ScheduleFrequency,
+        time: str,
+        day_of_week: int = 0,
+        day_of_month: int = 1,
     ) -> str:
         """
         Generate systemd OnCalendar specification.
@@ -402,7 +428,11 @@ class Scheduler:
             return f"*-*-* {time_str}"
 
     def _generate_crontab_entry(
-        self, frequency: ScheduleFrequency, time: str, day_of_week: int = 0, day_of_month: int = 1
+        self,
+        frequency: ScheduleFrequency,
+        time: str,
+        day_of_week: int = 0,
+        day_of_month: int = 1,
     ) -> str:
         """
         Generate crontab entry specification.
@@ -460,7 +490,9 @@ class Scheduler:
         paths = []
 
         # User installation location (respects XDG_DATA_HOME)
-        xdg_data_home = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+        xdg_data_home = os.environ.get(
+            "XDG_DATA_HOME", os.path.expanduser("~/.local/share")
+        )
         user_venv = Path(xdg_data_home) / "clamui" / "venv"
         paths.append(user_venv)
 
@@ -495,7 +527,9 @@ class Scheduler:
                 logger.debug("Path existence check failed for %s: %s", path, e)
                 return False
             except Exception as e:
-                logger.debug("Unexpected error checking path existence for %s: %s", path, e)
+                logger.debug(
+                    "Unexpected error checking path existence for %s: %s", path, e
+                )
                 return False
         return path.exists()
 
@@ -504,6 +538,7 @@ class Scheduler:
         Get the path to the clamui-scheduled-scan CLI command.
 
         Searches in order:
+        0. Flatpak: use 'flatpak run <app-id>' command
         1. PATH (via which_host_command) - works when installed to /usr/bin etc.
         2. Well-known venv locations - for install.sh installations
         3. Fallback to module execution with venv's Python
@@ -511,6 +546,11 @@ class Scheduler:
         Returns:
             Path to the CLI command, or None if not found
         """
+        # 0. In Flatpak, use 'flatpak run --command=' to invoke the CLI from host systemd
+        if is_flatpak():
+            app_id = os.environ.get("FLATPAK_ID", "io.github.linx_systems.ClamUI")
+            return f"flatpak run --command=clamui-scheduled-scan {app_id}"
+
         # 1. First try to find it in PATH
         cli_path = which_host_command("clamui-scheduled-scan")
         if cli_path:
@@ -587,11 +627,23 @@ class Scheduler:
 
         if self._backend == SchedulerBackend.SYSTEMD:
             return self._enable_systemd_schedule(
-                freq, time, targets, day_of_week, day_of_month, skip_on_battery, auto_quarantine
+                freq,
+                time,
+                targets,
+                day_of_week,
+                day_of_month,
+                skip_on_battery,
+                auto_quarantine,
             )
         elif self._backend == SchedulerBackend.CRON:
             return self._enable_cron_schedule(
-                freq, time, targets, day_of_week, day_of_month, skip_on_battery, auto_quarantine
+                freq,
+                time,
+                targets,
+                day_of_week,
+                day_of_month,
+                skip_on_battery,
+                auto_quarantine,
             )
         else:
             return (False, "No scheduler backend available")
@@ -622,7 +674,9 @@ class Scheduler:
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate OnCalendar specification
-            on_calendar = self._generate_oncalendar(frequency, time, day_of_week, day_of_month)
+            on_calendar = self._generate_oncalendar(
+                frequency, time, day_of_week, day_of_month
+            )
 
             # Create service file
             service_content = self._generate_service_file(
@@ -646,7 +700,13 @@ class Scheduler:
             # Enable and start timer
             result = subprocess.run(
                 wrap_host_command(
-                    ["systemctl", "--user", "enable", "--now", f"{self.TIMER_NAME}.timer"]
+                    [
+                        "systemctl",
+                        "--user",
+                        "enable",
+                        "--now",
+                        f"{self.TIMER_NAME}.timer",
+                    ]
                 ),
                 capture_output=True,
                 text=True,
@@ -668,7 +728,11 @@ class Scheduler:
             return (False, f"Error enabling schedule: {str(e)}")
 
     def _generate_service_file(
-        self, cli_path: str, targets: list[str], skip_on_battery: bool, auto_quarantine: bool
+        self,
+        cli_path: str,
+        targets: list[str],
+        skip_on_battery: bool,
+        auto_quarantine: bool,
     ) -> str:
         """
         Generate systemd service file content.
@@ -745,7 +809,9 @@ WantedBy=timers.target
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate cron time specification
-            cron_time = self._generate_crontab_entry(frequency, time, day_of_week, day_of_month)
+            cron_time = self._generate_crontab_entry(
+                frequency, time, day_of_week, day_of_month
+            )
 
             # Build command
             # Use shlex.quote() to prevent command injection via malicious paths
@@ -762,7 +828,10 @@ WantedBy=timers.target
 
             # Get current crontab
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
+                wrap_host_command(["crontab", "-l"]),
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
 
             if result.returncode == 0:
@@ -840,7 +909,13 @@ WantedBy=timers.target
             # Stop and disable timer
             subprocess.run(
                 wrap_host_command(
-                    ["systemctl", "--user", "disable", "--now", f"{self.TIMER_NAME}.timer"]
+                    [
+                        "systemctl",
+                        "--user",
+                        "disable",
+                        "--now",
+                        f"{self.TIMER_NAME}.timer",
+                    ]
                 ),
                 capture_output=True,
                 timeout=10,
@@ -883,7 +958,10 @@ WantedBy=timers.target
         try:
             # Get current crontab
             result = subprocess.run(
-                wrap_host_command(["crontab", "-l"]), capture_output=True, text=True, timeout=5
+                wrap_host_command(["crontab", "-l"]),
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
 
             if result.returncode != 0:

@@ -40,9 +40,9 @@ def find_clamui_base_icon() -> str | None:
 
     Searches in order:
     1. Development: <module_dir>/../../icons/
-    2. Flatpak: /app/share/icons/hicolor/scalable/apps/
-    3. System: /usr/share/icons/hicolor/scalable/apps/
-    4. User: ~/.local/share/icons/hicolor/scalable/apps/
+    2. Flatpak: /app/share/icons/hicolor/{128x128,scalable}/apps/
+    3. System: /usr/share/icons/hicolor/{128x128,scalable}/apps/
+    4. User: ~/.local/share/icons/hicolor/{128x128,scalable}/apps/
 
     Returns:
         Absolute path to the icon file, or None if not found
@@ -55,11 +55,19 @@ def find_clamui_base_icon() -> str | None:
 
     module_dir = Path(__file__).parent
     search_paths = [
-        module_dir.parent.parent / "icons",  # Development: src/ui -> src -> project/icons
-        Path("/app/share/icons/hicolor/scalable/apps"),  # Flatpak
-        Path("/usr/share/icons/hicolor/scalable/apps"),  # System
-        Path("/usr/local/share/icons/hicolor/scalable/apps"),  # Local system
-        Path.home() / ".local/share/icons/hicolor/scalable/apps",  # User install
+        module_dir.parent.parent
+        / "icons",  # Development: src/ui -> src -> project/icons
+        # Flatpak - check size-specific first (PNG), then scalable (SVG)
+        Path("/app/share/icons/hicolor/128x128/apps"),
+        Path("/app/share/icons/hicolor/scalable/apps"),
+        # System installs
+        Path("/usr/share/icons/hicolor/128x128/apps"),
+        Path("/usr/share/icons/hicolor/scalable/apps"),
+        Path("/usr/local/share/icons/hicolor/128x128/apps"),
+        Path("/usr/local/share/icons/hicolor/scalable/apps"),
+        # User install
+        Path.home() / ".local/share/icons/hicolor/128x128/apps",
+        Path.home() / ".local/share/icons/hicolor/scalable/apps",
     ]
 
     # First pass: look for PNG (preferred)
@@ -78,7 +86,9 @@ def find_clamui_base_icon() -> str | None:
             # For now, return it and let the caller handle it
             return str(icon_path.absolute())
 
-    logger.warning(f"ClamUI base icon not found. Searched paths: {[str(p) for p in search_paths]}")
+    logger.warning(
+        f"ClamUI base icon not found. Searched paths: {[str(p) for p in search_paths]}"
+    )
     return None
 
 
@@ -203,7 +213,10 @@ class TrayIconGenerator:
 
         # Check if cached icon exists and is newer than base icon
         base_icon = self._get_base_icon_path()
-        if cache_path.exists() and cache_path.stat().st_mtime >= base_icon.stat().st_mtime:
+        if (
+            cache_path.exists()
+            and cache_path.stat().st_mtime >= base_icon.stat().st_mtime
+        ):
             return str(cache_path)
 
         # Generate new icon

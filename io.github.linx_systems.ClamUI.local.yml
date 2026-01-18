@@ -126,6 +126,7 @@ modules:
       - install -Dm644 io.github.linx_systems.ClamUI.desktop /app/share/applications/io.github.linx_systems.ClamUI.desktop
       - install -Dm644 io.github.linx_systems.ClamUI.metainfo.xml /app/share/metainfo/io.github.linx_systems.ClamUI.metainfo.xml
       - install -Dm644 icons/io.github.linx_systems.ClamUI.svg /app/share/icons/hicolor/scalable/apps/io.github.linx_systems.ClamUI.svg
+      - install -Dm644 icons/io.github.linx_systems.ClamUI.png /app/share/icons/hicolor/128x128/apps/io.github.linx_systems.ClamUI.png
     sources:
       - type: dir
         path: .

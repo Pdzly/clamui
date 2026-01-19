@@ -12,13 +12,57 @@ All tests mock ClamAV subprocess execution to run without requiring ClamAV insta
 """
 
 import subprocess
+import sys
 from unittest import mock
 
 import pytest
 
-# Import directly - scanner module uses GLib only for idle_add in async methods,
-# and those async methods are tested with proper subprocess mocking
-from src.core.scanner import Scanner, ScanResult, ScanStatus, ThreatDetail
+
+def _clear_src_modules():
+    """Clear all cached src.* modules to ensure clean imports."""
+    modules_to_remove = [
+        mod for mod in list(sys.modules.keys()) if mod.startswith("src.")
+    ]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
+
+
+# Global references for scanner classes - populated by fixture
+Scanner = None
+ScanResult = None
+ScanStatus = None
+ThreatDetail = None
+
+
+@pytest.fixture(autouse=True)
+def ensure_fresh_scanner_import():
+    """Ensure scanner module is freshly imported for each integration test.
+
+    This fixture clears cached src modules before each test to prevent
+    stale module references when running alongside test_scanner.py which
+    also clears modules.
+    """
+    global Scanner, ScanResult, ScanStatus, ThreatDetail
+
+    # Clear any cached src modules before test
+    _clear_src_modules()
+
+    # Import fresh
+    # Reset flatpak cache after imports
+    import src.core.flatpak as flatpak_module
+    from src.core.scanner import Scanner as _Scanner
+    from src.core.scanner import ScanResult as _ScanResult
+    from src.core.scanner import ScanStatus as _ScanStatus
+    from src.core.scanner import ThreatDetail as _ThreatDetail
+
+    flatpak_module._flatpak_detected = None
+
+    Scanner = _Scanner
+    ScanResult = _ScanResult
+    ScanStatus = _ScanStatus
+    ThreatDetail = _ThreatDetail
+
+    yield
 
 
 @pytest.mark.integration
@@ -56,19 +100,25 @@ Data read: 0.01 MB
 Time: 0.100 sec (0 m 0 s)
 """
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 0
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 0
+                            mock_popen.return_value = mock_process
 
-                        # Step 3: Execute scan
-                        result = scanner.scan_sync(str(test_file))
+                            # Step 3: Execute scan
+                            result = scanner.scan_sync(str(test_file))
 
         # Step 4: Verify ScanResult structure
         assert isinstance(result, ScanResult)
@@ -116,18 +166,26 @@ Data scanned: 0.01 MB
 Time: 0.100 sec (0 m 0 s)
 """
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 1  # ClamAV exit code 1 = virus found
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = (
+                                1  # ClamAV exit code 1 = virus found
+                            )
+                            mock_popen.return_value = mock_process
 
-                        result = scanner.scan_sync(str(test_file))
+                            result = scanner.scan_sync(str(test_file))
 
         # Verify infected status
         assert result.status == ScanStatus.INFECTED
@@ -179,18 +237,24 @@ Data scanned: 0.01 MB
 Time: 0.200 sec (0 m 0 s)
 """
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 0
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 0
+                            mock_popen.return_value = mock_process
 
-                        result = scanner.scan_sync(str(scan_dir), recursive=True)
+                            result = scanner.scan_sync(str(scan_dir), recursive=True)
 
         # Verify clean scan
         assert result.status == ScanStatus.CLEAN
@@ -217,18 +281,24 @@ Time: 0.200 sec (0 m 0 s)
 
         mock_stderr = "ERROR: Can't open database file"
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = ("", mock_stderr)
-                        mock_process.returncode = 2  # ClamAV exit code 2 = error
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = ("", mock_stderr)
+                            mock_process.returncode = 2  # ClamAV exit code 2 = error
+                            mock_popen.return_value = mock_process
 
-                        result = scanner.scan_sync(str(test_file))
+                            result = scanner.scan_sync(str(test_file))
 
         # Verify error status
         assert result.status == ScanStatus.ERROR
@@ -267,34 +337,41 @@ Time: 0.200 sec (0 m 0 s)
 
         scanner = Scanner()
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
-                # Mock check_clamd_connection to force clamscan path (in "auto" mode,
-                # daemon is tried first if available)
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamd_connection", return_value=(False, "not running")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
+                    # Mock check_clamd_connection to force clamscan path (in "auto" mode,
+                    # daemon is tried first if available)
                     with mock.patch(
-                        "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                        "src.core.scanner.check_clamd_connection",
+                        return_value=(False, "not running"),
                     ):
-                        with mock.patch("subprocess.Popen") as mock_popen:
-                            mock_process = mock.MagicMock()
-                            mock_process.communicate.return_value = ("", "")
-                            mock_process.returncode = 0
-                            mock_popen.return_value = mock_process
+                        with mock.patch(
+                            "src.core.scanner.check_clamav_installed",
+                            return_value=(True, "1.2.3"),
+                        ):
+                            with mock.patch("subprocess.Popen") as mock_popen:
+                                mock_process = mock.MagicMock()
+                                mock_process.communicate.return_value = ("", "")
+                                mock_process.returncode = 0
+                                mock_popen.return_value = mock_process
 
-                            scanner.scan_sync(str(test_file))
+                                scanner.scan_sync(str(test_file))
 
-                            # Verify Popen was called
-                            mock_popen.assert_called_once()
+                                # Verify Popen was called
+                                mock_popen.assert_called_once()
 
-                            # Verify command arguments
-                            call_args = mock_popen.call_args
-                            cmd = call_args[0][0]
+                                # Verify command arguments
+                                call_args = mock_popen.call_args
+                                cmd = call_args[0][0]
 
-                            assert cmd[0] == "/usr/bin/clamscan"
-                            assert "-i" in cmd
-                            assert str(test_file) in cmd
+                                assert cmd[0] == "/usr/bin/clamscan"
+                                assert "-i" in cmd
+                                assert str(test_file) in cmd
 
     def test_scanner_sync_workflow_multiple_threats(self, tmp_path):
         """
@@ -323,18 +400,24 @@ Scanned files: 4
 Infected files: 4
 """
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 1
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 1
+                            mock_popen.return_value = mock_process
 
-                        result = scanner.scan_sync(str(scan_dir), recursive=True)
+                            result = scanner.scan_sync(str(scan_dir), recursive=True)
 
         # Verify all threats detected
         assert result.status == ScanStatus.INFECTED
@@ -393,19 +476,25 @@ Data read: 0.01 MB
 Time: 0.100 sec (0 m 0 s)
 """
 
-    with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-        with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+    with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+        with mock.patch(
+            "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+        ):
             with mock.patch(
-                "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                "src.core.scanner.wrap_host_command", side_effect=lambda x: x
             ):
-                with mock.patch("subprocess.Popen") as mock_popen:
-                    mock_process = mock.MagicMock()
-                    mock_process.communicate.return_value = (mock_stdout, "")
-                    mock_process.returncode = 1  # ClamAV exit code 1 = virus found
-                    mock_popen.return_value = mock_process
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed",
+                    return_value=(True, "1.2.3"),
+                ):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.return_value = (mock_stdout, "")
+                        mock_process.returncode = 1  # ClamAV exit code 1 = virus found
+                        mock_popen.return_value = mock_process
 
-                    # Execute scan on EICAR file
-                    result = scanner.scan_sync(str(eicar_file))
+                        # Execute scan on EICAR file
+                        result = scanner.scan_sync(str(eicar_file))
 
     # Verify EICAR detection
     assert result.status == ScanStatus.INFECTED, "EICAR should be detected as infected"
@@ -428,8 +517,12 @@ Time: 0.100 sec (0 m 0 s)
     # EICAR test files must be classified as:
     # - category='Test' (not a real threat category)
     # - severity='low' (minimal risk since it's just a test file)
-    assert threat.category == "Test", f"EICAR category should be 'Test', got '{threat.category}'"
-    assert threat.severity == "low", f"EICAR severity should be 'low', got '{threat.severity}'"
+    assert (
+        threat.category == "Test"
+    ), f"EICAR category should be 'Test', got '{threat.category}'"
+    assert (
+        threat.severity == "low"
+    ), f"EICAR severity should be 'low', got '{threat.severity}'"
 
 
 @pytest.mark.integration
@@ -488,26 +581,33 @@ Time: 0.100 sec (0 m 0 s)
             # Immediately invoke the callback (simulates GTK main loop)
             return callback_func(*args)
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 0
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 0
+                            mock_popen.return_value = mock_process
 
-                        # Mock GLib.idle_add in the scanner module
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            # Step 3: Execute async scan
-                            scanner.scan_async(str(test_file), test_callback)
+                            # Mock GLib.idle_add in the scanner module
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                # Step 3: Execute async scan
+                                scanner.scan_async(str(test_file), test_callback)
 
-                            # Wait for callback to be invoked (with timeout)
-                            callback_received = callback_event.wait(timeout=5.0)
+                                # Wait for callback to be invoked (with timeout)
+                                callback_received = callback_event.wait(timeout=5.0)
 
         # Step 4: Verify callback was invoked
         assert callback_received, "Callback was not invoked within timeout"
@@ -516,7 +616,9 @@ Time: 0.100 sec (0 m 0 s)
         # Verify GLib.idle_add was used for main thread scheduling
         assert len(glib_idle_add_calls) == 1, "GLib.idle_add should be called once"
         idle_callback, idle_args = glib_idle_add_calls[0]
-        assert idle_callback == test_callback, "GLib.idle_add should schedule our callback"
+        assert (
+            idle_callback == test_callback
+        ), "GLib.idle_add should schedule our callback"
 
         # Step 5: Verify ScanResult structure
         result = callback_results[0]
@@ -575,22 +677,31 @@ Time: 0.100 sec (0 m 0 s)
         def mock_glib_idle_add(callback_func, *args):
             return callback_func(*args)
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 1  # ClamAV exit code 1 = virus found
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = (
+                                1  # ClamAV exit code 1 = virus found
+                            )
+                            mock_popen.return_value = mock_process
 
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            scanner.scan_async(str(test_file), test_callback)
-                            callback_received = callback_event.wait(timeout=5.0)
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                scanner.scan_async(str(test_file), test_callback)
+                                callback_received = callback_event.wait(timeout=5.0)
 
         assert callback_received, "Callback was not invoked within timeout"
 
@@ -633,22 +744,29 @@ Time: 0.100 sec (0 m 0 s)
         def mock_glib_idle_add(callback_func, *args):
             return callback_func(*args)
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = ("", mock_stderr)
-                        mock_process.returncode = 2  # ClamAV exit code 2 = error
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = ("", mock_stderr)
+                            mock_process.returncode = 2  # ClamAV exit code 2 = error
+                            mock_popen.return_value = mock_process
 
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            scanner.scan_async(str(test_file), test_callback)
-                            callback_received = callback_event.wait(timeout=5.0)
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                scanner.scan_async(str(test_file), test_callback)
+                                callback_received = callback_event.wait(timeout=5.0)
 
         assert callback_received, "Callback was not invoked within timeout"
 
@@ -690,38 +808,47 @@ Time: 0.100 sec (0 m 0 s)
             scan_thread_ids.append(threading.current_thread().ident)
             return (mock_stdout, "")
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.side_effect = mock_communicate
-                        mock_process.returncode = 0
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.side_effect = mock_communicate
+                            mock_process.returncode = 0
+                            mock_popen.return_value = mock_process
 
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            # Record time before calling scan_async
-                            start_time = time.monotonic()
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                # Record time before calling scan_async
+                                start_time = time.monotonic()
 
-                            # Call scan_async - should return immediately
-                            scanner.scan_async(str(test_file), test_callback)
+                                # Call scan_async - should return immediately
+                                scanner.scan_async(str(test_file), test_callback)
 
-                            # Should return immediately (non-blocking)
-                            elapsed = time.monotonic() - start_time
+                                # Should return immediately (non-blocking)
+                                elapsed = time.monotonic() - start_time
 
-                            # Wait for callback
-                            callback_event.wait(timeout=5.0)
+                                # Wait for callback
+                                callback_event.wait(timeout=5.0)
 
         # Verify scan_async returned quickly (non-blocking)
         assert elapsed < 0.5, f"scan_async took {elapsed}s, should be non-blocking"
 
         # Verify scan executed in a different thread than main
         assert len(scan_thread_ids) == 1
-        assert scan_thread_ids[0] != main_thread_id, "Scan should run in background thread"
+        assert (
+            scan_thread_ids[0] != main_thread_id
+        ), "Scan should run in background thread"
 
     def test_scanner_async_workflow_with_recursive_directory(self, tmp_path):
         """
@@ -763,23 +890,32 @@ Time: 0.200 sec (0 m 0 s)
         def mock_glib_idle_add(callback_func, *args):
             return callback_func(*args)
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 0
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 0
+                            mock_popen.return_value = mock_process
 
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            # Scan directory with recursive=True
-                            scanner.scan_async(str(scan_dir), test_callback, recursive=True)
-                            callback_received = callback_event.wait(timeout=5.0)
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                # Scan directory with recursive=True
+                                scanner.scan_async(
+                                    str(scan_dir), test_callback, recursive=True
+                                )
+                                callback_received = callback_event.wait(timeout=5.0)
 
         assert callback_received, "Callback was not invoked within timeout"
 
@@ -825,22 +961,31 @@ Infected files: 4
         def mock_glib_idle_add(callback_func, *args):
             return callback_func(*args)
 
-        with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-            with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+        with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+            with mock.patch(
+                "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+            ):
                 with mock.patch(
-                    "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                    "src.core.scanner.wrap_host_command", side_effect=lambda x: x
                 ):
-                    with mock.patch("subprocess.Popen") as mock_popen:
-                        mock_process = mock.MagicMock()
-                        mock_process.communicate.return_value = (mock_stdout, "")
-                        mock_process.returncode = 1
-                        mock_popen.return_value = mock_process
+                    with mock.patch(
+                        "src.core.scanner.check_clamav_installed",
+                        return_value=(True, "1.2.3"),
+                    ):
+                        with mock.patch("subprocess.Popen") as mock_popen:
+                            mock_process = mock.MagicMock()
+                            mock_process.communicate.return_value = (mock_stdout, "")
+                            mock_process.returncode = 1
+                            mock_popen.return_value = mock_process
 
-                        with mock.patch(
-                            "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                        ):
-                            scanner.scan_async(str(scan_dir), test_callback, recursive=True)
-                            callback_received = callback_event.wait(timeout=5.0)
+                            with mock.patch(
+                                "src.core.scanner.GLib.idle_add",
+                                side_effect=mock_glib_idle_add,
+                            ):
+                                scanner.scan_async(
+                                    str(scan_dir), test_callback, recursive=True
+                                )
+                                callback_received = callback_event.wait(timeout=5.0)
 
         assert callback_received, "Callback was not invoked within timeout"
 
@@ -914,25 +1059,32 @@ def test_scan_cancellation(tmp_path):
         # Second call: return output after termination
         return ("", "")
 
-    with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-        with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+    with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+        with mock.patch(
+            "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+        ):
             with mock.patch(
-                "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                "src.core.scanner.wrap_host_command", side_effect=lambda x: x
             ):
-                with mock.patch("subprocess.Popen") as mock_popen:
-                    mock_process = mock.MagicMock()
-                    mock_process.communicate.side_effect = mock_communicate
-                    mock_process.returncode = -15  # SIGTERM exit code
-                    mock_popen.return_value = mock_process
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed",
+                    return_value=(True, "1.2.3"),
+                ):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.side_effect = mock_communicate
+                        mock_process.returncode = -15  # SIGTERM exit code
+                        mock_popen.return_value = mock_process
 
-                    with mock.patch(
-                        "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                    ):
-                        # Execute async scan
-                        scanner.scan_async(str(test_file), test_callback)
+                        with mock.patch(
+                            "src.core.scanner.GLib.idle_add",
+                            side_effect=mock_glib_idle_add,
+                        ):
+                            # Execute async scan
+                            scanner.scan_async(str(test_file), test_callback)
 
-                        # Wait for callback to be invoked
-                        callback_received = callback_event.wait(timeout=5.0)
+                            # Wait for callback to be invoked
+                            callback_received = callback_event.wait(timeout=5.0)
 
     # Verify callback was invoked
     assert callback_received, "Callback was not invoked within timeout"
@@ -943,9 +1095,9 @@ def test_scan_cancellation(tmp_path):
     assert isinstance(result, ScanResult)
 
     # CRITICAL: Verify ScanStatus.CANCELLED
-    assert result.status == ScanStatus.CANCELLED, (
-        f"Expected ScanStatus.CANCELLED, got {result.status}"
-    )
+    assert (
+        result.status == ScanStatus.CANCELLED
+    ), f"Expected ScanStatus.CANCELLED, got {result.status}"
 
     # Verify cancellation properties
     assert result.path == str(test_file)
@@ -1023,43 +1175,50 @@ def test_scan_cancellation_via_cancel_method(tmp_path):
         # Second call: return output after termination
         return ("", "")
 
-    with mock.patch("src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"):
-        with mock.patch("src.core.scanner.wrap_host_command", side_effect=lambda x: x):
+    with mock.patch("src.core.scanner.is_flatpak", return_value=False):
+        with mock.patch(
+            "src.core.scanner.get_clamav_path", return_value="/usr/bin/clamscan"
+        ):
             with mock.patch(
-                "src.core.scanner.check_clamav_installed", return_value=(True, "1.2.3")
+                "src.core.scanner.wrap_host_command", side_effect=lambda x: x
             ):
-                with mock.patch("subprocess.Popen") as mock_popen:
-                    mock_process = mock.MagicMock()
-                    mock_process.communicate.side_effect = mock_communicate
-                    mock_process.returncode = -15  # SIGTERM exit code
-                    mock_popen.return_value = mock_process
+                with mock.patch(
+                    "src.core.scanner.check_clamav_installed",
+                    return_value=(True, "1.2.3"),
+                ):
+                    with mock.patch("subprocess.Popen") as mock_popen:
+                        mock_process = mock.MagicMock()
+                        mock_process.communicate.side_effect = mock_communicate
+                        mock_process.returncode = -15  # SIGTERM exit code
+                        mock_popen.return_value = mock_process
 
-                    with mock.patch(
-                        "src.core.scanner.GLib.idle_add", side_effect=mock_glib_idle_add
-                    ):
-                        # Start async scan
-                        scanner.scan_async(str(test_file), test_callback)
+                        with mock.patch(
+                            "src.core.scanner.GLib.idle_add",
+                            side_effect=mock_glib_idle_add,
+                        ):
+                            # Start async scan
+                            scanner.scan_async(str(test_file), test_callback)
 
-                        # Wait for process to start
-                        process_started = process_started_event.wait(timeout=2.0)
-                        assert process_started, "Process did not start"
+                            # Wait for process to start
+                            process_started = process_started_event.wait(timeout=2.0)
+                            assert process_started, "Process did not start"
 
-                        # Call cancel() method - this should:
-                        # 1. Set _cancel_event
-                        # 2. Call terminate() on the subprocess
-                        scanner.cancel()
+                            # Call cancel() method - this should:
+                            # 1. Set _cancel_event
+                            # 2. Call terminate() on the subprocess
+                            scanner.cancel()
 
-                        # Wait for callback to be invoked
-                        callback_received = callback_event.wait(timeout=5.0)
+                            # Wait for callback to be invoked
+                            callback_received = callback_event.wait(timeout=5.0)
 
     # Verify callback was invoked
     assert callback_received, "Callback was not invoked within timeout"
 
     # Verify cancellation result
     result = callback_results[0]
-    assert result.status == ScanStatus.CANCELLED, (
-        f"Expected ScanStatus.CANCELLED, got {result.status}"
-    )
+    assert (
+        result.status == ScanStatus.CANCELLED
+    ), f"Expected ScanStatus.CANCELLED, got {result.status}"
 
     # Verify cancel() was effective
     assert scanner._cancel_event.is_set() is True

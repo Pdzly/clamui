@@ -119,6 +119,54 @@ class MockGtkListBoxRow(MockGtkWidget):
 
 
 # =============================================================================
+# Flatpak Cache Reset
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def reset_flatpak_cache():
+    """
+    Reset the Flatpak detection cache before each test.
+
+    The flatpak.py module caches the is_flatpak() result in _flatpak_detected
+    for performance. In test environments where /.flatpak-info exists (e.g.,
+    Flatpak development environments), this cache can cause tests to fail
+    because mocking is_flatpak() doesn't work when the cache is already set.
+
+    This fixture:
+    1. Resets the cache variable to None
+    2. Patches os.path.exists to return False for /.flatpak-info
+       (handles cases where modules are reimported during tests)
+
+    The original value is restored after the test to avoid affecting other tests.
+    """
+    import os
+
+    import src.core.flatpak as flatpak_module
+
+    original_value = flatpak_module._flatpak_detected
+    flatpak_module._flatpak_detected = None
+
+    # Patch os.path.exists to return False for /.flatpak-info
+    # This ensures that even if the flatpak module is reimported,
+    # is_flatpak() will return False
+    original_exists = os.path.exists
+
+    def patched_exists(path):
+        if path == "/.flatpak-info":
+            return False
+        return original_exists(path)
+
+    os.path.exists = patched_exists
+
+    yield
+
+    # Restore original values
+    os.path.exists = original_exists
+    flatpak_module._flatpak_detected = original_value
+
+
+# =============================================================================
 # Module Cache Management
 # =============================================================================
 

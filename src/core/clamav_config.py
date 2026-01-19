@@ -356,9 +356,7 @@ def parse_config(file_path: str) -> tuple[ClamAVConfig | None, str | None]:
         value = parts[1] if len(parts) > 1 else ""
 
         # Add value to config (supports multi-value options)
-        config_value = ClamAVConfigValue(
-            value=value, comment=comment, line_number=line_number
-        )
+        config_value = ClamAVConfigValue(value=value, comment=comment, line_number=line_number)
 
         if key not in config.values:
             config.values[key] = []

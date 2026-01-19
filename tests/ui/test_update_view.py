@@ -149,9 +149,7 @@ class TestUpdateViewNotifications:
         app = mock_root.get_application.return_value
         app.notification_manager.notify_update_complete.assert_not_called()
 
-    def test_no_notification_on_success_with_zero_updates(
-        self, update_view_module, mock_root
-    ):
+    def test_no_notification_on_success_with_zero_updates(self, update_view_module, mock_root):
         """Test notification is NOT sent when SUCCESS but databases_updated is 0."""
         UpdateView = update_view_module.UpdateView
         UpdateStatus = update_view_module.UpdateStatus
@@ -286,9 +284,7 @@ class TestUpdateViewStatusBanner:
             view._display_results(result)
 
             # Verify title and that banner was revealed
-            view._status_banner.set_title.assert_called_once_with(
-                "Database is already up to date"
-            )
+            view._status_banner.set_title.assert_called_once_with("Database is already up to date")
             view._status_banner.set_revealed.assert_called_with(True)
 
     def test_error_banner_uses_error_class(self, update_view_module):

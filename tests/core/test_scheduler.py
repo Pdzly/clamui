@@ -2,20 +2,69 @@
 """Unit tests for the Scheduler class."""
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from src.core.scheduler import (
-    ScheduleConfig,
-    ScheduleFrequency,
-    Scheduler,
-    SchedulerBackend,
-    _check_cron_available,
-    _check_systemd_available,
-)
+
+# =============================================================================
+# Module-level globals that will be set by the fresh import fixture
+# =============================================================================
+def _clear_src_modules():
+    """Clear all cached src.* modules to ensure clean imports."""
+    modules_to_remove = [
+        mod for mod in list(sys.modules.keys()) if mod.startswith("src.")
+    ]
+    for mod in modules_to_remove:
+        del sys.modules[mod]
+
+
+ScheduleConfig = None
+ScheduleFrequency = None
+Scheduler = None
+SchedulerBackend = None
+_check_cron_available = None
+_check_systemd_available = None
+
+
+@pytest.fixture(autouse=True)
+def ensure_fresh_scheduler_import():
+    """
+    Ensure fresh scheduler imports for each test.
+
+    This fixture clears cached src.* modules and reimports the scheduler
+    module with fresh references. This prevents stale mock references when
+    other test files (like test_scanner.py) clear modules.
+    """
+    global ScheduleConfig, ScheduleFrequency, Scheduler, SchedulerBackend
+    global _check_cron_available, _check_systemd_available
+
+    _clear_src_modules()
+
+    # Import fresh after clearing
+    import src.core.flatpak as flatpak_module
+    from src.core.scheduler import ScheduleConfig as _ScheduleConfig
+    from src.core.scheduler import ScheduleFrequency as _ScheduleFrequency
+    from src.core.scheduler import Scheduler as _Scheduler
+    from src.core.scheduler import SchedulerBackend as _SchedulerBackend
+    from src.core.scheduler import _check_cron_available as _check_cron
+    from src.core.scheduler import _check_systemd_available as _check_systemd
+
+    # Reset flatpak cache to ensure is_flatpak() returns False
+    flatpak_module._flatpak_detected = None
+
+    # Assign to module globals
+    ScheduleConfig = _ScheduleConfig
+    ScheduleFrequency = _ScheduleFrequency
+    Scheduler = _Scheduler
+    SchedulerBackend = _SchedulerBackend
+    _check_cron_available = _check_cron
+    _check_systemd_available = _check_systemd
+
+    yield
 
 
 class TestScheduleConfig:

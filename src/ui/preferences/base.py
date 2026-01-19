@@ -17,9 +17,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 
-def populate_bool_field(
-    config, widgets_dict: dict, key: str, default: bool = False
-) -> None:
+def populate_bool_field(config, widgets_dict: dict, key: str, default: bool = False) -> None:
     """
     Populate a boolean switch widget from config.
 
@@ -67,9 +65,7 @@ def populate_text_field(config, widgets_dict: dict, key: str) -> None:
         widgets_dict[key].set_text(config.get_value(key))
 
 
-def populate_multivalue_field(
-    config, widgets_dict: dict, key: str, separator: str = ", "
-) -> None:
+def populate_multivalue_field(config, widgets_dict: dict, key: str, separator: str = ", ") -> None:
     """
     Populate a text entry widget with comma-separated values from config.
 

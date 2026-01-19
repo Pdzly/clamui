@@ -268,9 +268,7 @@ class TestVirusTotalSetupDialogWebsiteActions:
         VirusTotalSetupDialog = vt_setup_dialog_module.VirusTotalSetupDialog
 
         with mock.patch.object(VirusTotalSetupDialog, "_setup_ui"):
-            with mock.patch(
-                "src.ui.virustotal_setup_dialog.webbrowser"
-            ) as mock_browser:
+            with mock.patch("src.ui.virustotal_setup_dialog.webbrowser") as mock_browser:
                 dialog = VirusTotalSetupDialog()
                 dialog._show_toast = mock.MagicMock()
 

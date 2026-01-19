@@ -143,9 +143,7 @@ def ensure_freshclam_config() -> Path | None:
 
     # If config file already exists, don't regenerate it (preserve user settings)
     if config_path.exists():
-        logger.debug(
-            "Freshclam config already exists at: %s, skipping generation", config_path
-        )
+        logger.debug("Freshclam config already exists at: %s, skipping generation", config_path)
         return config_path
 
     logger.info("Generating freshclam config at: %s", config_path)
@@ -163,9 +161,7 @@ def ensure_freshclam_config() -> Path | None:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         logger.debug("Config directory created: %s", config_path.parent)
     except Exception as e:
-        logger.error(
-            "Failed to create ClamAV config directory %s: %s", config_path.parent, e
-        )
+        logger.error("Failed to create ClamAV config directory %s: %s", config_path.parent, e)
         return None
 
     # Generate the config file with the correct database directory

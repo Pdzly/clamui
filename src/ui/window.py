@@ -263,9 +263,7 @@ class MainWindow(Adw.ApplicationWindow):
         dialog = CloseBehaviorDialog(callback=self._on_close_behavior_dialog_response)
         dialog.present(self)
 
-    def _on_close_behavior_dialog_response(
-        self, choice: str | None, remember: bool
-    ) -> None:
+    def _on_close_behavior_dialog_response(self, choice: str | None, remember: bool) -> None:
         """
         Handle the close behavior dialog response.
 

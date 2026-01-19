@@ -129,9 +129,7 @@ class TestSetStatusClass:
         set_status_class(mock_widget, StatusLevel.INFO)
 
         # Should remove all other status classes
-        remove_calls = [
-            call[0][0] for call in mock_widget.remove_css_class.call_args_list
-        ]
+        remove_calls = [call[0][0] for call in mock_widget.remove_css_class.call_args_list]
         assert "success" in remove_calls
         assert "warning" in remove_calls
         assert "error" in remove_calls
@@ -164,9 +162,7 @@ class TestClearStatusClasses:
 
         # Should remove all 4 status classes
         assert mock_widget.remove_css_class.call_count == 4
-        remove_calls = [
-            call[0][0] for call in mock_widget.remove_css_class.call_args_list
-        ]
+        remove_calls = [call[0][0] for call in mock_widget.remove_css_class.call_args_list]
         assert "success" in remove_calls
         assert "warning" in remove_calls
         assert "error" in remove_calls
@@ -562,9 +558,7 @@ class TestCreateHeaderButtonBox:
         create_header_button_box = view_helpers_module.create_header_button_box
         HeaderButton = view_helpers_module.HeaderButton
 
-        buttons = [
-            HeaderButton(icon_name="view-refresh-symbolic", tooltip="Refresh data")
-        ]
+        buttons = [HeaderButton(icon_name="view-refresh-symbolic", tooltip="Refresh data")]
 
         box, spinner = create_header_button_box(buttons=buttons)
 
@@ -577,9 +571,7 @@ class TestCreateHeaderButtonBox:
         HeaderButton = view_helpers_module.HeaderButton
 
         buttons = [
-            HeaderButton(
-                icon_name="view-refresh-symbolic", css_classes=["suggested-action"]
-            )
+            HeaderButton(icon_name="view-refresh-symbolic", css_classes=["suggested-action"])
         ]
 
         box, spinner = create_header_button_box(buttons=buttons)
@@ -646,9 +638,7 @@ class TestCreateRefreshHeader:
         """Test create_refresh_header creates header components."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(
-            on_refresh_clicked=mock.MagicMock()
-        )
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
         # Verify all components created
         assert header_box is not None
@@ -671,9 +661,7 @@ class TestCreateRefreshHeader:
         """Test spinner is hidden by default."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(
-            on_refresh_clicked=mock.MagicMock()
-        )
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
         # Verify spinner was created (hidden state set internally)
         assert spinner is not None
@@ -682,9 +670,7 @@ class TestCreateRefreshHeader:
         """Test button has refresh icon."""
         create_refresh_header = view_helpers_module.create_refresh_header
 
-        header_box, spinner, button = create_refresh_header(
-            on_refresh_clicked=mock.MagicMock()
-        )
+        header_box, spinner, button = create_refresh_header(on_refresh_clicked=mock.MagicMock())
 
         # Verify button was created (icon set internally)
         assert button is not None

@@ -153,7 +153,7 @@ class VirusTotalResultsDialog(Adw.Dialog):
         if self._vt_result.status == VTScanStatus.CLEAN:
             status_row.set_title("No threats detected")
             status_row.set_subtitle("File appears to be safe")
-            icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+            icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
             icon.add_css_class("success")
         elif self._vt_result.status == VTScanStatus.DETECTED:
             ratio = f"{self._vt_result.detections}/{self._vt_result.total_engines}"

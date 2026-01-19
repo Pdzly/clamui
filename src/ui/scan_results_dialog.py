@@ -165,7 +165,7 @@ class ScanResultsDialog(Adw.Dialog):
         if self._scan_result.status == ScanStatus.CLEAN:
             expander.set_title("Scan Complete")
             expander.set_subtitle("No threats found")
-            icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+            icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
             icon.add_css_class("success")
         elif self._scan_result.status == ScanStatus.INFECTED:
             threat_text = (

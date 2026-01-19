@@ -210,7 +210,7 @@ class ScannerPage(PreferencesPageMixin):
         is_connected, message = check_clamd_connection()
         if is_connected:
             status_row.set_subtitle("✓ Daemon available")
-            status_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
             status_icon.add_css_class("success")
         else:
             status_row.set_subtitle(f"⚠ Not available: {message}")
@@ -307,7 +307,7 @@ class ScannerPage(PreferencesPageMixin):
             # Update icon
             for child in list(status_row):
                 if isinstance(child, Gtk.Image):
-                    child.set_from_icon_name("emblem-ok-symbolic")
+                    child.set_from_icon_name("object-select-symbolic")
                     child.remove_css_class("warning")
                     child.add_css_class("success")
                     break

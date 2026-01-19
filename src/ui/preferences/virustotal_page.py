@@ -111,7 +111,7 @@ class VirusTotalPage:
         current_key = get_api_key(settings_manager)
         if current_key:
             status_row.set_subtitle(f"Configured ({mask_api_key(current_key)})")
-            status_icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
             status_icon.add_css_class("success")
         else:
             status_row.set_subtitle("Not configured")
@@ -320,7 +320,7 @@ class VirusTotalPage:
 
             # Update status
             page._status_row.set_subtitle(f"Configured ({mask_api_key(api_key)})")
-            page._status_icon.set_from_icon_name("emblem-ok-symbolic")
+            page._status_icon.set_from_icon_name("object-select-symbolic")
             page._status_icon.remove_css_class("warning")
             page._status_icon.add_css_class("success")
 

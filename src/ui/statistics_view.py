@@ -273,7 +273,7 @@ class StatisticsView(Gtk.Box):
         self._clean_scans_row = Adw.ActionRow()
         self._clean_scans_row.set_title("Clean Scans")
         self._clean_scans_row.set_subtitle("Scans with no threats found")
-        add_row_icon(self._clean_scans_row, "emblem-ok-symbolic")
+        add_row_icon(self._clean_scans_row, "object-select-symbolic")
 
         self._clean_scans_label = Gtk.Label()
         self._clean_scans_label.set_label("0")
@@ -768,7 +768,7 @@ class StatisticsView(Gtk.Box):
 
         # Update icon and badge based on protection level
         if status.level == ProtectionLevel.PROTECTED.value:
-            self._protection_row_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._protection_row_icon.set_from_icon_name("object-select-symbolic")
             self._status_badge.set_label("Protected")
             set_status_class(self._status_badge, StatusLevel.SUCCESS)
         elif status.level == ProtectionLevel.AT_RISK.value:

@@ -348,7 +348,7 @@ class ComponentsView(Gtk.Box):
         clipboard.set(command)
 
         # Visual feedback - change icon temporarily
-        button.set_icon_name("emblem-ok-symbolic")
+        button.set_icon_name("object-select-symbolic")
         GLib.timeout_add(1500, lambda: button.set_icon_name("edit-copy-symbolic"))
 
     def _add_flatpak_bundled_message(self, content_box: Gtk.Box, component_id: str):
@@ -491,7 +491,7 @@ class ComponentsView(Gtk.Box):
         is_flatpak_bundled = is_flatpak() and component_id in ("clamscan", "freshclam")
 
         if is_installed:
-            status_icon.set_from_icon_name("emblem-ok-symbolic")
+            status_icon.set_from_icon_name("object-select-symbolic")
             set_status_class(status_icon, StatusLevel.SUCCESS)
             if is_flatpak_bundled:
                 status_label.set_text("Bundled")
@@ -547,7 +547,7 @@ class ComponentsView(Gtk.Box):
         guide_row = self._guide_rows.get(component_id)
 
         if status == DaemonStatus.RUNNING:
-            status_icon.set_from_icon_name("emblem-ok-symbolic")
+            status_icon.set_from_icon_name("object-select-symbolic")
             set_status_class(status_icon, StatusLevel.SUCCESS)
             status_label.set_text("Running")
             expander.set_subtitle("Daemon is running")

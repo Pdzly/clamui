@@ -28,14 +28,28 @@ class MockGtkWidget:
 
     Supports object.__new__() instantiation and returns MagicMock for
     any undefined attribute access, enabling method chaining.
+
+    Method calls are tracked via _mocks dict for test assertions.
     """
 
     def __init__(self, *args, **kwargs):
-        pass
+        # Store mock methods in __dict__ to avoid __getattr__ recursion
+        object.__setattr__(self, "_mocks", {})
 
     def __getattr__(self, name):
-        """Return a MagicMock for any undefined attribute access."""
-        return MagicMock()
+        """Return a persistent MagicMock for method tracking."""
+        # Allow single underscore attributes (private instance vars)
+        if name.startswith("__"):
+            raise AttributeError(name)
+        try:
+            mocks = object.__getattribute__(self, "_mocks")
+        except AttributeError:
+            # Initialize _mocks if it doesn't exist (happens with object.__new__)
+            object.__setattr__(self, "_mocks", {})
+            mocks = object.__getattribute__(self, "_mocks")
+        if name not in mocks:
+            mocks[name] = MagicMock()
+        return mocks[name]
 
 
 class MockGtkBox(MockGtkWidget):
@@ -66,9 +80,15 @@ class MockAdwPreferencesWindow(MockGtkWidget):
 
     def __getattr__(self, name):
         """Return a persistent MagicMock for method tracking."""
-        if name.startswith("_"):
+        # Allow single underscore attributes (private instance vars)
+        if name.startswith("__"):
             raise AttributeError(name)
-        mocks = object.__getattribute__(self, "_mocks")
+        try:
+            mocks = object.__getattribute__(self, "_mocks")
+        except AttributeError:
+            # Initialize _mocks if it doesn't exist (happens with object.__new__)
+            object.__setattr__(self, "_mocks", {})
+            mocks = object.__getattribute__(self, "_mocks")
         if name not in mocks:
             mocks[name] = MagicMock()
         return mocks[name]
@@ -171,7 +191,9 @@ def mock_gi_modules():
     mock_adw.SwitchRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.EntryRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.SpinRow = MagicMock()
-    mock_adw.SpinRow.new_with_range = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
+    mock_adw.SpinRow.new_with_range = MagicMock(
+        side_effect=lambda *args, **kwargs: MagicMock()
+    )
     # Container widgets - tests may set return_value to control what's returned
     mock_adw.PreferencesGroup = MagicMock()
     mock_adw.PreferencesPage = MagicMock()

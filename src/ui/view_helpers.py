@@ -33,6 +33,7 @@ class StatusLevel(Enum):
     SUCCESS = "success"
     WARNING = "warning"
     ERROR = "error"
+    INFO = "info"
 
 
 # All status CSS classes for removal operations

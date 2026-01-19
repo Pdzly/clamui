@@ -4,18 +4,22 @@ Updater module for ClamUI providing freshclam subprocess execution and async dat
 """
 
 import logging
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from gi.repository import GLib
 
 from .flatpak import (
     ensure_clamav_database_dir,
     ensure_freshclam_config,
+    get_clamav_database_dir,
     is_flatpak,
 )
 from .log_manager import LogEntry, LogManager
@@ -36,7 +40,6 @@ def get_pkexec_path() -> str | None:
     Returns:
         The full path to pkexec if found, None otherwise
     """
-    import shutil
 
     return shutil.which("pkexec")
 
@@ -101,12 +104,17 @@ class FreshclamUpdater:
         """
         return check_freshclam_installed()
 
-    def update_sync(self) -> UpdateResult:
+    def update_sync(self, force: bool = False) -> UpdateResult:
         """
         Execute a synchronous database update.
 
         WARNING: This will block the calling thread. For UI applications,
         use update_async() instead.
+
+        Args:
+            force: If True, backup existing databases, delete them, then download
+                   fresh copies from mirrors. Previous databases are restored if
+                   the update fails.
 
         Returns:
             UpdateResult with update details
@@ -128,8 +136,59 @@ class FreshclamUpdater:
             self._save_update_log(result, duration)
             return result
 
+        # If force update, backup existing databases (for potential restore)
+        # Note: In native mode, deletion happens via pkexec in _build_command
+        # In Flatpak mode, deletion happens here with user permissions
+        if force:
+            if not is_flatpak():
+                # Native: best-effort backup (may fail due to root-owned directory)
+                # We continue even if backup fails since deletion is done via pkexec
+                success, error, backed_files = self._backup_local_databases()
+                if not success:
+                    logger.warning(
+                        "Could not backup databases in native mode (expected for root-owned directory): %s",
+                        error,
+                    )
+                    # Clear any partial backup
+                    self._cleanup_backup()
+            else:
+                # Flatpak: backup and delete here (user-writable directory)
+                success, error, backed_files = self._backup_local_databases()
+                if not success:
+                    result = UpdateResult(
+                        status=UpdateStatus.ERROR,
+                        stdout="",
+                        stderr=error,
+                        exit_code=-1,
+                        databases_updated=0,
+                        error_message=error,
+                    )
+                    duration = time.monotonic() - start_time
+                    self._save_update_log(result, duration)
+                    return result
+
+                # Delete local databases to force fresh download
+                success, error, deleted_count = self._delete_local_databases()
+                if not success:
+                    # Restore from backup and return error
+                    self._restore_databases_from_backup()
+                    self._cleanup_backup()
+                    result = UpdateResult(
+                        status=UpdateStatus.ERROR,
+                        stdout="",
+                        stderr=error,
+                        exit_code=-1,
+                        databases_updated=0,
+                        error_message=error,
+                    )
+                    duration = time.monotonic() - start_time
+                    self._save_update_log(result, duration)
+                    return result
+
+                logger.info("Deleted %d database file(s) before force update", deleted_count)
+
         # Build freshclam command
-        cmd = self._build_command()
+        cmd = self._build_command(force=force)
 
         try:
             self._update_cancelled = False
@@ -175,6 +234,8 @@ class FreshclamUpdater:
 
             # Check if timed out (and not cancelled) - treat as error
             if timed_out and not self._update_cancelled:
+                if force:
+                    self._restore_databases_from_backup()
                 result = UpdateResult(
                     status=UpdateStatus.ERROR,
                     stdout=stdout,
@@ -185,10 +246,13 @@ class FreshclamUpdater:
                 )
                 duration = time.monotonic() - start_time
                 self._save_update_log(result, duration)
+                self._cleanup_backup()
                 return result
 
             # Check if cancelled during execution
             if self._update_cancelled:
+                if force and is_flatpak():
+                    self._restore_databases_from_backup()
                 result = UpdateResult(
                     status=UpdateStatus.CANCELLED,
                     stdout=stdout,
@@ -199,15 +263,25 @@ class FreshclamUpdater:
                 )
                 duration = time.monotonic() - start_time
                 self._save_update_log(result, duration)
+                self._cleanup_backup()
                 return result
 
             # Parse the results
             result = self._parse_results(stdout, stderr, exit_code)
+
+            # On error in Flatpak mode, restore databases from backup
+            # In native mode, restore is skipped (backup was likely not possible)
+            if force and result.status == UpdateStatus.ERROR and is_flatpak():
+                self._restore_databases_from_backup()
+
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
+            self._cleanup_backup()
             return result
 
         except FileNotFoundError:
+            if force and is_flatpak():
+                self._restore_databases_from_backup()
             result = UpdateResult(
                 status=UpdateStatus.ERROR,
                 stdout="",
@@ -218,8 +292,11 @@ class FreshclamUpdater:
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
+            self._cleanup_backup()
             return result
         except PermissionError as e:
+            if force and is_flatpak():
+                self._restore_databases_from_backup()
             result = UpdateResult(
                 status=UpdateStatus.ERROR,
                 stdout="",
@@ -230,8 +307,11 @@ class FreshclamUpdater:
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
+            self._cleanup_backup()
             return result
         except Exception as e:
+            if force and is_flatpak():
+                self._restore_databases_from_backup()
             result = UpdateResult(
                 status=UpdateStatus.ERROR,
                 stdout="",
@@ -242,9 +322,10 @@ class FreshclamUpdater:
             )
             duration = time.monotonic() - start_time
             self._save_update_log(result, duration)
+            self._cleanup_backup()
             return result
 
-    def update_async(self, callback: Callable[[UpdateResult], None]) -> None:
+    def update_async(self, callback: Callable[[UpdateResult], None], force: bool = False) -> None:
         """
         Execute an asynchronous database update.
 
@@ -253,10 +334,13 @@ class FreshclamUpdater:
 
         Args:
             callback: Function to call with UpdateResult when update completes
+            force: If True, backup existing databases, delete them, then download
+                   fresh copies from mirrors. Previous databases are restored if
+                   the update fails.
         """
 
         def update_thread():
-            result = self.update_sync()
+            result = self.update_sync(force=force)
             # Schedule callback on main thread
             GLib.idle_add(callback, result)
 
@@ -296,7 +380,7 @@ class FreshclamUpdater:
             except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
                 pass  # Best effort
 
-    def _build_command(self) -> list[str]:
+    def _build_command(self, force: bool = False) -> list[str]:
         """
         Build the freshclam command arguments with privilege elevation.
 
@@ -308,6 +392,11 @@ class FreshclamUpdater:
 
         When running inside a Flatpak sandbox, the command is automatically
         wrapped with 'flatpak-spawn --host' to execute freshclam on the host system.
+
+        Args:
+            force: If True and in native mode, delete databases before running
+                   freshclam (via pkexec shell script). In Flatpak, databases
+                   are deleted before this method is called.
 
         Returns:
             List of command arguments (wrapped with flatpak-spawn if in Flatpak)
@@ -339,7 +428,19 @@ class FreshclamUpdater:
             # Native: Use pkexec for privilege elevation
             pkexec = get_pkexec_path()
             if pkexec:
-                cmd = [pkexec, freshclam]
+                if force:
+                    # Force update: Delete databases first, then run freshclam
+                    # This all happens via pkexec with root privileges
+                    cmd = [
+                        pkexec,
+                        "sh",
+                        "-c",
+                        # Delete all ClamAV database files, then run freshclam
+                        f"rm -f /var/lib/clamav/*.cvd /var/lib/clamav/*.cld /var/lib/clamav/*.cud 2>/dev/null; {freshclam} --verbose",
+                    ]
+                    return wrap_host_command(cmd)
+                else:
+                    cmd = [pkexec, freshclam]
             else:
                 # Fallback to running without elevation (may fail with permission error)
                 cmd = [freshclam]
@@ -421,40 +522,72 @@ class FreshclamUpdater:
         """
         # Check for common error patterns
         output = stdout + stderr
+        output_lower = output.lower()
 
         # Check for pkexec authentication errors
         # Exit code 126 = pkexec: user dismissed auth dialog
         # Exit code 127 = pkexec: not authorized
         if exit_code == 126:
             return "Authentication cancelled. Database update requires administrator privileges."
-        if exit_code == 127 and "pkexec" in output.lower():
+        if exit_code == 127 and "pkexec" in output_lower:
             return "Authorization failed. You are not authorized to update the database."
 
+        # Rate limiting errors
+        rate_limit_patterns = [
+            "rate limit",
+            "rate-limit",
+            "rate limited",
+            "429",
+            "too many requests",
+            "temporarily blocked",
+            "blocked temporarily",
+        ]
+        if any(pattern in output_lower for pattern in rate_limit_patterns):
+            return "Update rate limited by mirror. Please wait a few minutes and try again."
+
+        # CDN/Proxy errors (often indicate rate limiting)
+        if "cloudfront" in output_lower or "cloudflare" in output_lower:
+            return "Update blocked by CDN. This may be due to rate limiting. Please wait and try again later."
+
+        # Mirror unavailable
+        if "mirror" in output_lower and ("down" in output_lower or "unavailable" in output_lower):
+            return "ClamAV mirror is currently unavailable. Please try again later."
+
+        # Certificate/SSL errors
+        if any(
+            p in output_lower for p in ["certificate", "ssl error", "tls error", "verify failed"]
+        ):
+            return "SSL/TLS certificate error. The mirror may have configuration issues."
+
+        # Timeout errors
+        if "timeout" in output_lower or "timed out" in output_lower:
+            return "Connection timed out. Please check your network connection."
+
         # Check for polkit/pkexec related errors
-        if "not authorized" in output.lower() or "authorization" in output.lower():
+        if "not authorized" in output_lower or "authorization" in output_lower:
             return "Authorization failed. Please try again and enter your password."
 
         # Check for lock file error (another freshclam running)
-        if "locked" in output.lower() or "lock" in output.lower():
+        if "locked" in output_lower or "lock" in output_lower:
             return "Database is locked. Another freshclam instance may be running."
 
         # Check for permission errors
-        if "permission denied" in output.lower():
+        if "permission denied" in output_lower:
             return "Permission denied. You may need elevated privileges to update the database."
 
         # Check for network errors
-        if "can't connect" in output.lower() or "connection" in output.lower():
+        if "can't connect" in output_lower or "connection" in output_lower:
             return "Connection error. Please check your network connection."
 
         # Check for DNS errors
-        if "can't resolve" in output.lower() or "host not found" in output.lower():
+        if "can't resolve" in output_lower or "host not found" in output_lower:
             return "DNS resolution failed. Please check your network settings."
 
         # Default to stderr content if available
         if stderr.strip():
             return stderr.strip()
 
-        return "Update failed with an unknown error"
+        return "Update failed with an unknown error. Check the logs for details."
 
     def _save_update_log(self, result: UpdateResult, duration: float) -> None:
         """
@@ -493,3 +626,127 @@ class FreshclamUpdater:
         )
 
         self._log_manager.save_log(log_entry)
+
+    def _backup_local_databases(self) -> tuple[bool, str | None, list[Path]]:
+        """
+        Backup local ClamAV database files to a temporary directory.
+
+        Returns:
+            Tuple of (success, error_message, list_of_backed_files)
+        """
+        # Determine database directory
+        if is_flatpak():
+            db_dir = Path(get_clamav_database_dir())
+        else:
+            db_dir = Path("/var/lib/clamav")
+
+        if not db_dir.exists():
+            return False, "Database directory not found", []
+
+        # Create backup directory with timestamp
+        backup_dir = Path(tempfile.mkdtemp(prefix="clamav_backup_"))
+        self._force_update_backup_dir = backup_dir
+
+        # Common ClamAV database files
+        db_patterns = ["*.cvd", "*.cld", "*.cud"]
+        backed_up = []
+
+        for pattern in db_patterns:
+            for db_file in db_dir.glob(pattern):
+                try:
+                    backup_path = backup_dir / db_file.name
+                    shutil.copy2(db_file, backup_path)
+                    backed_up.append(backup_path)
+                    logger.debug("Backed up database file: %s", db_file.name)
+                except OSError as e:
+                    # Cleanup on failure
+                    shutil.rmtree(backup_dir, ignore_errors=True)
+                    return False, f"Failed to backup {db_file.name}: {e}", []
+
+        if not backed_up:
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            return False, "No database files found to backup", []
+
+        logger.info("Backed up %d database file(s) to %s", len(backed_up), backup_dir)
+        return True, None, backed_up
+
+    def _restore_databases_from_backup(self) -> tuple[bool, str | None]:
+        """
+        Restore database files from backup.
+
+        Returns:
+            Tuple of (success, error_message)
+        """
+        backup_dir = getattr(self, "_force_update_backup_dir", None)
+        if not backup_dir or not backup_dir.exists():
+            return False, "No backup available"
+
+        # Determine database directory
+        if is_flatpak():
+            db_dir = Path(get_clamav_database_dir())
+        else:
+            db_dir = Path("/var/lib/clamav")
+
+        if not db_dir.exists():
+            return False, "Database directory not found"
+
+        restored_count = 0
+        for backup_file in backup_dir.glob("*"):
+            try:
+                target_path = db_dir / backup_file.name
+                shutil.copy2(backup_file, target_path)
+                restored_count += 1
+                logger.debug("Restored database file: %s", backup_file.name)
+            except OSError as e:
+                return False, f"Failed to restore {backup_file.name}: {e}"
+
+        logger.info("Restored %d database file(s) from backup", restored_count)
+        return True, f"Restored {restored_count} database file(s)"
+
+    def _cleanup_backup(self) -> None:
+        """Clean up backup directory."""
+        backup_dir = getattr(self, "_force_update_backup_dir", None)
+        if backup_dir and backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            self._force_update_backup_dir = None
+            logger.debug("Cleaned up backup directory: %s", backup_dir)
+
+    def _delete_local_databases(self) -> tuple[bool, str | None, int]:
+        """
+        Delete local ClamAV database files to force fresh download.
+
+        Returns:
+            Tuple of (success, error_message, deleted_count)
+        """
+        # Determine database directory
+        if is_flatpak():
+            db_dir = Path(get_clamav_database_dir())
+        else:
+            db_dir = Path("/var/lib/clamav")
+
+        if not db_dir.exists():
+            return False, "Database directory not found", 0
+
+        # Common ClamAV database files
+        db_patterns = ["*.cvd", "*.cld", "*.cud"]
+        deleted_count = 0
+        errors = []
+
+        for pattern in db_patterns:
+            for db_file in db_dir.glob(pattern):
+                try:
+                    db_file.unlink()
+                    deleted_count += 1
+                    logger.debug("Deleted database file: %s", db_file.name)
+                except OSError as e:
+                    errors.append(f"{db_file.name}: {e}")
+
+        if errors:
+            error_msg = f"Some files could not be deleted: {'; '.join(errors)}"
+            if deleted_count == 0:
+                return False, error_msg, 0
+            # Partial success - log warning but continue
+            logger.warning(error_msg)
+
+        logger.info("Deleted %d database file(s)", deleted_count)
+        return True, None, deleted_count

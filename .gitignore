@@ -84,3 +84,4 @@ build-deb-temp/
 .claude/
 pypi_cache
 .tldr
+coverage.json

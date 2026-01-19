@@ -433,7 +433,11 @@ class TestDragDropMultiple:
         # Mock validate_dropped_files to return all paths as valid
         with mock.patch("src.ui.scan_view.validate_dropped_files") as mock_validate:
             mock_validate.return_value = (
-                ["/home/user/file1.txt", "/home/user/file2.txt", "/home/user/file3.txt"],
+                [
+                    "/home/user/file1.txt",
+                    "/home/user/file2.txt",
+                    "/home/user/file3.txt",
+                ],
                 [],
             )
 
@@ -615,6 +619,95 @@ class TestProfileLoadsAllTargets:
         mock_scan_view._on_profile_selected(mock_dropdown, None)
 
         assert mock_scan_view._selected_profile is None
+
+    def test_profile_selection_clears_normalized_paths(self, mock_scan_view, tmp_path):
+        """Test that selecting a profile clears both _selected_paths and _normalized_paths.
+
+        Regression test for bug where _normalized_paths was not cleared in _clear_paths(),
+        causing profile switching to fail when returning to a previously selected profile.
+        """
+        self._setup_profile_mocks(mock_scan_view)
+        mock_scan_view._show_toast = mock.MagicMock()
+
+        # Pre-populate both data structures
+        mock_scan_view._selected_paths = ["/some/old/path"]
+        mock_scan_view._normalized_paths = {os.path.normpath("/some/old/path")}
+
+        # Create directory for profile target
+        profile_dir = tmp_path / "profile_target"
+        profile_dir.mkdir()
+
+        # Create mock profile
+        mock_profile = mock.MagicMock()
+        mock_profile.name = "Test Profile"
+        mock_profile.targets = [str(profile_dir)]
+
+        mock_scan_view._profile_list = [mock_profile]
+
+        mock_dropdown = mock.MagicMock()
+        mock_dropdown.get_selected.return_value = 1
+
+        # Select profile - should clear both data structures
+        mock_scan_view._on_profile_selected(mock_dropdown, None)
+
+        # Verify both structures are cleared and updated
+        assert len(mock_scan_view._selected_paths) == 1
+        assert "/some/old/path" not in mock_scan_view._selected_paths
+        assert os.path.normpath("/some/old/path") not in mock_scan_view._normalized_paths
+        assert os.path.normpath(str(profile_dir)) in mock_scan_view._normalized_paths
+
+    def test_profile_switch_allows_reselection(self, mock_scan_view, tmp_path):
+        """Test that switching between profiles allows re-selecting the same profile.
+
+        Regression test for the scenario: Full Scan → Quick Scan → Full Scan
+        where the second Full Scan selection failed due to stale _normalized_paths.
+        """
+        self._setup_profile_mocks(mock_scan_view)
+        mock_scan_view._show_toast = mock.MagicMock()
+
+        # Create directories for two profiles
+        full_scan_dir = tmp_path / "full_scan"
+        quick_scan_dir = tmp_path / "quick_scan"
+        full_scan_dir.mkdir()
+        quick_scan_dir.mkdir()
+
+        # Create two profiles
+        full_profile = mock.MagicMock()
+        full_profile.name = "Full Scan"
+        full_profile.targets = [str(full_scan_dir)]
+
+        quick_profile = mock.MagicMock()
+        quick_profile.name = "Quick Scan"
+        quick_profile.targets = [str(quick_scan_dir)]
+
+        mock_scan_view._profile_list = [full_profile, quick_profile]
+
+        # Step 1: Select Full Scan
+        mock_dropdown = mock.MagicMock()
+        mock_dropdown.get_selected.return_value = 1  # First profile (Full Scan)
+        mock_scan_view._on_profile_selected(mock_dropdown, None)
+
+        assert len(mock_scan_view._selected_paths) == 1
+        assert str(full_scan_dir) in mock_scan_view._selected_paths
+        assert os.path.normpath(str(full_scan_dir)) in mock_scan_view._normalized_paths
+
+        # Step 2: Switch to Quick Scan
+        mock_dropdown.get_selected.return_value = 2  # Second profile (Quick Scan)
+        mock_scan_view._on_profile_selected(mock_dropdown, None)
+
+        assert len(mock_scan_view._selected_paths) == 1
+        assert str(quick_scan_dir) in mock_scan_view._selected_paths
+        assert os.path.normpath(str(quick_scan_dir)) in mock_scan_view._normalized_paths
+        assert os.path.normpath(str(full_scan_dir)) not in mock_scan_view._normalized_paths
+
+        # Step 3: Switch back to Full Scan - this would fail before the fix
+        mock_dropdown.get_selected.return_value = 1  # First profile (Full Scan) again
+        mock_scan_view._on_profile_selected(mock_dropdown, None)
+
+        # Should successfully re-add Full Scan paths
+        assert len(mock_scan_view._selected_paths) == 1
+        assert str(full_scan_dir) in mock_scan_view._selected_paths
+        assert os.path.normpath(str(full_scan_dir)) in mock_scan_view._normalized_paths
 
 
 class TestGetSelectedPaths:

@@ -92,6 +92,10 @@ class UpdateView(Gtk.Box):
         update_box.set_halign(Gtk.Align.CENTER)
         update_box.set_spacing(12)
 
+        # Spinner for update progress (hidden by default)
+        self._update_spinner = Gtk.Spinner()
+        self._update_spinner.set_visible(False)
+
         # Update button
         self._update_button = Gtk.Button()
         self._update_button.set_label("Update Database")
@@ -104,9 +108,16 @@ class UpdateView(Gtk.Box):
         # Make the button larger
         self._update_button.set_size_request(160, 40)
 
-        # Spinner for update progress (hidden by default)
-        self._update_spinner = Gtk.Spinner()
-        self._update_spinner.set_visible(False)
+        # Force Update button - less prominent than main Update button
+        self._force_update_button = Gtk.Button()
+        self._force_update_button.set_label("Force Update")
+        self._force_update_button.set_tooltip_text(
+            "Force update: Backs up local databases, deletes them, then downloads fresh copies "
+            "from mirrors. Automatically restores from backup if update fails."
+        )
+        self._force_update_button.add_css_class("pill")
+        self._force_update_button.set_sensitive(False)  # Disabled until freshclam is verified
+        self._force_update_button.connect("clicked", self._on_force_update_clicked)
 
         # Cancel button (hidden by default)
         self._cancel_button = Gtk.Button()
@@ -118,6 +129,7 @@ class UpdateView(Gtk.Box):
 
         update_box.append(self._update_spinner)
         update_box.append(self._update_button)
+        update_box.append(self._force_update_button)
         update_box.append(self._cancel_button)
 
         self.append(update_box)
@@ -200,16 +212,18 @@ class UpdateView(Gtk.Box):
             self._freshclam_status_icon.add_css_class("success")
             self._freshclam_status_label.set_text(f"freshclam: {version_or_error}")
 
-            # Enable update button
+            # Enable update buttons
             self._update_button.set_sensitive(True)
+            self._force_update_button.set_sensitive(True)
         else:
             self._freshclam_available = False
             self._freshclam_status_icon.set_from_icon_name("dialog-warning-symbolic")
             self._freshclam_status_icon.add_css_class("warning")
             self._freshclam_status_label.set_text(version_or_error or "freshclam not found")
 
-            # Disable update button and show error banner
+            # Disable update buttons and show error banner
             self._update_button.set_sensitive(False)
+            self._force_update_button.set_sensitive(False)
             self._status_banner.set_title(version_or_error or "freshclam not installed")
             self._status_banner.set_revealed(True)
 
@@ -231,27 +245,50 @@ class UpdateView(Gtk.Box):
         if not self._freshclam_available:
             return
 
-        self._start_update()
+        self._start_update(force=False)
+
+    def _on_force_update_clicked(self, button):
+        """Handle force update button click."""
+        if not self._freshclam_available:
+            return
+
+        self._start_update(force=True)
 
     def _on_cancel_clicked(self, button):
         """Handle cancel button click."""
         self._updater.cancel()
         self._set_updating_state(False)
 
-    def _start_update(self):
-        """Start the database update process."""
+    def _start_update(self, force: bool = False):
+        """
+        Start the database update process.
+
+        Args:
+            force: If True, backup local databases, delete them, then download
+                   fresh copies from mirrors.
+        """
         self._set_updating_state(True)
         self._clear_results()
 
-        # Update results text
+        # Update results text with appropriate message
         buffer = self._results_text.get_buffer()
-        buffer.set_text("Updating virus database...\n\nPlease wait, this may take a few minutes.")
+        if force:
+            buffer.set_text(
+                "Force updating virus database...\n\n"
+                "Backing up local databases, then deleting them to force fresh downloads from mirrors.\n"
+                "Previous databases will be restored if the update fails.\n\n"
+                "Please wait, this may take a few minutes."
+            )
+        else:
+            buffer.set_text(
+                "Updating virus database...\n\nPlease wait, this may take a few minutes."
+            )
 
         # Hide any previous status banner
         self._status_banner.set_revealed(False)
 
         # Start async update
-        self._updater.update_async(callback=self._on_update_complete)
+        self._updater.update_async(callback=self._on_update_complete, force=force)
 
     def _set_updating_state(self, is_updating: bool):
         """
@@ -266,6 +303,7 @@ class UpdateView(Gtk.Box):
             # Show updating state
             self._update_button.set_label("Updating...")
             self._update_button.set_sensitive(False)
+            self._force_update_button.set_sensitive(False)
             self._update_spinner.set_visible(True)
             self._update_spinner.start()
             self._cancel_button.set_visible(True)
@@ -273,6 +311,7 @@ class UpdateView(Gtk.Box):
             # Restore normal state
             self._update_button.set_label("Update Database")
             self._update_button.set_sensitive(self._freshclam_available)
+            self._force_update_button.set_sensitive(self._freshclam_available)
             self._update_spinner.stop()
             self._update_spinner.set_visible(False)
             self._cancel_button.set_visible(False)
@@ -287,15 +326,19 @@ class UpdateView(Gtk.Box):
         self._set_updating_state(False)
         self._display_results(result)
 
-        # Send notification
+        # Send notification only on actual updates, not when already up-to-date
         root = self.get_root()
         if root:
             app = root.get_application()
             if app and hasattr(app, "notification_manager"):
-                success = result.status in (UpdateStatus.SUCCESS, UpdateStatus.UP_TO_DATE)
-                app.notification_manager.notify_update_complete(
-                    success=success, databases_updated=result.databases_updated
-                )
+                if result.status == UpdateStatus.SUCCESS and result.databases_updated > 0:
+                    app.notification_manager.notify_update_complete(
+                        success=True, databases_updated=result.databases_updated
+                    )
+                elif result.status == UpdateStatus.ERROR:
+                    app.notification_manager.notify_update_complete(
+                        success=False, databases_updated=0
+                    )
 
         return False  # Don't repeat GLib.idle_add
 
@@ -320,7 +363,7 @@ class UpdateView(Gtk.Box):
             set_status_class(self._status_banner, StatusLevel.SUCCESS)
         elif result.status == UpdateStatus.UP_TO_DATE:
             self._status_banner.set_title("Database is already up to date")
-            set_status_class(self._status_banner, StatusLevel.SUCCESS)
+            set_status_class(self._status_banner, StatusLevel.INFO)
         elif result.status == UpdateStatus.CANCELLED:
             self._status_banner.set_title("Update cancelled")
             set_status_class(self._status_banner, StatusLevel.WARNING)

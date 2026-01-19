@@ -142,7 +142,8 @@ class ScanView(Gtk.Box):
     def _setup_drop_css(self):
         """Set up CSS styling for drag-and-drop visual feedback and severity badges."""
         css_provider = Gtk.CssProvider()
-        css_provider.load_from_string("""
+        css_provider.load_from_string(
+            """
             .drop-active {
                 border: 2px dashed @accent_color;
                 border-radius: 12px;
@@ -275,9 +276,12 @@ class ScanView(Gtk.Box):
             .threat-action-btn.excluded {
                 opacity: 0.6;
             }
-        """)
+        """
+        )
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gdk.Display.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
     def _setup_drop_target(self):
@@ -873,6 +877,7 @@ class ScanView(Gtk.Box):
     def _clear_paths(self):
         """Clear all selected paths and reset the listbox."""
         self._selected_paths.clear()
+        self._normalized_paths.clear()
 
         # Remove all path rows from listbox (keep placeholder)
         child = self._paths_listbox.get_first_child()
@@ -1089,7 +1094,11 @@ class ScanView(Gtk.Box):
             # In Flatpak, use /tmp explicitly so the host's clamdscan can access it
             temp_dir = "/tmp" if is_flatpak() else None
             with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".txt", prefix="eicar_test_", delete=False, dir=temp_dir
+                mode="w",
+                suffix=".txt",
+                prefix="eicar_test_",
+                delete=False,
+                dir=temp_dir,
             ) as f:
                 f.write(EICAR_TEST_STRING)
                 self._eicar_temp_path = f.name
@@ -1247,12 +1256,12 @@ class ScanView(Gtk.Box):
             # Build aggregated result
             aggregated_result = ScanResult(
                 status=final_status,
-                path=", ".join(self._selected_paths)
-                if target_count > 1
-                else self._selected_paths[0],
+                path=(
+                    ", ".join(self._selected_paths) if target_count > 1 else self._selected_paths[0]
+                ),
                 stdout="\n\n".join(all_stdout),
                 stderr="\n\n".join(all_stderr),
-                exit_code=1 if final_status == ScanStatus.INFECTED else (2 if has_errors else 0),
+                exit_code=(1 if final_status == ScanStatus.INFECTED else (2 if has_errors else 0)),
                 infected_files=all_infected_files,
                 scanned_files=total_scanned_files,
                 scanned_dirs=total_scanned_dirs,

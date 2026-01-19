@@ -199,7 +199,9 @@ class TestStatisticsViewTimeframeSwitching:
         assert view._current_timeframe == "weekly"
         view._load_statistics_async.assert_not_called()
 
-    def test_on_timeframe_toggled_deactivates_other_buttons(self, statistics_view_class):
+    def test_on_timeframe_toggled_deactivates_other_buttons(
+        self, statistics_view_class
+    ):
         """Test that toggling one button deactivates others."""
         view = object.__new__(statistics_view_class)
         view._current_timeframe = "weekly"
@@ -379,7 +381,9 @@ class TestStatisticsViewQuickScanCallback:
 
         callback.assert_called_once()
 
-    def test_on_quick_scan_clicked_without_callback_tries_action(self, statistics_view_class):
+    def test_on_quick_scan_clicked_without_callback_tries_action(
+        self, statistics_view_class
+    ):
         """Test that quick scan click tries app action when no callback."""
         view = object.__new__(statistics_view_class)
         view._on_quick_scan_requested = None
@@ -536,8 +540,8 @@ class TestStatisticsViewUpdateChart:
         view = object.__new__(statistics_view_class)
         view._figure = mock.MagicMock()
         view._canvas = mock.MagicMock()
-        view._canvas.get_style_context.return_value.get_color.return_value = mock.MagicMock(
-            red=0.1, green=0.1, blue=0.1
+        view._canvas.get_style_context.return_value.get_color.return_value = (
+            mock.MagicMock(red=0.1, green=0.1, blue=0.1)
         )
         view._chart_empty_state = mock.MagicMock()
         view._chart_group = mock.MagicMock()
@@ -570,8 +574,8 @@ class TestStatisticsViewUpdateChart:
         mock_ax.bar.side_effect = [mock_bars_scans, mock_bars_threats]
         view._figure.add_subplot.return_value = mock_ax
         view._canvas = mock.MagicMock()
-        view._canvas.get_style_context.return_value.get_color.return_value = mock.MagicMock(
-            red=0.1, green=0.1, blue=0.1
+        view._canvas.get_style_context.return_value.get_color.return_value = (
+            mock.MagicMock(red=0.1, green=0.1, blue=0.1)
         )
         view._chart_empty_state = mock.MagicMock()
         view._chart_group = mock.MagicMock()
@@ -608,15 +612,17 @@ class TestStatisticsViewUpdateChart:
         view._figure.clear.assert_not_called()
         view._figure.add_subplot.assert_not_called()
 
-    def test_update_chart_reinitializes_when_data_points_change(self, statistics_view_class):
+    def test_update_chart_reinitializes_when_data_points_change(
+        self, statistics_view_class
+    ):
         """Test that chart reinitializes when number of data points changes."""
         view = object.__new__(statistics_view_class)
         view._figure = mock.MagicMock()
         mock_ax = mock.MagicMock()
         view._figure.add_subplot.return_value = mock_ax
         view._canvas = mock.MagicMock()
-        view._canvas.get_style_context.return_value.get_color.return_value = mock.MagicMock(
-            red=0.1, green=0.1, blue=0.1
+        view._canvas.get_style_context.return_value.get_color.return_value = (
+            mock.MagicMock(red=0.1, green=0.1, blue=0.1)
         )
         view._chart_empty_state = mock.MagicMock()
         view._chart_group = mock.MagicMock()
@@ -662,8 +668,12 @@ class TestStatisticsViewUpdateProtectionDisplay:
 
         view._update_protection_display()
 
-        view._protection_row.set_subtitle.assert_called_with("Unable to determine status")
-        view._protection_row_icon.set_from_icon_name.assert_called_with("dialog-question-symbolic")
+        view._protection_row.set_subtitle.assert_called_with(
+            "Unable to determine status"
+        )
+        view._protection_row_icon.set_from_icon_name.assert_called_with(
+            "dialog-question-symbolic"
+        )
         view._status_badge.set_label.assert_called_with("Unknown")
 
     def test_update_protection_display_protected(self, statistics_view_class):
@@ -692,7 +702,9 @@ class TestStatisticsViewUpdateProtectionDisplay:
             view._update_protection_display()
 
             view._protection_row.set_subtitle.assert_called_with("System is protected")
-            view._protection_row_icon.set_from_icon_name.assert_called_with("emblem-ok-symbolic")
+            view._protection_row_icon.set_from_icon_name.assert_called_with(
+                "object-select-symbolic"
+            )
             view._status_badge.set_label.assert_called_with("Protected")
             view._status_badge.add_css_class.assert_called_with("success")
 
@@ -748,7 +760,9 @@ class TestStatisticsViewUpdateProtectionDisplay:
 
             view._update_protection_display()
 
-            view._protection_row_icon.set_from_icon_name.assert_called_with("dialog-error-symbolic")
+            view._protection_row_icon.set_from_icon_name.assert_called_with(
+                "dialog-error-symbolic"
+            )
             view._status_badge.set_label.assert_called_with("Unprotected")
             view._status_badge.add_css_class.assert_called_with("error")
 
@@ -756,7 +770,9 @@ class TestStatisticsViewUpdateProtectionDisplay:
 class TestStatisticsViewUpdateStatisticsDisplay:
     """Tests for statistics display updates."""
 
-    def test_update_statistics_display_none_shows_empty_state(self, statistics_view_class):
+    def test_update_statistics_display_none_shows_empty_state(
+        self, statistics_view_class
+    ):
         """Test that None stats shows empty state."""
         view = object.__new__(statistics_view_class)
         view._current_stats = None
@@ -796,7 +812,9 @@ class TestStatisticsViewUpdateStatisticsDisplay:
         view._threats_label.set_label.assert_called_with("2")
         view._clean_scans_label.set_label.assert_called_with("8")
 
-    def test_update_statistics_display_threats_adds_error_class(self, statistics_view_class):
+    def test_update_statistics_display_threats_adds_error_class(
+        self, statistics_view_class
+    ):
         """Test that threats > 0 adds error CSS class."""
         mock_stats = mock.MagicMock()
         mock_stats.total_scans = 10
@@ -823,7 +841,9 @@ class TestStatisticsViewUpdateStatisticsDisplay:
 
         view._threats_label.add_css_class.assert_called_with("error")
 
-    def test_update_statistics_display_no_threats_removes_error_class(self, statistics_view_class):
+    def test_update_statistics_display_no_threats_removes_error_class(
+        self, statistics_view_class
+    ):
         """Test that threats = 0 removes error CSS class."""
         mock_stats = mock.MagicMock()
         mock_stats.total_scans = 10
@@ -850,7 +870,9 @@ class TestStatisticsViewUpdateStatisticsDisplay:
 
         view._threats_label.remove_css_class.assert_called_with("error")
 
-    def test_update_statistics_display_zero_duration_shows_placeholder(self, statistics_view_class):
+    def test_update_statistics_display_zero_duration_shows_placeholder(
+        self, statistics_view_class
+    ):
         """Test that zero duration shows placeholder."""
         mock_stats = mock.MagicMock()
         mock_stats.total_scans = 10

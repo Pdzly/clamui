@@ -2,10 +2,10 @@ name: Build Debian Package
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    branches: [master]
+    tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
   workflow_call:
 

@@ -4,7 +4,7 @@ Backwards compatibility module for ClamUI utilities.
 
 This module re-exports all utility functions from focused modules to maintain
 backwards compatibility with existing imports like:
-    from src.core.utils import check_clamav_installed
+    from clamui.core.utils import check_clamav_installed
 
 The original utils.py has been split into focused modules:
 - flatpak.py: Flatpak detection and portal path resolution

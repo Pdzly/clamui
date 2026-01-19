@@ -14,10 +14,14 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
-from src.core.flatpak import is_flatpak
-from src.ui.utils import add_row_icon
-
-from .base import PreferencesPageMixin, populate_bool_field, populate_int_field, populate_text_field
+from ...core.flatpak import is_flatpak
+from ..utils import add_row_icon
+from .base import (
+    PreferencesPageMixin,
+    populate_bool_field,
+    populate_int_field,
+    populate_text_field,
+)
 
 
 class ScannerPage(PreferencesPageMixin):
@@ -70,7 +74,9 @@ class ScannerPage(PreferencesPageMixin):
         temp_instance._parent_window = parent_window
 
         # Create scan backend settings group (ClamUI settings, auto-saved)
-        ScannerPage._create_scan_backend_group(page, widgets_dict, settings_manager, temp_instance)
+        ScannerPage._create_scan_backend_group(
+            page, widgets_dict, settings_manager, temp_instance
+        )
 
         # Create file location group
         temp_instance._create_file_location_group(
@@ -133,7 +139,9 @@ class ScannerPage(PreferencesPageMixin):
             # Show current backend (always clamscan in Flatpak)
             backend_row = Adw.ActionRow()
             backend_row.set_title("Scan Backend")
-            backend_row.set_subtitle("Standalone Scanner (clamscan) — Bundled with Flatpak")
+            backend_row.set_subtitle(
+                "Standalone Scanner (clamscan) — Bundled with Flatpak"
+            )
             add_row_icon(backend_row, "security-high-symbolic")
 
             # Add info badge
@@ -162,7 +170,7 @@ class ScannerPage(PreferencesPageMixin):
             return
 
         # Native installation - show full backend selection UI
-        from src.core.utils import check_clamd_connection
+        from ...core.utils import check_clamd_connection
 
         group.set_description("Select how ClamUI performs scans. Auto-saved.")
 
@@ -181,7 +189,9 @@ class ScannerPage(PreferencesPageMixin):
         backend_row.set_selected(backend_map.get(current_backend, 0))
 
         # Set initial subtitle based on current selection
-        ScannerPage._update_backend_subtitle(backend_row, backend_map.get(current_backend, 0))
+        ScannerPage._update_backend_subtitle(
+            backend_row, backend_map.get(current_backend, 0)
+        )
 
         # Connect to selection changes - pass settings_manager in lambda
         backend_row.connect(
@@ -218,7 +228,9 @@ class ScannerPage(PreferencesPageMixin):
         refresh_button.add_css_class("flat")
         refresh_button.connect(
             "clicked",
-            lambda btn: ScannerPage._on_refresh_daemon_status(widgets_dict["daemon_status_row"]),
+            lambda btn: ScannerPage._on_refresh_daemon_status(
+                widgets_dict["daemon_status_row"]
+            ),
         )
         status_row.add_suffix(refresh_button)
 
@@ -229,7 +241,8 @@ class ScannerPage(PreferencesPageMixin):
         add_row_icon(learn_more_row, "help-about-symbolic")
         learn_more_row.set_activatable(True)
         learn_more_row.connect(
-            "activated", lambda row: ScannerPage._on_learn_more_clicked(helper._parent_window)
+            "activated",
+            lambda row: ScannerPage._on_learn_more_clicked(helper._parent_window),
         )
 
         # Add chevron to indicate it's clickable
@@ -284,7 +297,7 @@ class ScannerPage(PreferencesPageMixin):
         Args:
             status_row: The ActionRow displaying daemon status
         """
-        from src.core.utils import check_clamd_connection
+        from ...core.utils import check_clamd_connection
 
         is_connected, message = check_clamd_connection()
 
@@ -322,7 +335,9 @@ class ScannerPage(PreferencesPageMixin):
 
         # Get the path to the documentation file
         # From src/ui/preferences/scanner_page.py -> src/ui/preferences/ -> src/ui/ -> src/ -> project_root/
-        docs_path = Path(__file__).parent.parent.parent.parent / "docs" / "SCAN_BACKENDS.md"
+        docs_path = (
+            Path(__file__).parent.parent.parent.parent / "docs" / "SCAN_BACKENDS.md"
+        )
 
         # Check if file exists
         if not docs_path.exists():
@@ -341,7 +356,9 @@ class ScannerPage(PreferencesPageMixin):
         try:
             # Use xdg-open on Linux to open file in default application
             subprocess.Popen(
-                ["xdg-open", str(docs_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                ["xdg-open", str(docs_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
         except Exception as e:
             # Show error dialog if opening fails
@@ -420,7 +437,9 @@ class ScannerPage(PreferencesPageMixin):
         page.add(group)
 
     @staticmethod
-    def _create_performance_group(page: Adw.PreferencesPage, widgets_dict: dict, helper):
+    def _create_performance_group(
+        page: Adw.PreferencesPage, widgets_dict: dict, helper
+    ):
         """
         Create the Performance preferences group for clamd.conf.
 
@@ -470,7 +489,9 @@ class ScannerPage(PreferencesPageMixin):
         # MaxFiles spin row (0-1000000)
         max_files_row = Adw.SpinRow.new_with_range(0, 1000000, 1)
         max_files_row.set_title("Max Files in Archive")
-        max_files_row.set_subtitle("Maximum number of files to scan in archive (0 = unlimited)")
+        max_files_row.set_subtitle(
+            "Maximum number of files to scan in archive (0 = unlimited)"
+        )
         max_files_row.set_numeric(True)
         max_files_row.set_snap_to_ticks(True)
         widgets_dict["MaxFiles"] = max_files_row
@@ -542,7 +563,14 @@ class ScannerPage(PreferencesPageMixin):
             return
 
         # Populate file type scanning switches
-        for key in ("ScanPE", "ScanELF", "ScanOLE2", "ScanPDF", "ScanHTML", "ScanArchive"):
+        for key in (
+            "ScanPE",
+            "ScanELF",
+            "ScanOLE2",
+            "ScanPDF",
+            "ScanHTML",
+            "ScanArchive",
+        ):
             populate_bool_field(config, widgets_dict, key)
 
         # Populate performance settings
@@ -580,7 +608,9 @@ class ScannerPage(PreferencesPageMixin):
         updates["ScanOLE2"] = "yes" if widgets_dict["ScanOLE2"].get_active() else "no"
         updates["ScanPDF"] = "yes" if widgets_dict["ScanPDF"].get_active() else "no"
         updates["ScanHTML"] = "yes" if widgets_dict["ScanHTML"].get_active() else "no"
-        updates["ScanArchive"] = "yes" if widgets_dict["ScanArchive"].get_active() else "no"
+        updates["ScanArchive"] = (
+            "yes" if widgets_dict["ScanArchive"].get_active() else "no"
+        )
 
         # Collect performance settings
         updates["MaxFileSize"] = str(int(widgets_dict["MaxFileSize"].get_value()))
@@ -593,7 +623,9 @@ class ScannerPage(PreferencesPageMixin):
         if log_file:
             updates["LogFile"] = log_file
 
-        updates["LogVerbose"] = "yes" if widgets_dict["LogVerbose"].get_active() else "no"
+        updates["LogVerbose"] = (
+            "yes" if widgets_dict["LogVerbose"].get_active() else "no"
+        )
         updates["LogSyslog"] = "yes" if widgets_dict["LogSyslog"].get_active() else "no"
 
         return updates

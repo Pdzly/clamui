@@ -15,15 +15,15 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw
 
-from src.core.clamav_config import parse_config
-from src.core.flatpak import (
+from ...core.clamav_config import parse_config
+from ...core.flatpak import (
     ensure_freshclam_config,
     get_freshclam_config_path,
     is_flatpak,
 )
+from ...core.scheduler import Scheduler
 
 logger = logging.getLogger(__name__)
-from src.core.scheduler import Scheduler
 
 from .base import PreferencesPageMixin
 from .behavior_page import BehaviorPage
@@ -105,7 +105,9 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
                 # Ensure the config file exists (generates it if needed)
                 generated_path = ensure_freshclam_config()
                 if generated_path:
-                    logger.info("Flatpak freshclam config generated at: %s", generated_path)
+                    logger.info(
+                        "Flatpak freshclam config generated at: %s", generated_path
+                    )
                     self._freshclam_conf_path = str(generated_path)
                 else:
                     # Config generation failed - log detailed error
@@ -124,7 +126,9 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
                     "Could not determine Flatpak config path, falling back to system path"
                 )
                 self._freshclam_conf_path = "/etc/clamav/freshclam.conf"
-                self._freshclam_load_error = "Could not determine Flatpak configuration path"
+                self._freshclam_load_error = (
+                    "Could not determine Flatpak configuration path"
+                )
             # clamd.conf is typically not used in Flatpak (daemon runs on host)
             self._clamd_conf_path = "/etc/clamav/clamd.conf"
         else:
@@ -153,7 +157,9 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
     def _setup_ui(self):
         """Set up the preferences window UI layout."""
         # Create Database Updates page (freshclam.conf)
-        database_page = DatabasePage.create_page(self._freshclam_conf_path, self._freshclam_widgets)
+        database_page = DatabasePage.create_page(
+            self._freshclam_conf_path, self._freshclam_widgets
+        )
         self.add(database_page)
 
         # Create Scanner Settings page (clamd.conf)
@@ -186,7 +192,9 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
         self.add(virustotal_page)
 
         # Create Behavior page (window behavior settings) - instance-based
-        behavior_page_instance = BehaviorPage(self._settings_manager, self._tray_available)
+        behavior_page_instance = BehaviorPage(
+            self._settings_manager, self._tray_available
+        )
         behavior_page = behavior_page_instance.create_page()
         self.add(behavior_page)
 

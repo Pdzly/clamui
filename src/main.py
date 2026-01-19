@@ -42,7 +42,7 @@ _setup_path()
 # Note: Tray indicator is handled by app.py with graceful degradation
 # GTK3/GTK4 cannot coexist in the same process, so tray is disabled
 # when running with GTK4 (which is required for the main UI)
-from src.app import ClamUIApp
+from .app import ClamUIApp
 
 
 def uri_to_path(uri: str) -> str:
@@ -110,7 +110,10 @@ def parse_arguments(argv: list[str]) -> tuple[list[str], bool, list[str]]:
     if file_paths:
         # Log received file paths for debugging context menu integration
         mode = "VirusTotal" if args.virustotal else "ClamAV"
-        print(f"ClamUI: Received {len(file_paths)} path(s) for {mode} scanning:", file=sys.stderr)
+        print(
+            f"ClamUI: Received {len(file_paths)} path(s) for {mode} scanning:",
+            file=sys.stderr,
+        )
         for path in file_paths:
             print(f"  - {path}", file=sys.stderr)
 

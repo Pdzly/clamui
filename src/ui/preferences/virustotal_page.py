@@ -16,7 +16,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
-from src.core.keyring_manager import (
+from ...core.keyring_manager import (
     delete_api_key,
     get_api_key,
     mask_api_key,
@@ -25,7 +25,7 @@ from src.core.keyring_manager import (
 )
 
 if TYPE_CHECKING:
-    from src.core.settings_manager import SettingsManager
+    from ...core.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,9 @@ class VirusTotalPage:
         # API key entry row
         api_key_row = Adw.PasswordEntryRow()
         api_key_row.set_title("API Key")
-        api_key_row.connect("changed", lambda row: VirusTotalPage._on_api_key_changed(page, row))
+        api_key_row.connect(
+            "changed", lambda row: VirusTotalPage._on_api_key_changed(page, row)
+        )
         page._api_key_row = api_key_row
         group.add(api_key_row)
 
@@ -151,7 +153,8 @@ class VirusTotalPage:
         delete_button.add_css_class("destructive-action")
         delete_button.set_sensitive(current_key is not None)
         delete_button.connect(
-            "clicked", lambda btn: VirusTotalPage._on_delete_clicked(page, settings_manager)
+            "clicked",
+            lambda btn: VirusTotalPage._on_delete_clicked(page, settings_manager),
         )
         page._delete_button = delete_button
         button_box.append(delete_button)
@@ -162,7 +165,8 @@ class VirusTotalPage:
         save_button.add_css_class("suggested-action")
         save_button.set_sensitive(False)
         save_button.connect(
-            "clicked", lambda btn: VirusTotalPage._on_save_clicked(page, settings_manager)
+            "clicked",
+            lambda btn: VirusTotalPage._on_save_clicked(page, settings_manager),
         )
         page._save_button = save_button
         button_box.append(save_button)
@@ -174,7 +178,9 @@ class VirusTotalPage:
         link_row.set_title("Get a free API key")
         link_row.set_subtitle("Create an account at virustotal.com")
         link_row.set_activatable(True)
-        link_row.connect("activated", lambda row: VirusTotalPage._on_get_api_key_clicked())
+        link_row.connect(
+            "activated", lambda row: VirusTotalPage._on_get_api_key_clicked()
+        )
 
         link_icon = Gtk.Image.new_from_icon_name("network-server-symbolic")
         link_icon.add_css_class("dim-label")
@@ -217,14 +223,18 @@ class VirusTotalPage:
         no_key_row.set_subtitle("Action to take when scanning without API key")
 
         # Set current selection from settings
-        current_action = settings_manager.get("virustotal_remember_no_key_action", "none")
+        current_action = settings_manager.get(
+            "virustotal_remember_no_key_action", "none"
+        )
         action_map = {"none": 0, "open_website": 1, "prompt": 2}
         no_key_row.set_selected(action_map.get(current_action, 0))
 
         # Connect to selection changes
         no_key_row.connect(
             "notify::selected",
-            lambda row, pspec: VirusTotalPage._on_no_key_action_changed(row, settings_manager),
+            lambda row, pspec: VirusTotalPage._on_no_key_action_changed(
+                row, settings_manager
+            ),
         )
 
         group.add(no_key_row)
@@ -287,7 +297,9 @@ class VirusTotalPage:
             page._validation_label.set_visible(True)
 
     @staticmethod
-    def _on_save_clicked(page: Adw.PreferencesPage, settings_manager: "SettingsManager"):
+    def _on_save_clicked(
+        page: Adw.PreferencesPage, settings_manager: "SettingsManager"
+    ):
         """Save the API key."""
         api_key = page._api_key_row.get_text().strip()
 
@@ -317,10 +329,14 @@ class VirusTotalPage:
             page._save_button.set_sensitive(False)
             page._delete_button.set_sensitive(True)
         else:
-            VirusTotalPage._show_toast(page, f"Failed to save: {error}" if error else "Failed")
+            VirusTotalPage._show_toast(
+                page, f"Failed to save: {error}" if error else "Failed"
+            )
 
     @staticmethod
-    def _on_delete_clicked(page: Adw.PreferencesPage, settings_manager: "SettingsManager"):
+    def _on_delete_clicked(
+        page: Adw.PreferencesPage, settings_manager: "SettingsManager"
+    ):
         """Delete the API key after confirmation."""
         # Show confirmation dialog
         dialog = Adw.AlertDialog()
@@ -357,7 +373,9 @@ class VirusTotalPage:
         dialog.present(page._parent_window)
 
     @staticmethod
-    def _on_no_key_action_changed(row: Adw.ComboRow, settings_manager: "SettingsManager"):
+    def _on_no_key_action_changed(
+        row: Adw.ComboRow, settings_manager: "SettingsManager"
+    ):
         """Handle no-key action selection change."""
         action_reverse_map = {0: "none", 1: "open_website", 2: "prompt"}
         selected = row.get_selected()

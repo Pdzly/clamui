@@ -39,11 +39,11 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.core.battery_manager import BatteryManager
-from src.core.log_manager import LogEntry, LogManager
-from src.core.quarantine import QuarantineManager
-from src.core.scanner import Scanner, ScanResult, ScanStatus
-from src.core.settings_manager import SettingsManager
+from ..core.battery_manager import BatteryManager
+from ..core.log_manager import LogEntry, LogManager
+from ..core.quarantine import QuarantineManager
+from ..core.scanner import Scanner, ScanResult, ScanStatus
+from ..core.settings_manager import SettingsManager
 
 
 @dataclass
@@ -134,10 +134,14 @@ Examples:
     )
 
     parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be done without executing"
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without executing",
     )
 
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose output"
+    )
 
     return parser.parse_args()
 
@@ -193,7 +197,11 @@ def send_notification(title: str, body: str, urgency: str = "normal") -> bool:
             "dialog-warning",  # Fallback system icon
         ]
         for icon in icon_paths:
-            if icon.startswith("/") and os.path.exists(icon) or not icon.startswith("/"):
+            if (
+                icon.startswith("/")
+                and os.path.exists(icon)
+                or not icon.startswith("/")
+            ):
                 cmd.extend(["--icon", icon])
                 break
 
@@ -228,7 +236,9 @@ def _check_battery_status(ctx: ScanContext) -> int | None:
 
     battery_status = ctx.battery_manager.get_status()
     percent = battery_status.percent or 0
-    log_message(f"Skipping scan: running on battery power ({percent:.0f}%)", ctx.verbose)
+    log_message(
+        f"Skipping scan: running on battery power ({percent:.0f}%)", ctx.verbose
+    )
 
     log_entry = LogEntry.create(
         log_type="scan",
@@ -243,7 +253,9 @@ def _check_battery_status(ctx: ScanContext) -> int | None:
     return 0
 
 
-def _validate_targets(targets: list[str], verbose: bool) -> tuple[list[str], int | None]:
+def _validate_targets(
+    targets: list[str], verbose: bool
+) -> tuple[list[str], int | None]:
     """
     Validate scan targets and return valid paths.
 
@@ -385,7 +397,9 @@ def _process_quarantine(ctx: ScanContext, agg: ScanAggregateResult) -> Quarantin
     if not agg.all_infected_files or not ctx.auto_quarantine:
         return qr
 
-    log_message(f"Quarantining {len(agg.all_infected_files)} infected file(s)...", ctx.verbose)
+    log_message(
+        f"Quarantining {len(agg.all_infected_files)} infected file(s)...", ctx.verbose
+    )
 
     quarantine_manager = QuarantineManager()
 
@@ -396,15 +410,21 @@ def _process_quarantine(ctx: ScanContext, agg: ScanAggregateResult) -> Quarantin
 
     # Quarantine each infected file with its threat name
     for threat in all_threat_details:
-        quarantine_result = quarantine_manager.quarantine_file(threat.file_path, threat.threat_name)
+        quarantine_result = quarantine_manager.quarantine_file(
+            threat.file_path, threat.threat_name
+        )
         if quarantine_result.is_success:
             qr.quarantined_count += 1
         else:
-            error_msg = quarantine_result.error_message or str(quarantine_result.status.value)
+            error_msg = quarantine_result.error_message or str(
+                quarantine_result.status.value
+            )
             qr.failed.append((threat.file_path, error_msg))
 
     if qr.quarantined_count > 0:
-        log_message(f"  Successfully quarantined: {qr.quarantined_count} file(s)", ctx.verbose)
+        log_message(
+            f"  Successfully quarantined: {qr.quarantined_count} file(s)", ctx.verbose
+        )
     if qr.failed:
         log_message(f"  Failed to quarantine: {len(qr.failed)} file(s)", ctx.verbose)
         for file_path, error in qr.failed:
@@ -440,7 +460,9 @@ def _build_summary_and_status(
         summary = "Scheduled scan completed with errors"
         status = "error"
     else:
-        summary = f"Scheduled scan completed - {agg.total_scanned} files scanned, no threats"
+        summary = (
+            f"Scheduled scan completed - {agg.total_scanned} files scanned, no threats"
+        )
         status = "clean"
 
     return summary, status
@@ -540,9 +562,7 @@ def _send_scan_notification(
 
     if agg.total_infected > 0:
         if qr.quarantined_count > 0:
-            body = (
-                f"{agg.total_infected} infected file(s) found, {qr.quarantined_count} quarantined"
-            )
+            body = f"{agg.total_infected} infected file(s) found, {qr.quarantined_count} quarantined"
         else:
             body = f"{agg.total_infected} infected file(s) found"
         send_notification("Scheduled Scan: Threats Detected!", body, urgency="critical")

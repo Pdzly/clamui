@@ -263,7 +263,9 @@ class MainWindow(Adw.ApplicationWindow):
         dialog = CloseBehaviorDialog(callback=self._on_close_behavior_dialog_response)
         dialog.present(self)
 
-    def _on_close_behavior_dialog_response(self, choice: str | None, remember: bool) -> None:
+    def _on_close_behavior_dialog_response(
+        self, choice: str | None, remember: bool
+    ) -> None:
         """
         Handle the close behavior dialog response.
 
@@ -294,23 +296,25 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _setup_ui(self):
         """Set up the window UI layout."""
-        # Main vertical box to hold all content
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-
         # Create the header bar
         header_bar = self._create_header_bar()
-        main_box.append(header_bar)
 
         # Create the content area
         self._content_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._content_area.set_vexpand(True)
         self._content_area.set_hexpand(True)
-        main_box.append(self._content_area)
 
         # Add toast overlay for in-app notifications
         self._toast_overlay = Adw.ToastOverlay()
-        self._toast_overlay.set_child(main_box)
-        self.set_content(self._toast_overlay)
+        self._toast_overlay.set_child(self._content_area)
+
+        # Use ToolbarView to properly integrate the HeaderBar as a titlebar
+        # This makes window control buttons (minimize, maximize, close) functional
+        toolbar_view = Adw.ToolbarView()
+        toolbar_view.add_top_bar(header_bar)
+        toolbar_view.set_content(self._toast_overlay)
+
+        self.set_content(toolbar_view)
 
         # Show placeholder content (will be replaced with ScanView in integration)
         self._show_placeholder()
@@ -325,6 +329,8 @@ class MainWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
 
         # Enable window control buttons (minimize, maximize, close)
+        # Start buttons for systems with left-side window controls (e.g., Ubuntu)
+        header_bar.set_show_start_title_buttons(True)
         header_bar.set_show_end_title_buttons(True)
 
         # Add title widget

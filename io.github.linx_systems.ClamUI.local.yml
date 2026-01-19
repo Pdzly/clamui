@@ -33,22 +33,13 @@ finish-args:
   # GVFS for file browser integration
   - --filesystem=xdg-run/gvfsd
 
-  # Full filesystem access for antivirus scanning (matches ClamTk)
+  # Full filesystem access for antivirus scanning
   # Required for file manager integration to scan arbitrary user files
+  # Also covers ~/.config/systemd/user and ~/.local/share for file manager integrations
   - --filesystem=host
-
-  # Systemd user timers for scheduled scans
-  # Allows writing timer/service files to host's ~/.config/systemd/user/
-  - --filesystem=~/.config/systemd/user:create
 
   # Allow flatpak-spawn --host for executing systemctl on the host
   - --talk-name=org.freedesktop.Flatpak
-
-  # File manager integration directories
-  # Allows installing context menu actions to user's local share directories
-  - --filesystem=~/.local/share/nemo/actions:create
-  - --filesystem=~/.local/share/nautilus/scripts:create
-  - --filesystem=~/.local/share/kservices5/ServiceMenus:create
 
 modules:
   # System tray uses StatusNotifierItem D-Bus protocol

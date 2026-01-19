@@ -567,7 +567,7 @@ class LogsView(Gtk.Box):
         # Add status indicator
         status_icon = Gtk.Image()
         if entry.status in ("clean", "success", "up_to_date"):
-            status_icon.set_from_icon_name("emblem-ok-symbolic")
+            status_icon.set_from_icon_name("object-select-symbolic")
             status_icon.add_css_class("success")
         elif entry.status in ("infected", "error"):
             status_icon.set_from_icon_name("dialog-warning-symbolic")
@@ -1072,7 +1072,7 @@ class LogsView(Gtk.Box):
 
         if status == DaemonStatus.RUNNING:
             self._daemon_status_row.set_subtitle("Running")
-            self._daemon_status_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._daemon_status_icon.set_from_icon_name("object-select-symbolic")
             # Remove any warning/error classes and add success
             self._daemon_status_row.remove_css_class("warning")
             self._daemon_status_row.remove_css_class("error")

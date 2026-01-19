@@ -193,7 +193,7 @@ class PreferencesWindow(Adw.PreferencesWindow, PreferencesPageMixin):
 
         # Create Behavior page (window behavior settings) - instance-based
         behavior_page_instance = BehaviorPage(
-            self._settings_manager, self._tray_available
+            self._settings_manager, self._tray_available, parent_window=self
         )
         behavior_page = behavior_page_instance.create_page()
         self.add(behavior_page)

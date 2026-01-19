@@ -68,7 +68,7 @@ class ClamUIApp(Adw.Application):
         """Initialize the ClamUI application."""
         super().__init__(
             application_id="io.github.linx_systems.ClamUI",
-            flags=Gio.ApplicationFlags.FLAGS_NONE,
+            flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
 
         # Application metadata
@@ -213,9 +213,7 @@ class ClamUIApp(Adw.Application):
         if self._statistics_view is None:
             self._statistics_view = StatisticsView()
             # Connect statistics view quick scan callback
-            self._statistics_view.set_quick_scan_callback(
-                self._on_statistics_quick_scan
-            )
+            self._statistics_view.set_quick_scan_callback(self._on_statistics_quick_scan)
         return self._statistics_view
 
     @property
@@ -282,8 +280,49 @@ class ClamUIApp(Adw.Application):
         # Mark first activation as complete
         self._first_activation = False
 
+        # Show file manager integration dialog on first Flatpak run
+        if is_new_window:
+            self._maybe_show_file_manager_integration_dialog()
+
         # Process any initial scan paths from CLI (e.g., from context menu)
         self._process_initial_scan_paths()
+
+    def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
+        """
+        Handle command line arguments for both new and existing instances.
+
+        This method is called by GTK when:
+        1. The application is first launched with arguments
+        2. A second instance is launched (arguments forwarded to first instance)
+
+        This enables file manager integration to work even when ClamUI is
+        already running - the new arguments are forwarded via D-Bus IPC.
+
+        Args:
+            command_line: The command line object containing arguments.
+
+        Returns:
+            Exit code (0 for success).
+        """
+        # Import parse_arguments lazily to avoid circular imports
+        # (main.py imports ClamUIApp from app.py)
+        from .main import parse_arguments
+
+        args = command_line.get_arguments()
+        logger.debug(f"do_command_line received: {args}")
+
+        # Parse file paths from arguments
+        file_paths, use_virustotal, _ = parse_arguments(args)
+
+        if file_paths:
+            self._initial_scan_paths = file_paths
+            self._initial_use_virustotal = use_virustotal
+            logger.info(f"Command line: {len(file_paths)} path(s), virustotal={use_virustotal}")
+
+        # Activate the application (shows window, processes paths)
+        self.activate()
+
+        return 0
 
     def do_startup(self):
         """
@@ -307,46 +346,6 @@ class ClamUIApp(Adw.Application):
         # Ensure ClamAV database directory exists in Flatpak
         self._ensure_clamav_database_dir()
 
-        # Install Nemo context menu actions if running in Flatpak
-        self._install_nemo_actions()
-
-    def _install_nemo_actions(self):
-        """
-        Install Nemo context menu actions if running in Flatpak.
-
-        Copies the nemo action files from the Flatpak to the user's
-        local Nemo actions directory for context menu integration.
-        """
-        # Only run in Flatpak environment
-        if not os.path.exists("/.flatpak-info"):
-            return
-
-        source_dir = Path("/app/share/clamui/nemo-actions")
-        dest_dir = (
-            Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-            / "nemo/actions"
-        )
-
-        # Check if source directory exists
-        if not source_dir.exists():
-            return
-
-        try:
-            # Create destination directory if needed
-            dest_dir.mkdir(parents=True, exist_ok=True)
-
-            # Copy action files if they don't exist or are outdated
-            for action_file in source_dir.glob("*.nemo_action"):
-                dest_file = dest_dir / action_file.name
-                # Always update to ensure latest version
-                if not dest_file.exists():
-                    import shutil
-
-                    shutil.copy2(action_file, dest_file)
-                    logging.info(f"Installed Nemo action: {action_file.name}")
-        except Exception as e:
-            logging.warning(f"Failed to install Nemo actions: {e}")
-
     def _ensure_clamav_database_dir(self):
         """
         Ensure ClamAV database directory exists in Flatpak.
@@ -364,6 +363,46 @@ class ClamUIApp(Adw.Application):
         db_dir = ensure_clamav_database_dir()
         if db_dir is not None:
             logger.info(f"ClamAV database directory: {db_dir}")
+
+    def _maybe_show_file_manager_integration_dialog(self):
+        """
+        Show file manager integration dialog on first Flatpak run.
+
+        Checks if:
+        1. Running as Flatpak
+        2. Not already prompted (stored in settings)
+        3. At least one file manager integration is available but not installed
+
+        If all conditions are met, shows the integration dialog.
+        """
+        from .core.file_manager_integration import check_any_not_installed
+        from .core.flatpak import is_flatpak
+
+        # Only show in Flatpak
+        if not is_flatpak():
+            return
+
+        # Check if already prompted
+        if self._settings_manager.get("file_manager_integration_prompted", False):
+            return
+
+        # Check if any integrations are available but not installed
+        if not check_any_not_installed():
+            # Either no file managers detected or all already integrated
+            # Mark as prompted so we don't keep checking
+            self._settings_manager.set("file_manager_integration_prompted", True)
+            return
+
+        # Show the integration dialog
+        win = self.props.active_window
+        if win:
+            from .ui.file_manager_integration_dialog import FileManagerIntegrationDialog
+
+            dialog = FileManagerIntegrationDialog(
+                settings_manager=self._settings_manager,
+            )
+            dialog.present(win)
+            logger.info("Showing file manager integration dialog")
 
     def _setup_actions(self):
         """Set up application-level actions."""
@@ -441,14 +480,10 @@ class ClamUIApp(Adw.Application):
             )
 
             # Set window toggle callback
-            self._tray_indicator.set_window_toggle_callback(
-                on_toggle=self._on_tray_window_toggle
-            )
+            self._tray_indicator.set_window_toggle_callback(on_toggle=self._on_tray_window_toggle)
 
             # Set profile selection callback
-            self._tray_indicator.set_profile_select_callback(
-                on_select=self._on_tray_profile_select
-            )
+            self._tray_indicator.set_profile_select_callback(on_select=self._on_tray_profile_select)
 
             # Start the tray subprocess
             if self._tray_indicator.start():
@@ -611,10 +646,7 @@ class ClamUIApp(Adw.Application):
                 self._current_view = "update"
 
             # Trigger the update if freshclam is available and not already updating
-            if (
-                self.update_view._freshclam_available
-                and not self.update_view._is_updating
-            ):
+            if self.update_view._freshclam_available and not self.update_view._is_updating:
                 self.update_view._start_update()
 
     def _on_statistics_quick_scan(self):
@@ -778,16 +810,11 @@ class ClamUIApp(Adw.Application):
             self._current_view = "update"
 
             # Start the update if freshclam is available
-            if (
-                self.update_view._freshclam_available
-                and not self.update_view._is_updating
-            ):
+            if self.update_view._freshclam_available and not self.update_view._is_updating:
                 self.update_view._start_update()
                 logger.info("Database update started from tray menu")
             else:
-                logger.info(
-                    "Database update view opened from tray menu (update not started)"
-                )
+                logger.info("Database update view opened from tray menu (update not started)")
 
         return False  # Don't repeat
 
@@ -893,9 +920,7 @@ class ClamUIApp(Adw.Application):
                 if result.has_threats:
                     # Threats detected - show alert/threat status
                     self._tray_indicator.update_status("threat")
-                    logger.debug(
-                        f"Tray updated to threat state ({result.infected_count} threats)"
-                    )
+                    logger.debug(f"Tray updated to threat state ({result.infected_count} threats)")
                 elif result.is_clean:
                     # No threats - show protected status
                     self._tray_indicator.update_status("protected")
@@ -903,9 +928,7 @@ class ClamUIApp(Adw.Application):
                 else:
                     # Error or cancelled - show warning status
                     self._tray_indicator.update_status("warning")
-                    logger.debug(
-                        f"Tray updated to warning state (status: {result.status.value})"
-                    )
+                    logger.debug(f"Tray updated to warning state (status: {result.status.value})")
             else:
                 # No result provided, default to protected
                 self._tray_indicator.update_status("protected")
@@ -927,10 +950,7 @@ class ClamUIApp(Adw.Application):
         if self._scan_view is not None:
             try:
                 # Cancel any ongoing scan
-                if (
-                    hasattr(self._scan_view, "_scanner")
-                    and self._scan_view._scanner is not None
-                ):
+                if hasattr(self._scan_view, "_scanner") and self._scan_view._scanner is not None:
                     self._scan_view._scanner.cancel()
                     logger.debug("Active scan cancelled during shutdown")
             except Exception as e:
@@ -987,9 +1007,7 @@ class ClamUIApp(Adw.Application):
 
     # Initial scan path handling (from CLI / context menu)
 
-    def set_initial_scan_paths(
-        self, file_paths: list[str], use_virustotal: bool = False
-    ) -> None:
+    def set_initial_scan_paths(self, file_paths: list[str], use_virustotal: bool = False) -> None:
         """
         Set initial file paths to scan on activation.
 
@@ -1002,9 +1020,7 @@ class ClamUIApp(Adw.Application):
         """
         self._initial_scan_paths = file_paths
         self._initial_use_virustotal = use_virustotal
-        logger.info(
-            f"Set {len(file_paths)} initial scan path(s) (virustotal={use_virustotal})"
-        )
+        logger.info(f"Set {len(file_paths)} initial scan path(s) (virustotal={use_virustotal})")
 
     def _process_initial_scan_paths(self) -> None:
         """
@@ -1056,9 +1072,7 @@ class ClamUIApp(Adw.Application):
             self._trigger_virustotal_scan(file_path, api_key)
         else:
             # No API key - check remembered action
-            action = self._settings_manager.get(
-                "virustotal_remember_no_key_action", "none"
-            )
+            action = self._settings_manager.get("virustotal_remember_no_key_action", "none")
 
             if action == "open_website":
                 # Open VirusTotal website directly

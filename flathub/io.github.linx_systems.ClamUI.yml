@@ -33,9 +33,19 @@ finish-args:
   # GVFS for file browser integration
   - --filesystem=xdg-run/gvfsd
 
+  # Full filesystem access for antivirus scanning (matches ClamTk)
+  # Required for file manager integration to scan arbitrary user files
+  - --filesystem=host
+
   # Systemd user timers for scheduled scans
   # Allows writing timer/service files to host's ~/.config/systemd/user/
   - --filesystem=~/.config/systemd/user:create
+
+  # File manager integration directories
+  # Allows installing context menu actions to user's local share directories
+  - --filesystem=~/.local/share/nemo/actions:create
+  - --filesystem=~/.local/share/nautilus/scripts:create
+  - --filesystem=~/.local/share/kservices5/ServiceMenus:create
 
   # Allow flatpak-spawn --host for executing systemctl on the host
   - --talk-name=org.freedesktop.Flatpak
@@ -130,6 +140,11 @@ modules:
       - install -Dm644 io.github.linx_systems.ClamUI.metainfo.xml /app/share/metainfo/io.github.linx_systems.ClamUI.metainfo.xml
       - install -Dm644 icons/io.github.linx_systems.ClamUI.svg /app/share/icons/hicolor/scalable/apps/io.github.linx_systems.ClamUI.svg
       - install -Dm644 icons/io.github.linx_systems.ClamUI.png /app/share/icons/hicolor/128x128/apps/io.github.linx_systems.ClamUI.png
+      # File manager integration files (bundled for first-run installation)
+      - install -Dm644 flathub/integrations/io.github.linx_systems.ClamUI.nemo_action /app/share/clamui/integrations/io.github.linx_systems.ClamUI.nemo_action
+      - install -Dm644 flathub/integrations/io.github.linx_systems.ClamUI-virustotal.nemo_action /app/share/clamui/integrations/io.github.linx_systems.ClamUI-virustotal.nemo_action
+      - install -Dm644 flathub/integrations/io.github.linx_systems.ClamUI-virustotal.desktop /app/share/clamui/integrations/io.github.linx_systems.ClamUI-virustotal.desktop
+      - install -Dm755 flathub/integrations/clamui-virustotal-nautilus.sh /app/share/clamui/integrations/clamui-virustotal-nautilus.sh
     sources:
       - type: git
         url: https://github.com/linx-systems/clamui.git

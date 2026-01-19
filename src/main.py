@@ -146,29 +146,22 @@ def main():
     """
     Application entry point.
 
-    Parses CLI file arguments and creates a ClamUIApp instance.
-    When file paths are provided (e.g., from file manager context menu),
-    they will be queued for scanning when the application starts.
+    Creates a ClamUIApp instance and passes all arguments to it.
+    The app's do_command_line() method handles argument parsing,
+    enabling file manager integration to work even when ClamUI
+    is already running (arguments are forwarded via D-Bus IPC).
 
     Returns:
         int: Exit code from the application (0 for success).
     """
-    # Parse file arguments and options from CLI (e.g., from context menu %F)
-    file_paths, use_virustotal, gtk_args = parse_arguments(sys.argv)
-
     # Create application instance
     app = ClamUIApp()
 
-    # Store file paths for processing after activation
-    # The app's do_activate() will handle these paths
-    if file_paths:
-        # Pass file paths to the app if the method is available
-        if hasattr(app, "set_initial_scan_paths"):
-            app.set_initial_scan_paths(file_paths, use_virustotal=use_virustotal)
-
-    # Pass only program name + unknown args (GTK-specific) to app.run()
-    # Our custom args (--virustotal, file paths) have already been processed
-    return app.run([sys.argv[0]] + gtk_args)
+    # Pass all arguments to app.run() - do_command_line() will process them
+    # This enables single-instance behavior: when ClamUI is already running,
+    # arguments from file manager context menu are forwarded to the running
+    # instance via D-Bus, allowing it to start a new scan.
+    return app.run(sys.argv)
 
 
 if __name__ == "__main__":

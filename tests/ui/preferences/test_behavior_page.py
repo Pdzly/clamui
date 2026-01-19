@@ -153,7 +153,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock ComboRow
         mock_row = MagicMock()
@@ -172,7 +174,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock ComboRow
         mock_row = MagicMock()
@@ -191,7 +195,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock ComboRow
         mock_row = MagicMock()
@@ -210,7 +216,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock ComboRow
         mock_row = MagicMock()
@@ -228,7 +236,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock row that returns selected index 0 (minimize)
         mock_row = MagicMock()
@@ -245,7 +255,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock row that returns selected index 1 (quit)
         mock_row = MagicMock()
@@ -262,7 +274,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock row that returns selected index 2 (ask)
         mock_row = MagicMock()
@@ -293,7 +307,9 @@ class TestBehaviorPageCloseBehaviorOption:
 
         from src.ui.preferences.behavior_page import BehaviorPage
 
-        page_instance = BehaviorPage(settings_manager=settings_manager, tray_available=True)
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager, tray_available=True
+        )
 
         # Create mock row with out-of-range index
         mock_row = MagicMock()
@@ -302,4 +318,167 @@ class TestBehaviorPageCloseBehaviorOption:
         # Should not raise exception and should not save
         page_instance._on_close_behavior_changed(mock_row, None)
         settings_manager.set.assert_not_called()
+        _clear_src_modules()
+
+
+class TestBehaviorPageParentWindow:
+    """Test parent_window parameter functionality."""
+
+    def test_init_with_parent_window(self, mock_gi_modules):
+        """Test initialization with parent window."""
+        settings_manager = MagicMock()
+        parent_window = MagicMock()
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page = BehaviorPage(
+            settings_manager=settings_manager,
+            tray_available=True,
+            parent_window=parent_window,
+        )
+
+        assert page._parent_window is parent_window
+        _clear_src_modules()
+
+    def test_init_without_parent_window(self, mock_gi_modules):
+        """Test initialization without parent window defaults to None."""
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page = BehaviorPage()
+
+        assert page._parent_window is None
+        _clear_src_modules()
+
+
+class TestBehaviorPageFileManagerIntegration:
+    """Test file manager integration group functionality."""
+
+    def test_create_page_adds_file_manager_group_in_flatpak(
+        self, mock_gi_modules, monkeypatch
+    ):
+        """Test that file manager group is added when running in Flatpak."""
+        adw = mock_gi_modules["adw"]
+        mock_page = MagicMock()
+        mock_group = MagicMock()
+        adw.PreferencesPage.return_value = mock_page
+        adw.PreferencesGroup.return_value = mock_group
+
+        # Mock is_flatpak to return True
+        import src.ui.preferences.behavior_page as behavior_module
+
+        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: True)
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page_instance = BehaviorPage(tray_available=True)
+        page_instance.create_page()
+
+        # Should add two groups: window behavior + file manager integration
+        assert mock_page.add.call_count == 2
+        _clear_src_modules()
+
+    def test_create_page_no_file_manager_group_when_not_flatpak(
+        self, mock_gi_modules, monkeypatch
+    ):
+        """Test that file manager group is NOT added when not in Flatpak."""
+        adw = mock_gi_modules["adw"]
+        mock_page = MagicMock()
+        mock_group = MagicMock()
+        adw.PreferencesPage.return_value = mock_page
+        adw.PreferencesGroup.return_value = mock_group
+
+        # Mock is_flatpak to return False
+        import src.ui.preferences.behavior_page as behavior_module
+
+        monkeypatch.setattr(behavior_module, "is_flatpak", lambda: False)
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page_instance = BehaviorPage(tray_available=True)
+        page_instance.create_page()
+
+        # Should only add one group: window behavior (no file manager group)
+        assert mock_page.add.call_count == 1
+        _clear_src_modules()
+
+    def test_create_file_manager_group_returns_group(self, mock_gi_modules):
+        """Test that _create_file_manager_group returns a PreferencesGroup."""
+        adw = mock_gi_modules["adw"]
+        gtk = mock_gi_modules["gtk"]
+        mock_group = MagicMock()
+        mock_row = MagicMock()
+        mock_icon = MagicMock()
+        adw.PreferencesGroup.return_value = mock_group
+        adw.ActionRow.return_value = mock_row
+        gtk.Image.new_from_icon_name.return_value = mock_icon
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page_instance = BehaviorPage()
+        result = page_instance._create_file_manager_group()
+
+        assert result is mock_group
+        mock_group.set_title.assert_called_with("File Manager Integration")
+        _clear_src_modules()
+
+    def test_create_file_manager_group_creates_action_row(self, mock_gi_modules):
+        """Test that _create_file_manager_group creates an activatable ActionRow."""
+        adw = mock_gi_modules["adw"]
+        gtk = mock_gi_modules["gtk"]
+        mock_group = MagicMock()
+        mock_row = MagicMock()
+        mock_icon = MagicMock()
+        adw.PreferencesGroup.return_value = mock_group
+        adw.ActionRow.return_value = mock_row
+        gtk.Image.new_from_icon_name.return_value = mock_icon
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page_instance = BehaviorPage()
+        page_instance._create_file_manager_group()
+
+        # Verify ActionRow was configured correctly
+        mock_row.set_title.assert_called_with("Configure Integration")
+        mock_row.set_subtitle.assert_called_with(
+            "Install or manage 'Scan with ClamUI' menu actions"
+        )
+        mock_row.set_activatable.assert_called_with(True)
+        mock_row.connect.assert_called()
+        mock_group.add.assert_called_with(mock_row)
+        _clear_src_modules()
+
+    def test_file_manager_integration_click_opens_dialog(
+        self, mock_gi_modules, monkeypatch
+    ):
+        """Test that clicking the row opens FileManagerIntegrationDialog."""
+        settings_manager = MagicMock()
+        parent_window = MagicMock()
+
+        # Mock the dialog class in the dialog module
+        mock_dialog_class = MagicMock()
+        mock_dialog_instance = MagicMock()
+        mock_dialog_class.return_value = mock_dialog_instance
+
+        import src.ui.file_manager_integration_dialog as dialog_module
+
+        monkeypatch.setattr(
+            dialog_module, "FileManagerIntegrationDialog", mock_dialog_class
+        )
+
+        from src.ui.preferences.behavior_page import BehaviorPage
+
+        page_instance = BehaviorPage(
+            settings_manager=settings_manager,
+            tray_available=True,
+            parent_window=parent_window,
+        )
+
+        # Call the click handler
+        page_instance._on_file_manager_integration_clicked(MagicMock())
+
+        # Verify dialog was created with correct arguments
+        mock_dialog_class.assert_called_once_with(
+            settings_manager=settings_manager,
+        )
+        mock_dialog_instance.present.assert_called_once_with(parent_window)
         _clear_src_modules()

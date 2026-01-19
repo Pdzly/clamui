@@ -12,6 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ...core.flatpak import is_flatpak
 from .base import PreferencesPageMixin
 
 
@@ -24,6 +25,7 @@ class BehaviorPage(PreferencesPageMixin):
 
     The page includes:
     - Close behavior setting (minimize to tray, quit, or always ask)
+    - File manager integration (Flatpak only)
     - All settings are auto-saved when modified
 
     Note: This page is only shown when a system tray is available.
@@ -33,16 +35,23 @@ class BehaviorPage(PreferencesPageMixin):
     CLOSE_BEHAVIOR_OPTIONS = ["minimize", "quit", "ask"]
     CLOSE_BEHAVIOR_LABELS = ["Minimize to tray", "Quit completely", "Always ask"]
 
-    def __init__(self, settings_manager=None, tray_available: bool = False):
+    def __init__(
+        self,
+        settings_manager=None,
+        tray_available: bool = False,
+        parent_window=None,
+    ):
         """
         Initialize the BehaviorPage.
 
         Args:
             settings_manager: Optional SettingsManager instance for storing settings
             tray_available: Whether the system tray is available
+            parent_window: Parent window for presenting dialogs
         """
         self._settings_manager = settings_manager
         self._tray_available = tray_available
+        self._parent_window = parent_window
         self._close_behavior_row = None
         self._close_behavior_handler_id = None
 
@@ -72,6 +81,11 @@ class BehaviorPage(PreferencesPageMixin):
             )
             page.add(info_group)
 
+        # File Manager Integration group (only in Flatpak)
+        if is_flatpak():
+            file_manager_group = self._create_file_manager_group()
+            page.add(file_manager_group)
+
         return page
 
     def _create_window_behavior_group(self) -> Adw.PreferencesGroup:
@@ -88,7 +102,9 @@ class BehaviorPage(PreferencesPageMixin):
         # Close behavior combo row
         self._close_behavior_row = Adw.ComboRow()
         self._close_behavior_row.set_title("When closing window")
-        self._close_behavior_row.set_subtitle("Choose what happens when you close the main window")
+        self._close_behavior_row.set_subtitle(
+            "Choose what happens when you close the main window"
+        )
 
         # Create string list model for options
         model = Gtk.StringList()
@@ -107,6 +123,47 @@ class BehaviorPage(PreferencesPageMixin):
         group.add(self._close_behavior_row)
 
         return group
+
+    def _create_file_manager_group(self) -> Adw.PreferencesGroup:
+        """
+        Create the File Manager Integration preferences group.
+
+        Returns:
+            Configured Adw.PreferencesGroup for file manager integration settings
+        """
+        group = Adw.PreferencesGroup()
+        group.set_title("File Manager Integration")
+        group.set_description(
+            "Add context menu actions to scan files directly from your file manager"
+        )
+
+        row = Adw.ActionRow()
+        row.set_title("Configure Integration")
+        row.set_subtitle("Install or manage 'Scan with ClamUI' menu actions")
+        row.set_activatable(True)
+        row.connect("activated", self._on_file_manager_integration_clicked)
+
+        # Icon prefix
+        icon = Gtk.Image.new_from_icon_name("system-file-manager-symbolic")
+        icon.add_css_class("dim-label")
+        row.add_prefix(icon)
+
+        # Chevron suffix
+        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron.add_css_class("dim-label")
+        row.add_suffix(chevron)
+
+        group.add(row)
+        return group
+
+    def _on_file_manager_integration_clicked(self, _row):
+        """Handle file manager integration row click."""
+        from ..file_manager_integration_dialog import FileManagerIntegrationDialog
+
+        dialog = FileManagerIntegrationDialog(
+            settings_manager=self._settings_manager,
+        )
+        dialog.present(self._parent_window)
 
     def _load_close_behavior(self):
         """Load the current close behavior setting into the ComboRow."""

@@ -196,7 +196,7 @@ class UpdateView(Gtk.Box):
 
         if is_installed:
             self._freshclam_available = True
-            self._freshclam_status_icon.set_from_icon_name("emblem-ok-symbolic")
+            self._freshclam_status_icon.set_from_icon_name("object-select-symbolic")
             self._freshclam_status_icon.add_css_class("success")
             self._freshclam_status_label.set_text(f"freshclam: {version_or_error}")
 

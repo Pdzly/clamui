@@ -27,8 +27,13 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
 
 # Check GTK version for FileDialog support (added in GTK 4.10)
-_GTK_MINOR_VERSION = Gtk.get_minor_version()
-_HAS_FILE_DIALOG = _GTK_MINOR_VERSION >= 10
+# Handle edge cases where version detection fails (e.g., during testing with mocks)
+try:
+    _GTK_MINOR_VERSION = Gtk.get_minor_version()
+    _HAS_FILE_DIALOG = _GTK_MINOR_VERSION >= 10
+except (TypeError, AttributeError):
+    # Fallback to older API if version detection fails
+    _HAS_FILE_DIALOG = False
 
 
 @dataclass
@@ -150,7 +155,9 @@ class FileExportHelper:
 
         dialog.save(window, None, self._on_file_dialog_selected)
 
-    def _on_file_dialog_selected(self, dialog: "Gtk.FileDialog", result: Gio.AsyncResult) -> None:
+    def _on_file_dialog_selected(
+        self, dialog: "Gtk.FileDialog", result: Gio.AsyncResult
+    ) -> None:
         """Handle FileDialog (GTK 4.10+) result."""
         try:
             file = dialog.save_finish(result)
@@ -181,7 +188,9 @@ class FileExportHelper:
         dialog.connect("response", self._on_file_chooser_response)
         dialog.show()
 
-    def _on_file_chooser_response(self, dialog: Gtk.FileChooserNative, response: int) -> None:
+    def _on_file_chooser_response(
+        self, dialog: Gtk.FileChooserNative, response: int
+    ) -> None:
         """Handle FileChooserNative (GTK < 4.10) response."""
         if response == Gtk.ResponseType.ACCEPT:
             file = dialog.get_file()
@@ -229,7 +238,9 @@ class FileExportHelper:
             self._show_toast(message)
 
         except PermissionError:
-            self._show_toast("Permission denied - cannot write to selected location", is_error=True)
+            self._show_toast(
+                "Permission denied - cannot write to selected location", is_error=True
+            )
         except OSError as e:
             self._show_toast(f"Error writing file: {str(e)}", is_error=True)
 
@@ -258,4 +269,6 @@ class FileExportHelper:
 # Pre-defined file filters for common export formats
 TEXT_FILTER = FileFilter(name="Text Files", extension="txt", mime_type="text/plain")
 CSV_FILTER = FileFilter(name="CSV Files", extension="csv", mime_type="text/csv")
-JSON_FILTER = FileFilter(name="JSON Files", extension="json", mime_type="application/json")
+JSON_FILTER = FileFilter(
+    name="JSON Files", extension="json", mime_type="application/json"
+)

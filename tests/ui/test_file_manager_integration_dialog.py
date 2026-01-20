@@ -145,7 +145,7 @@ class TestFileManagerIntegrationDialog:
         dialog = FileManagerIntegrationDialog()
 
         icon = dialog._get_file_manager_icon(FileManager.NEMO)
-        assert icon == "system-file-manager-symbolic"
+        assert icon == "folder-symbolic"
 
     def test_get_file_manager_icon_nautilus(self, mock_gi_modules):
         """Test returns correct icon for Nautilus."""
@@ -155,7 +155,7 @@ class TestFileManagerIntegrationDialog:
         dialog = FileManagerIntegrationDialog()
 
         icon = dialog._get_file_manager_icon(FileManager.NAUTILUS)
-        assert icon == "org.gnome.Nautilus-symbolic"
+        assert icon == "folder-symbolic"
 
     def test_get_file_manager_icon_dolphin(self, mock_gi_modules):
         """Test returns correct icon for Dolphin."""
@@ -165,7 +165,7 @@ class TestFileManagerIntegrationDialog:
         dialog = FileManagerIntegrationDialog()
 
         icon = dialog._get_file_manager_icon(FileManager.DOLPHIN)
-        assert icon == "system-file-manager-symbolic"
+        assert icon == "folder-symbolic"
 
     def test_on_complete_callback_called(self, mock_gi_modules):
         """Test on_complete callback is called after dialog closes."""

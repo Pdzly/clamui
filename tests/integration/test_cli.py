@@ -64,6 +64,9 @@ def parse_file_arguments(request):
     mock_gi_repository.Adw.PreferencesWindow = MockAdwPreferencesWindow
     mock_gi_repository.Gtk.Widget = MockGtkWidget
     mock_gi_repository.Gtk.Box = MockGtkWidget
+    # GTK version functions (needed for file_export.py GTK version check)
+    mock_gi_repository.Gtk.get_minor_version = mock.MagicMock(return_value=14)
+    mock_gi_repository.Gtk.get_major_version = mock.MagicMock(return_value=4)
 
     # Mock the matplotlib GTK backend
     mock_backend = mock.MagicMock()
@@ -255,7 +258,9 @@ class TestNonExistentPaths:
 class TestSymlinks:
     """Tests for handling symbolic links."""
 
-    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
+    @pytest.mark.skipif(
+        os.name == "nt", reason="Symlinks require special permissions on Windows"
+    )
     def test_symlink_to_file(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a file."""
         target_file = tmp_path / "target.txt"
@@ -270,7 +275,9 @@ class TestSymlinks:
         # Verify symlink exists
         assert os.path.exists(result[0])
 
-    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
+    @pytest.mark.skipif(
+        os.name == "nt", reason="Symlinks require special permissions on Windows"
+    )
     def test_symlink_to_directory(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with symlink to a directory."""
         target_dir = tmp_path / "target_dir"
@@ -285,7 +292,9 @@ class TestSymlinks:
         # Verify symlink exists and points to directory
         assert os.path.isdir(result[0])
 
-    @pytest.mark.skipif(os.name == "nt", reason="Symlinks require special permissions on Windows")
+    @pytest.mark.skipif(
+        os.name == "nt", reason="Symlinks require special permissions on Windows"
+    )
     def test_broken_symlink(self, parse_file_arguments, tmp_path):
         """Test parse_file_arguments with broken symlink."""
         target = tmp_path / "target_that_will_be_deleted.txt"

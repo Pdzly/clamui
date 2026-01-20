@@ -239,9 +239,7 @@ def mock_gi_modules():
     mock_adw.SwitchRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.EntryRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.SpinRow = MagicMock()
-    mock_adw.SpinRow.new_with_range = MagicMock(
-        side_effect=lambda *args, **kwargs: MagicMock()
-    )
+    mock_adw.SpinRow.new_with_range = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     # Container widgets - tests may set return_value to control what's returned
     mock_adw.PreferencesGroup = MagicMock()
     mock_adw.PreferencesPage = MagicMock()
@@ -253,6 +251,11 @@ def mock_gi_modules():
     mock_gtk.Image.new_from_icon_name = MagicMock()
     mock_gtk.StringList = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_gtk.Adjustment = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
+
+    # GTK version functions - return realistic values (GTK 4.14 for FileDialog support)
+    mock_gtk.get_minor_version = MagicMock(return_value=14)
+    mock_gtk.get_major_version = MagicMock(return_value=4)
+    mock_gtk.get_micro_version = MagicMock(return_value=0)
 
     # Build gi module structure
     mock_gi_module = MagicMock()

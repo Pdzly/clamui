@@ -4,6 +4,10 @@
 The tray system uses TrayManager to spawn tray_service.py as a subprocess.
 The tray_service.py implements the StatusNotifierItem D-Bus protocol and
 communicates with the main app via JSON over stdin/stdout.
+
+IMPORTANT: This module does NOT use module-level mocking to avoid test pollution.
+All GTK mocking is done inside pytest fixtures that properly save and restore
+sys.modules state.
 """
 
 import sys
@@ -11,38 +15,113 @@ from unittest import mock
 
 import pytest
 
-# Mock GLib before importing TrayManager to ensure GLib.idle_add runs callbacks immediately
-_mock_gi = mock.MagicMock()
-_mock_glib = mock.MagicMock()
-_mock_glib.idle_add = mock.MagicMock(side_effect=lambda func, *args: func(*args))
 
-_mock_repo = mock.MagicMock()
-_mock_repo.GLib = _mock_glib
+@pytest.fixture
+def tray_manager_with_mocks():
+    """
+    Fixture that properly mocks GTK/GLib and imports TrayManager.
 
-# Install mocks before any imports happen
-sys.modules["gi"] = _mock_gi
-sys.modules["gi.repository"] = _mock_repo
-_mock_gi.require_version = mock.MagicMock()
+    This fixture:
+    1. Saves the current state of sys.modules for GTK-related modules
+    2. Installs mocks for gi, gi.repository, GLib, Gtk
+    3. Imports TrayManager with the mocked environment
+    4. Yields TrayManager class for tests
+    5. Restores sys.modules to original state on cleanup
 
-# Now import TrayManager (it will use the mocked GLib)
-from src.ui.tray_manager import TrayManager
+    This prevents test pollution by ensuring mocks don't leak to other tests.
+    """
+    # Save original module state
+    modules_to_mock = [
+        "gi",
+        "gi.repository",
+        "gi.repository.Gtk",
+        "gi.repository.GLib",
+        "gi.repository.Adw",
+        "gi.repository.Gio",
+    ]
+    original_modules = {mod: sys.modules.get(mod) for mod in modules_to_mock}
+
+    # Also save any src.ui modules that may have been imported
+    src_modules_to_clear = [mod for mod in sys.modules if mod.startswith("src.ui")]
+    original_src_modules = {mod: sys.modules.get(mod) for mod in src_modules_to_clear}
+
+    # Clear src.ui modules so they reimport with our mocks
+    for mod in src_modules_to_clear:
+        del sys.modules[mod]
+
+    # Create mocks
+    mock_gi = mock.MagicMock()
+    mock_glib = mock.MagicMock()
+    mock_glib.idle_add = mock.MagicMock(side_effect=lambda func, *args: func(*args))
+
+    mock_gtk = mock.MagicMock()
+    mock_gtk.get_minor_version = mock.MagicMock(return_value=14)
+    mock_gtk.get_major_version = mock.MagicMock(return_value=4)
+
+    mock_adw = mock.MagicMock()
+    mock_gio = mock.MagicMock()
+
+    mock_repo = mock.MagicMock()
+    mock_repo.GLib = mock_glib
+    mock_repo.Gtk = mock_gtk
+    mock_repo.Adw = mock_adw
+    mock_repo.Gio = mock_gio
+
+    mock_gi.require_version = mock.MagicMock()
+
+    # Install mocks
+    sys.modules["gi"] = mock_gi
+    sys.modules["gi.repository"] = mock_repo
+    sys.modules["gi.repository.Gtk"] = mock_gtk
+    sys.modules["gi.repository.GLib"] = mock_glib
+    sys.modules["gi.repository.Adw"] = mock_adw
+    sys.modules["gi.repository.Gio"] = mock_gio
+
+    # Import TrayManager with mocked environment
+    from src.ui.tray_manager import TrayManager
+
+    # Yield the class for tests
+    yield TrayManager
+
+    # Cleanup: remove src.ui modules that were imported with mocks
+    src_modules_to_remove = [mod for mod in sys.modules if mod.startswith("src.ui")]
+    for mod in src_modules_to_remove:
+        if mod in sys.modules:
+            del sys.modules[mod]
+
+    # Restore original src.ui modules
+    for mod, original in original_src_modules.items():
+        if original is not None:
+            sys.modules[mod] = original
+
+    # Restore original gi modules
+    for mod, original in original_modules.items():
+        if original is not None:
+            sys.modules[mod] = original
+        elif mod in sys.modules:
+            del sys.modules[mod]
 
 
-@pytest.fixture(autouse=True)
-def mock_gtk_modules(monkeypatch):
-    """Ensure mocks stay in place for all tests."""
-    monkeypatch.setitem(sys.modules, "gi", _mock_gi)
-    monkeypatch.setitem(sys.modules, "gi.repository", _mock_repo)
-    _mock_gi.require_version = mock.MagicMock()
-    yield
+@pytest.fixture
+def tray_indicator_with_mocks(tray_manager_with_mocks):
+    """
+    Fixture that provides tray_indicator module with mocked GTK.
+
+    Depends on tray_manager_with_mocks to ensure proper mock setup.
+    """
+    # The fixture parameter is used for its side effects (installing mocks)
+    _ = tray_manager_with_mocks  # Suppress unused warning
+    from src.ui import tray_indicator
+
+    return tray_indicator
 
 
 class TestTrayMenuActionsIntegration:
     """Integration tests for tray menu actions triggering app operations."""
 
-    def test_quick_scan_action_triggers_callback(self, mock_gtk_modules):
+    def test_quick_scan_action_triggers_callback(self, tray_manager_with_mocks):
         """Test that Quick Scan tray action triggers the callback."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         scan_started = []
@@ -55,9 +134,9 @@ class TestTrayMenuActionsIntegration:
 
         assert "quick_scan" in scan_started
 
-    def test_full_scan_action_triggers_callback(self, mock_gtk_modules):
+    def test_full_scan_action_triggers_callback(self, tray_manager_with_mocks):
         """Test that Full Scan tray action triggers the callback."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         folder_selection_opened = []
@@ -70,9 +149,9 @@ class TestTrayMenuActionsIntegration:
 
         assert "full_scan" in folder_selection_opened
 
-    def test_update_action_triggers_callback(self, mock_gtk_modules):
+    def test_update_action_triggers_callback(self, tray_manager_with_mocks):
         """Test that Update Definitions action triggers the callback."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         update_triggered = []
@@ -85,9 +164,9 @@ class TestTrayMenuActionsIntegration:
 
         assert "update" in update_triggered
 
-    def test_quit_action_triggers_callback(self, mock_gtk_modules):
+    def test_quit_action_triggers_callback(self, tray_manager_with_mocks):
         """Test that Quit action triggers the callback."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         quit_triggered = []
@@ -104,9 +183,9 @@ class TestTrayMenuActionsIntegration:
 class TestScanStateToTrayPropagation:
     """Integration tests for scan state changes updating tray status."""
 
-    def test_scan_start_updates_status(self, mock_gtk_modules):
+    def test_scan_start_updates_status(self, tray_manager_with_mocks):
         """Test that starting a scan updates tray to scanning state."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -115,9 +194,9 @@ class TestScanStateToTrayPropagation:
 
         assert manager.current_status == "scanning"
 
-    def test_scan_complete_clean_updates_status(self, mock_gtk_modules):
+    def test_scan_complete_clean_updates_status(self, tray_manager_with_mocks):
         """Test that clean scan result updates tray to protected state."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -127,9 +206,9 @@ class TestScanStateToTrayPropagation:
 
         assert manager.current_status == "protected"
 
-    def test_scan_complete_threats_updates_status(self, mock_gtk_modules):
+    def test_scan_complete_threats_updates_status(self, tray_manager_with_mocks):
         """Test that threat detection updates tray to threat state."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -139,9 +218,9 @@ class TestScanStateToTrayPropagation:
 
         assert manager.current_status == "threat"
 
-    def test_scan_error_updates_status(self, mock_gtk_modules):
+    def test_scan_error_updates_status(self, tray_manager_with_mocks):
         """Test that scan error updates tray to warning state."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -151,9 +230,9 @@ class TestScanStateToTrayPropagation:
 
         assert manager.current_status == "warning"
 
-    def test_scan_progress_sends_command(self, mock_gtk_modules):
+    def test_scan_progress_sends_command(self, tray_manager_with_mocks):
         """Test that scan progress sends command to subprocess."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()
@@ -164,9 +243,9 @@ class TestScanStateToTrayPropagation:
         mock_stdin.write.assert_called()
         mock_stdin.flush.assert_called()
 
-    def test_scan_complete_clears_progress(self, mock_gtk_modules):
+    def test_scan_complete_clears_progress(self, tray_manager_with_mocks):
         """Test that scan completion clears progress (percentage 0)."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()
@@ -180,9 +259,9 @@ class TestScanStateToTrayPropagation:
 class TestWindowToggleIntegration:
     """Integration tests for window toggle functionality."""
 
-    def test_window_toggle_callback_invoked(self, mock_gtk_modules):
+    def test_window_toggle_callback_invoked(self, tray_manager_with_mocks):
         """Test that window toggle callback is invoked on menu action."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         toggle_called = []
@@ -198,9 +277,9 @@ class TestWindowToggleIntegration:
 
         assert "toggled" in toggle_called
 
-    def test_window_menu_label_sends_command(self, mock_gtk_modules):
+    def test_window_menu_label_sends_command(self, tray_manager_with_mocks):
         """Test that window menu label update sends command."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()
@@ -210,9 +289,9 @@ class TestWindowToggleIntegration:
 
         mock_stdin.write.assert_called()
 
-    def test_window_toggle_syncs_label(self, mock_gtk_modules):
+    def test_window_toggle_syncs_label(self, tray_manager_with_mocks):
         """Test that toggling window sends visibility update."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()
@@ -238,17 +317,17 @@ class TestWindowToggleIntegration:
 class TestMinimizeToTrayIntegration:
     """Integration tests for minimize-to-tray functionality."""
 
-    def test_tray_availability_check(self, mock_gtk_modules):
+    def test_tray_availability_check(self, tray_indicator_with_mocks):
         """Test tray availability check."""
-        from src.ui import tray_indicator
+        tray_indicator = tray_indicator_with_mocks
 
         # Tray is always available with D-Bus SNI
         assert tray_indicator.is_available() is True
         assert tray_indicator.get_unavailable_reason() is None
 
-    def test_minimize_triggers_toggle_callback(self, mock_gtk_modules):
+    def test_minimize_triggers_toggle_callback(self, tray_manager_with_mocks):
         """Test that minimizing to tray triggers toggle callback."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         window_hidden = []
@@ -270,9 +349,9 @@ class TestMinimizeToTrayIntegration:
         # Verify window was hidden
         assert "hidden" in window_hidden
 
-    def test_restore_from_tray_triggers_toggle(self, mock_gtk_modules):
+    def test_restore_from_tray_triggers_toggle(self, tray_manager_with_mocks):
         """Test that clicking tray when minimized triggers toggle."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         # Start with window hidden
@@ -299,9 +378,9 @@ class TestMinimizeToTrayIntegration:
 class TestTrayCleanupIntegration:
     """Integration tests for tray cleanup during app shutdown."""
 
-    def test_cleanup_clears_all_callbacks(self, mock_gtk_modules):
+    def test_cleanup_clears_all_callbacks(self, tray_manager_with_mocks):
         """Test that cleanup clears all registered callbacks."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         # Set up all callbacks
@@ -328,9 +407,9 @@ class TestTrayCleanupIntegration:
         assert manager._on_quit is None
         assert manager._on_window_toggle is None
 
-    def test_stop_sends_quit_command(self, mock_gtk_modules):
+    def test_stop_sends_quit_command(self, tray_manager_with_mocks):
         """Test that stop sends quit command to subprocess."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()
@@ -346,9 +425,9 @@ class TestTrayCleanupIntegration:
 class TestTrayAppCallbackChain:
     """Integration tests for callback chain between tray and app."""
 
-    def test_complete_scan_workflow_updates_status(self, mock_gtk_modules):
+    def test_complete_scan_workflow_updates_status(self, tray_manager_with_mocks):
         """Test complete scan workflow: start -> progress -> complete -> status."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -375,9 +454,9 @@ class TestTrayAppCallbackChain:
         assert "scanning" in status_changes
         assert "protected" in status_changes
 
-    def test_multiple_callbacks_can_be_set_and_replaced(self, mock_gtk_modules):
+    def test_multiple_callbacks_can_be_set_and_replaced(self, tray_manager_with_mocks):
         """Test that callbacks can be set and replaced without issues."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         call_log = []
@@ -399,9 +478,9 @@ class TestTrayAppCallbackChain:
         # Verify both were called in order
         assert call_log == ["callback1", "callback2"]
 
-    def test_callbacks_work_independently(self, mock_gtk_modules):
+    def test_callbacks_work_independently(self, tray_manager_with_mocks):
         """Test that different callbacks work independently."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         actions = []
@@ -419,7 +498,10 @@ class TestTrayAppCallbackChain:
             actions.append("quit")
 
         manager.set_action_callbacks(
-            on_quick_scan=quick_scan, on_full_scan=full_scan, on_update=update, on_quit=quit_app
+            on_quick_scan=quick_scan,
+            on_full_scan=full_scan,
+            on_update=update,
+            on_quit=quit_app,
         )
 
         # Trigger each action
@@ -435,9 +517,9 @@ class TestTrayAppCallbackChain:
 class TestTrayStatusIntegration:
     """Integration tests for status updates."""
 
-    def test_status_transitions_are_tracked(self, mock_gtk_modules):
+    def test_status_transitions_are_tracked(self, tray_manager_with_mocks):
         """Test that status transitions are properly tracked."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -452,9 +534,9 @@ class TestTrayStatusIntegration:
             manager.update_status(state)
             assert manager.current_status == state
 
-    def test_invalid_status_still_tracked(self, mock_gtk_modules):
+    def test_invalid_status_still_tracked(self, tray_manager_with_mocks):
         """Test that invalid status is still tracked (validation in subprocess)."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         manager._process.stdin = mock.MagicMock()
@@ -467,9 +549,9 @@ class TestTrayStatusIntegration:
 class TestTrayLifecycle:
     """Integration tests for tray lifecycle with application."""
 
-    def test_manager_can_be_created_without_subprocess(self, mock_gtk_modules):
+    def test_manager_can_be_created_without_subprocess(self, tray_manager_with_mocks):
         """Test that TrayManager can be created before subprocess starts."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         # Should work without errors
@@ -477,9 +559,9 @@ class TestTrayLifecycle:
         assert manager.current_status == "protected"
         assert manager.is_active is False
 
-    def test_callbacks_can_be_set_before_subprocess(self, mock_gtk_modules):
+    def test_callbacks_can_be_set_before_subprocess(self, tray_manager_with_mocks):
         """Test that callbacks can be set before subprocess is started."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         # Set callbacks before start
@@ -490,9 +572,9 @@ class TestTrayLifecycle:
         assert manager._on_quick_scan is not None
         assert manager._on_window_toggle is not None
 
-    def test_cleanup_is_idempotent(self, mock_gtk_modules):
+    def test_cleanup_is_idempotent(self, tray_manager_with_mocks):
         """Test that cleanup can be called multiple times safely."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         # Set up some state
@@ -509,16 +591,16 @@ class TestTrayLifecycle:
 class TestTrayAvailability:
     """Integration tests for tray availability."""
 
-    def test_tray_module_availability(self, mock_gtk_modules):
+    def test_tray_module_availability(self, tray_indicator_with_mocks):
         """Test that tray module reports availability correctly."""
-        from src.ui import tray_indicator
+        tray_indicator = tray_indicator_with_mocks
 
         # D-Bus SNI is always available with GTK4/GIO
         assert tray_indicator.is_available() is True
 
-    def test_tray_unavailable_reason_is_none(self, mock_gtk_modules):
+    def test_tray_unavailable_reason_is_none(self, tray_indicator_with_mocks):
         """Test that unavailable reason is None when available."""
-        from src.ui import tray_indicator
+        tray_indicator = tray_indicator_with_mocks
 
         assert tray_indicator.get_unavailable_reason() is None
 
@@ -526,9 +608,9 @@ class TestTrayAvailability:
 class TestProfileSelectIntegration:
     """Integration tests for profile selection from tray."""
 
-    def test_profile_select_callback_invoked(self, mock_gtk_modules):
+    def test_profile_select_callback_invoked(self, tray_manager_with_mocks):
         """Test that profile select callback is invoked."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
 
         selected_profiles = []
@@ -543,9 +625,9 @@ class TestProfileSelectIntegration:
 
         assert "profile-123" in selected_profiles
 
-    def test_profiles_update_sends_command(self, mock_gtk_modules):
+    def test_profiles_update_sends_command(self, tray_manager_with_mocks):
         """Test that updating profiles sends command to subprocess."""
-
+        TrayManager = tray_manager_with_mocks
         manager = TrayManager()
         manager._process = mock.MagicMock()
         mock_stdin = mock.MagicMock()

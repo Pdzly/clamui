@@ -294,7 +294,7 @@ class TestFileExportHelperFileSelected:
             content_generator=lambda: "Test content here",
         )
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        helper._write_to_file(str(test_file))
 
         assert test_file.exists()
         assert test_file.read_text() == "Test content here"
@@ -326,7 +326,7 @@ class TestFileExportHelperFileSelected:
             content_generator=lambda: "CSV content",
         )
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        helper._write_to_file(str(test_file))
 
         # File should be created with .csv extension
         expected_file = tmp_path / "test.csv"
@@ -334,7 +334,7 @@ class TestFileExportHelperFileSelected:
         assert expected_file.read_text() == "CSV content"
 
     def test_file_selected_returns_on_cancel(self, file_export_class, mock_gi_modules):
-        """Test that cancelling the dialog does nothing."""
+        """Test that cancelling the dialog (returning None from save_finish) does nothing."""
         FileExportHelper = file_export_class["FileExportHelper"]
         FileFilter = file_export_class["FileFilter"]
 
@@ -354,25 +354,20 @@ class TestFileExportHelperFileSelected:
             content_generator=content_generator,
         )
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        # Test that _on_file_dialog_selected handles None result (cancel)
+        helper._on_file_dialog_selected(mock_dialog, mock.MagicMock())
 
-        # Content generator should not be called
+        # Content generator should not be called since dialog was cancelled
         content_generator.assert_not_called()
 
     def test_file_selected_handles_invalid_path(self, file_export_class, mock_gi_modules):
-        """Test handling of invalid file path."""
+        """Test handling of invalid file path (None)."""
         FileExportHelper = file_export_class["FileExportHelper"]
         FileFilter = file_export_class["FileFilter"]
 
         mock_parent = mock.MagicMock()
         mock_parent.get_root.return_value = mock.MagicMock()
         filter = FileFilter(name="Text", extension="txt")
-
-        mock_file = mock.MagicMock()
-        mock_file.get_path.return_value = None
-
-        mock_dialog = mock.MagicMock()
-        mock_dialog.save_finish.return_value = mock_file
 
         helper = FileExportHelper(
             parent_widget=mock_parent,
@@ -383,7 +378,8 @@ class TestFileExportHelperFileSelected:
         )
         helper._show_toast = mock.MagicMock()
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        # Call _write_to_file with None to simulate invalid path
+        helper._write_to_file(None)
 
         helper._show_toast.assert_called_once()
         assert "Invalid file path" in helper._show_toast.call_args[0][0]
@@ -414,7 +410,7 @@ class TestFileExportHelperFileSelected:
         )
         helper._show_toast = mock.MagicMock()
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        helper._write_to_file(str(test_file))
 
         helper._show_toast.assert_called_once()
         assert "test.txt" in helper._show_toast.call_args[0][0]
@@ -448,7 +444,7 @@ class TestFileExportHelperFileSelected:
         )
         helper._show_toast = mock.MagicMock()
 
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        helper._write_to_file(str(test_file))
 
         helper._show_toast.assert_called_once_with("Exported 5 items successfully!")
 
@@ -456,7 +452,7 @@ class TestFileExportHelperFileSelected:
 class TestFileExportHelperErrorHandling:
     """Tests for error handling in file export."""
 
-    def test_permission_error_shows_toast(self, file_export_class, mock_gi_modules, tmp_path):
+    def test_permission_error_shows_toast(self, file_export_class, mock_gi_modules):
         """Test that permission error shows appropriate toast."""
         FileExportHelper = file_export_class["FileExportHelper"]
         FileFilter = file_export_class["FileFilter"]
@@ -464,17 +460,6 @@ class TestFileExportHelperErrorHandling:
         mock_parent = mock.MagicMock()
         mock_parent.get_root.return_value = mock.MagicMock()
         filter = FileFilter(name="Text", extension="txt")
-
-        # Use a path that would require elevation
-        mock_file = mock.MagicMock()
-        mock_file.get_path.return_value = "/root/protected.txt"
-
-        mock_dialog = mock.MagicMock()
-        mock_dialog.save_finish.return_value = mock_file
-
-        # Need to patch GLib.Error to be an actual exception class for the except clause
-        real_glib_error = type("Error", (Exception,), {})
-        mock_gi_modules["glib"].Error = real_glib_error
 
         helper = FileExportHelper(
             parent_widget=mock_parent,
@@ -487,13 +472,13 @@ class TestFileExportHelperErrorHandling:
 
         # Mock open to raise PermissionError
         with mock.patch("builtins.open", side_effect=PermissionError()):
-            helper._on_file_selected(mock_dialog, mock.MagicMock())
+            helper._write_to_file("/root/protected.txt")
 
         helper._show_toast.assert_called_once()
         toast_msg = helper._show_toast.call_args[0][0]
         assert "Permission denied" in toast_msg
 
-    def test_os_error_shows_toast(self, file_export_class, mock_gi_modules, tmp_path):
+    def test_os_error_shows_toast(self, file_export_class, mock_gi_modules):
         """Test that OS error shows appropriate toast."""
         FileExportHelper = file_export_class["FileExportHelper"]
         FileFilter = file_export_class["FileFilter"]
@@ -501,16 +486,6 @@ class TestFileExportHelperErrorHandling:
         mock_parent = mock.MagicMock()
         mock_parent.get_root.return_value = mock.MagicMock()
         filter = FileFilter(name="Text", extension="txt")
-
-        mock_file = mock.MagicMock()
-        mock_file.get_path.return_value = "/some/path.txt"
-
-        mock_dialog = mock.MagicMock()
-        mock_dialog.save_finish.return_value = mock_file
-
-        # Need to patch GLib.Error to be an actual exception class for the except clause
-        real_glib_error = type("Error", (Exception,), {})
-        mock_gi_modules["glib"].Error = real_glib_error
 
         helper = FileExportHelper(
             parent_widget=mock_parent,
@@ -523,7 +498,7 @@ class TestFileExportHelperErrorHandling:
 
         # Mock open to raise OSError
         with mock.patch("builtins.open", side_effect=OSError("Disk full")):
-            helper._on_file_selected(mock_dialog, mock.MagicMock())
+            helper._write_to_file("/some/path.txt")
 
         helper._show_toast.assert_called_once()
         toast_msg = helper._show_toast.call_args[0][0]
@@ -552,10 +527,10 @@ class TestFileExportHelperErrorHandling:
         )
         helper._show_toast = mock.MagicMock()
 
-        # Should not raise
-        helper._on_file_selected(mock_dialog, mock.MagicMock())
+        # Should not raise - GLib.Error is caught in _on_file_dialog_selected
+        helper._on_file_dialog_selected(mock_dialog, mock.MagicMock())
 
-        # Toast should not be shown for GLib.Error
+        # Toast should not be shown for GLib.Error (user cancelled)
         helper._show_toast.assert_not_called()
 
 

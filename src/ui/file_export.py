@@ -10,6 +10,10 @@ Provides a generic export workflow that handles:
 
 This eliminates duplication across export operations for different formats
 (text, CSV, JSON, etc.) by extracting the common dialog/callback pattern.
+
+Supports GTK 4.6+ with automatic fallback:
+- GTK 4.10+: Uses modern Gtk.FileDialog API
+- GTK 4.6-4.9: Falls back to Gtk.FileChooserNative
 """
 
 from collections.abc import Callable
@@ -21,6 +25,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
+
+# Check GTK version for FileDialog support (added in GTK 4.10)
+_GTK_MINOR_VERSION = Gtk.get_minor_version()
+_HAS_FILE_DIALOG = _GTK_MINOR_VERSION >= 10
 
 
 @dataclass
@@ -94,22 +102,21 @@ class FileExportHelper:
         self._content_generator = content_generator
         self._success_message = success_message
         self._toast_manager = toast_manager
+        # For GTK < 4.10 fallback: prevent garbage collection of FileChooserNative
+        self._native_dialog: Gtk.FileChooserNative | None = None
 
     def show_save_dialog(self) -> None:
         """
         Open the file save dialog.
 
-        Creates a FileDialog with the configured title, filters, and default
-        filename, then opens it asynchronously. The callback will handle
-        file writing and notifications.
+        Creates a FileDialog (GTK 4.10+) or FileChooserNative (GTK 4.6-4.9)
+        with the configured title, filters, and default filename, then opens
+        it asynchronously. The callback will handle file writing and notifications.
         """
-        dialog = Gtk.FileDialog()
-        dialog.set_title(self._dialog_title)
-
         # Generate default filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         extension = self._file_filter.extension
-        dialog.set_initial_name(f"{self._filename_prefix}_{timestamp}.{extension}")
+        default_name = f"{self._filename_prefix}_{timestamp}.{extension}"
 
         # Set up file filter
         gtk_filter = Gtk.FileFilter()
@@ -118,38 +125,87 @@ class FileExportHelper:
             gtk_filter.add_mime_type(self._file_filter.mime_type)
         gtk_filter.add_pattern(f"*.{extension}")
 
+        # Get the parent window
+        window = self._parent_widget.get_root()
+
+        if _HAS_FILE_DIALOG:
+            # GTK 4.10+ path: Use modern FileDialog API
+            self._show_file_dialog(window, gtk_filter, default_name)
+        else:
+            # GTK 4.6-4.9 fallback: Use FileChooserNative
+            self._show_file_chooser_native(window, gtk_filter, default_name)
+
+    def _show_file_dialog(
+        self, window: Gtk.Window | None, gtk_filter: Gtk.FileFilter, default_name: str
+    ) -> None:
+        """Use GTK 4.10+ FileDialog API."""
+        dialog = Gtk.FileDialog()
+        dialog.set_title(self._dialog_title)
+        dialog.set_initial_name(default_name)
+
         filters = Gio.ListStore.new(Gtk.FileFilter)
         filters.append(gtk_filter)
         dialog.set_filters(filters)
         dialog.set_default_filter(gtk_filter)
 
-        # Get the parent window
-        window = self._parent_widget.get_root()
+        dialog.save(window, None, self._on_file_dialog_selected)
 
-        # Open save dialog
-        dialog.save(window, None, self._on_file_selected)
-
-    def _on_file_selected(self, dialog: Gtk.FileDialog, result: Gio.AsyncResult) -> None:
-        """
-        Handle file selection result.
-
-        Writes content to the selected file with proper error handling
-        and shows toast notifications.
-
-        Args:
-            dialog: The FileDialog that was used
-            result: The async result from the save dialog
-        """
+    def _on_file_dialog_selected(self, dialog: "Gtk.FileDialog", result: Gio.AsyncResult) -> None:
+        """Handle FileDialog (GTK 4.10+) result."""
         try:
             file = dialog.save_finish(result)
             if file is None:
                 return  # User cancelled
+            self._write_to_file(file.get_path())
+        except GLib.Error:
+            # User cancelled the dialog
+            pass
 
-            file_path = file.get_path()
-            if file_path is None:
-                self._show_toast("Invalid file path selected", is_error=True)
-                return
+    def _show_file_chooser_native(
+        self, window: Gtk.Window | None, gtk_filter: Gtk.FileFilter, default_name: str
+    ) -> None:
+        """Use GTK 4.0+ FileChooserNative API (fallback for GTK < 4.10)."""
+        dialog = Gtk.FileChooserNative.new(
+            self._dialog_title,
+            window,
+            Gtk.FileChooserAction.SAVE,
+            "_Save",
+            "_Cancel",
+        )
+        dialog.set_current_name(default_name)
+        dialog.add_filter(gtk_filter)
 
+        # Store reference to prevent garbage collection
+        self._native_dialog = dialog
+
+        dialog.connect("response", self._on_file_chooser_response)
+        dialog.show()
+
+    def _on_file_chooser_response(self, dialog: Gtk.FileChooserNative, response: int) -> None:
+        """Handle FileChooserNative (GTK < 4.10) response."""
+        if response == Gtk.ResponseType.ACCEPT:
+            file = dialog.get_file()
+            if file is not None:
+                self._write_to_file(file.get_path())
+
+        # Clean up reference
+        self._native_dialog = None
+
+    def _write_to_file(self, file_path: str | None) -> None:
+        """
+        Write content to the selected file.
+
+        Handles extension enforcement, content generation, file writing,
+        and toast notifications.
+
+        Args:
+            file_path: Path to write to, or None if invalid selection
+        """
+        if file_path is None:
+            self._show_toast("Invalid file path selected", is_error=True)
+            return
+
+        try:
             # Ensure correct extension
             extension = self._file_filter.extension
             if not file_path.endswith(f".{extension}"):
@@ -172,9 +228,6 @@ class FileExportHelper:
                 message = f"Exported to {filename}"
             self._show_toast(message)
 
-        except GLib.Error:
-            # User cancelled the dialog
-            pass
         except PermissionError:
             self._show_toast("Permission denied - cannot write to selected location", is_error=True)
         except OSError as e:

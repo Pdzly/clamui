@@ -7,7 +7,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, Gtk
 
 from ..core.updater import FreshclamUpdater, UpdateResult, UpdateStatus
 from ..core.utils import check_freshclam_installed
@@ -46,8 +46,8 @@ class UpdateView(Gtk.Box):
         # Set up the UI
         self._setup_ui()
 
-        # Check freshclam availability on load
-        GLib.idle_add(self._check_freshclam_status)
+        # Check freshclam availability on load (synchronous to avoid race conditions)
+        self._check_freshclam_status()
 
     def _setup_ui(self):
         """Set up the update view UI layout."""
@@ -74,12 +74,16 @@ class UpdateView(Gtk.Box):
         # Info frame
         info_group = Adw.PreferencesGroup()
         info_group.set_title("Database Update")
-        info_group.set_description("Update ClamAV virus definitions to detect the latest threats")
+        info_group.set_description(
+            "Update ClamAV virus definitions to detect the latest threats"
+        )
 
         # Info row explaining the update process
         info_row = Adw.ActionRow()
         info_row.set_title("Virus Definitions")
-        info_row.set_subtitle("Click 'Update Database' to download the latest virus signatures")
+        info_row.set_subtitle(
+            "Click 'Update Database' to download the latest virus signatures"
+        )
         add_row_icon(info_row, "software-update-available-symbolic")
 
         info_group.add(info_row)
@@ -116,7 +120,9 @@ class UpdateView(Gtk.Box):
             "from mirrors. Automatically restores from backup if update fails."
         )
         self._force_update_button.add_css_class("pill")
-        self._force_update_button.set_sensitive(False)  # Disabled until freshclam is verified
+        self._force_update_button.set_sensitive(
+            False
+        )  # Disabled until freshclam is verified
         self._force_update_button.connect("clicked", self._on_force_update_clicked)
 
         # Cancel button (hidden by default)
@@ -219,7 +225,9 @@ class UpdateView(Gtk.Box):
             self._freshclam_available = False
             self._freshclam_status_icon.set_from_icon_name("dialog-warning-symbolic")
             self._freshclam_status_icon.add_css_class("warning")
-            self._freshclam_status_label.set_text(version_or_error or "freshclam not found")
+            self._freshclam_status_label.set_text(
+                version_or_error or "freshclam not found"
+            )
 
             # Disable update buttons and show error banner
             self._update_button.set_sensitive(False)
@@ -331,7 +339,10 @@ class UpdateView(Gtk.Box):
         if root:
             app = root.get_application()
             if app and hasattr(app, "notification_manager"):
-                if result.status == UpdateStatus.SUCCESS and result.databases_updated > 0:
+                if (
+                    result.status == UpdateStatus.SUCCESS
+                    and result.databases_updated > 0
+                ):
                     app.notification_manager.notify_update_complete(
                         success=True, databases_updated=result.databases_updated
                     )
@@ -368,7 +379,9 @@ class UpdateView(Gtk.Box):
             self._status_banner.set_title("Update cancelled")
             set_status_class(self._status_banner, StatusLevel.WARNING)
         else:  # ERROR
-            self._status_banner.set_title(result.error_message or "Update error occurred")
+            self._status_banner.set_title(
+                result.error_message or "Update error occurred"
+            )
             set_status_class(self._status_banner, StatusLevel.ERROR)
 
         self._status_banner.set_revealed(True)

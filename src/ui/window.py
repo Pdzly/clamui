@@ -45,8 +45,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_title("ClamUI")
         self.set_default_size(800, 800)
         self.set_size_request(
-            400, 800
-        )  # Minimum size to keep ClamAV status bar and Profile section visible
+            400, 400
+        )  # Minimum size - height reduced to fix maximize button on Ubuntu
 
         # Set up minimize-to-tray handling
         self._setup_minimize_to_tray()

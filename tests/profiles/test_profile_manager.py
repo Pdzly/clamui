@@ -1089,6 +1089,7 @@ class TestProfileManagerPersistence:
         manager2 = ProfileManager(config_dir=temp_config_dir)
         loaded = manager2.get_profile(profile.id)
 
+        assert loaded is not None
         assert loaded.description == "Updated description"
 
     def test_deletes_persist_across_instances(self, temp_config_dir):

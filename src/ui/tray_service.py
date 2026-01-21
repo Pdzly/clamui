@@ -176,7 +176,7 @@ class TrayService:
         "threat": "NeedsAttention",
     }
 
-    DBUS_NAME = "org.kde.StatusNotifierItem-clamui-1"
+    DBUS_NAME = "io.github.linx_systems.ClamUI"
     SNI_PATH = "/StatusNotifierItem"
     MENU_PATH = "/MenuBar"
 

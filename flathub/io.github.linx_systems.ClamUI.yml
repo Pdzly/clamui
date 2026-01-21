@@ -25,7 +25,7 @@ finish-args:
   # StatusNotifierItem (SNI) system tray protocol
   # Allows the tray service to register on D-Bus and communicate with
   # desktop environment tray watchers (KDE, Cinnamon, MATE, XFCE, Budgie)
-  - --own-name=io.github.linx_systems.ClamUI
+  - --own-name=io.github.linx_systems.ClamUI.tray
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=org.x.StatusNotifierWatcher
   - --talk-name=org.freedesktop.StatusNotifierWatcher

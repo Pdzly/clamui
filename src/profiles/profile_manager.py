@@ -7,6 +7,7 @@ Centralizes all profile operations including CRUD, validation, and import/export
 import contextlib
 import functools
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -18,9 +19,14 @@ from typing import Any
 from .models import ScanProfile
 from .profile_storage import ProfileStorage
 
+logger = logging.getLogger(__name__)
+
 # Validation constants
 MAX_PROFILE_NAME_LENGTH = 50
 MIN_PROFILE_NAME_LENGTH = 1
+
+# Migration version for XDG path updates
+_XDG_MIGRATION_VERSION = 1
 
 
 class ProfileManager:
@@ -95,6 +101,9 @@ class ProfileManager:
         # Ensure default profiles exist
         self._ensure_default_profiles()
 
+        # Run migrations for existing profiles
+        self._migrate_default_profiles_to_xdg()
+
     def _load(self) -> None:
         """Load profiles from storage into memory."""
         with self._lock:
@@ -103,12 +112,15 @@ class ProfileManager:
 
     def _ensure_default_profiles(self) -> None:
         """
-        Ensure all default profiles exist.
+        Ensure all default profiles exist with XDG-resolved paths.
 
         Creates any missing default profiles from DEFAULT_PROFILES.
+        For Quick Scan, uses xdg-user-dir to get the localized Downloads path.
         This is called during initialization to ensure built-in profiles
         are always available.
         """
+        from src.core.flatpak import get_xdg_user_dir
+
         # Get names of existing default profiles
         existing_default_names: set[str] = set()
         with self._lock:
@@ -120,11 +132,19 @@ class ProfileManager:
         profiles_created = False
         for default_def in self.DEFAULT_PROFILES:
             if default_def["name"] not in existing_default_names:
+                targets = list(default_def["targets"])
+
+                # Resolve XDG paths for Quick Scan
+                if default_def["name"] == "Quick Scan":
+                    xdg_download = get_xdg_user_dir("DOWNLOAD")
+                    if xdg_download:
+                        targets = [xdg_download]
+
                 timestamp = self._get_timestamp()
                 profile = ScanProfile(
                     id=self._generate_id(),
                     name=default_def["name"],
-                    targets=list(default_def["targets"]),
+                    targets=targets,
                     exclusions=dict(default_def["exclusions"]),
                     created_at=timestamp,
                     updated_at=timestamp,
@@ -158,6 +178,85 @@ class ProfileManager:
     def _get_timestamp(self) -> str:
         """Get current timestamp in ISO 8601 format."""
         return datetime.now(timezone.utc).isoformat()
+
+    def _load_migration_state(self) -> dict[str, int]:
+        """
+        Load migration state from settings.
+
+        Returns:
+            Dictionary with migration version numbers
+        """
+        settings_path = self._config_dir / "settings.json"
+        if settings_path.exists():
+            try:
+                with open(settings_path, encoding="utf-8") as f:
+                    settings = json.load(f)
+                    return settings.get("_migrations", {})
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {}
+
+    def _save_migration_state(self, state: dict[str, int]) -> None:
+        """
+        Save migration state to settings.
+
+        Args:
+            state: Dictionary with migration version numbers
+        """
+        settings_path = self._config_dir / "settings.json"
+        settings: dict[str, Any] = {}
+        if settings_path.exists():
+            try:
+                with open(settings_path, encoding="utf-8") as f:
+                    settings = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        settings["_migrations"] = state
+
+        try:
+            self._config_dir.mkdir(parents=True, exist_ok=True)
+            with open(settings_path, "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=2)
+        except OSError as e:
+            logger.error("Failed to save migration state: %s", e)
+
+    def _migrate_default_profiles_to_xdg(self) -> None:
+        """
+        One-time migration: Update default profiles to use XDG paths.
+
+        Replaces hardcoded ~/Downloads with xdg-user-dir DOWNLOAD result
+        for the built-in "Quick Scan" profile.
+        """
+        from src.core.flatpak import get_xdg_user_dir
+
+        # Check if migration already done
+        migration_state = self._load_migration_state()
+        if migration_state.get("xdg_migration_version", 0) >= _XDG_MIGRATION_VERSION:
+            return
+
+        modified = False
+        with self._lock:
+            for profile in self._profiles.values():
+                if profile.is_default and profile.name == "Quick Scan":
+                    # Only migrate if still using the old hardcoded path
+                    if profile.targets == ["~/Downloads"]:
+                        xdg_download = get_xdg_user_dir("DOWNLOAD")
+                        if xdg_download:
+                            profile.targets = [xdg_download]
+                            profile.updated_at = self._get_timestamp()
+                            modified = True
+                            logger.info(
+                                "Migrated Quick Scan target to XDG path: %s",
+                                xdg_download,
+                            )
+
+        if modified:
+            self._save()
+
+        # Mark migration as complete
+        migration_state["xdg_migration_version"] = _XDG_MIGRATION_VERSION
+        self._save_migration_state(migration_state)
 
     @staticmethod
     @functools.lru_cache(maxsize=128)

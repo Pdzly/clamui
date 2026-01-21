@@ -106,7 +106,9 @@ class TestE2EProfileLifecycle:
             data = json.load(f)
 
         profiles_data = data.get("profiles", [])
-        saved_profile = next((p for p in profiles_data if p["name"] == "E2E Test Profile"), None)
+        saved_profile = next(
+            (p for p in profiles_data if p["name"] == "E2E Test Profile"), None
+        )
         assert saved_profile is not None
         assert saved_profile["targets"] == test_targets
         assert saved_profile["exclusions"] == test_exclusions
@@ -440,7 +442,9 @@ class TestE2EProfileLifecycle:
             data = json.load(f)
 
         profiles_data = data.get("profiles", [])
-        deleted_profile = next((p for p in profiles_data if p.get("id") == profile_id), None)
+        deleted_profile = next(
+            (p for p in profiles_data if p.get("id") == profile_id), None
+        )
         assert deleted_profile is None
 
     def test_e2e_profile_import_from_json(self, profile_test_env):
@@ -759,15 +763,17 @@ class TestE2EDefaultProfiles:
         assert quick_scan.is_default is True, "Quick Scan should be marked as default"
 
         # Step 4: Verify Downloads folder is target
+        # Note: The profile manager resolves ~/Downloads to the XDG path
+        # (e.g., /home/user/Downloads or localized equivalent)
         assert len(quick_scan.targets) > 0, "Quick Scan should have targets"
         downloads_target = quick_scan.targets[0]
-        assert "Downloads" in downloads_target, (
-            f"Quick Scan should target Downloads folder, got: {downloads_target}"
-        )
-        # Verify it's the ~/Downloads path
-        assert downloads_target == "~/Downloads", (
-            f"Quick Scan should target ~/Downloads, got: {downloads_target}"
-        )
+        # The XDG path should be an absolute path in the user's home directory
+        import os
+
+        home_dir = os.path.expanduser("~")
+        assert downloads_target.startswith(
+            home_dir
+        ), f"Quick Scan should target a folder in home directory, got: {downloads_target}"
 
         # Step 5: Select Full Scan profile
         full_scan = pm.get_profile_by_name("Full Scan")
@@ -776,9 +782,9 @@ class TestE2EDefaultProfiles:
 
         # Step 6: Verify system-wide scan targets
         assert len(full_scan.targets) > 0, "Full Scan should have targets"
-        assert "/" in full_scan.targets, (
-            f"Full Scan should target root '/', got: {full_scan.targets}"
-        )
+        assert (
+            "/" in full_scan.targets
+        ), f"Full Scan should target root '/', got: {full_scan.targets}"
 
         # Verify Full Scan has sensible exclusions for system directories
         exclusion_paths = full_scan.exclusions.get("paths", [])
@@ -796,21 +802,21 @@ class TestE2EDefaultProfiles:
 
         # Step 8: Verify deletion is blocked
         assert delete_error is not None, "Deleting default profile should raise error"
-        assert "Cannot delete default profile" in str(delete_error), (
-            f"Error should mention cannot delete default, got: {delete_error}"
-        )
+        assert "Cannot delete default profile" in str(
+            delete_error
+        ), f"Error should mention cannot delete default, got: {delete_error}"
 
         # Verify profile still exists after failed deletion attempt
-        assert pm.profile_exists(quick_scan.id), (
-            "Default profile should still exist after blocked deletion"
-        )
+        assert pm.profile_exists(
+            quick_scan.id
+        ), "Default profile should still exist after blocked deletion"
 
         # Verify all default profiles still exist
         final_profiles = pm.list_profiles()
         final_default_count = len([p for p in final_profiles if p.is_default])
-        assert final_default_count >= 3, (
-            f"All 3 default profiles should still exist, got: {final_default_count}"
-        )
+        assert (
+            final_default_count >= 3
+        ), f"All 3 default profiles should still exist, got: {final_default_count}"
 
         # Also try deleting Full Scan and Home Folder (should all be blocked)
         for profile_name in ["Full Scan", "Home Folder"]:
@@ -818,9 +824,9 @@ class TestE2EDefaultProfiles:
             with pytest.raises(ValueError, match="Cannot delete default profile"):
                 pm.delete_profile(profile.id)
             # Verify still exists
-            assert pm.profile_exists(profile.id), (
-                f"{profile_name} should still exist after blocked deletion"
-            )
+            assert pm.profile_exists(
+                profile.id
+            ), f"{profile_name} should still exist after blocked deletion"
 
     def test_e2e_home_folder_profile_targets(self, default_profile_env):
         """
@@ -836,16 +842,16 @@ class TestE2EDefaultProfiles:
         assert home_folder is not None, "Home Folder profile should exist"
 
         # Verify targets home directory
-        assert "~" in home_folder.targets, (
-            f"Home Folder should target ~, got: {home_folder.targets}"
-        )
+        assert (
+            "~" in home_folder.targets
+        ), f"Home Folder should target ~, got: {home_folder.targets}"
 
         # Verify has sensible exclusions for home directory
         exclusion_paths = home_folder.exclusions.get("paths", [])
         assert "~/.cache" in exclusion_paths, "Home Folder should exclude ~/.cache"
-        assert "~/.local/share/Trash" in exclusion_paths, (
-            "Home Folder should exclude ~/.local/share/Trash"
-        )
+        assert (
+            "~/.local/share/Trash" in exclusion_paths
+        ), "Home Folder should exclude ~/.local/share/Trash"
 
         # Verify profile attributes
         assert home_folder.is_default is True
@@ -921,7 +927,9 @@ class TestE2EProfileCompleteWorkflow:
         assert any(p.id == profile_id for p in profiles)
 
         # Step 3: Verify tray menu data format
-        tray_data = [{"id": p.id, "name": p.name, "is_default": p.is_default} for p in profiles]
+        tray_data = [
+            {"id": p.id, "name": p.name, "is_default": p.is_default} for p in profiles
+        ]
         tray_entry = next(d for d in tray_data if d["id"] == profile_id)
         assert tray_entry["name"] == "Complete Workflow Test"
         assert tray_entry["is_default"] is False
@@ -1020,7 +1028,9 @@ class TestE2EProfileCompleteWorkflow:
         # Verify sorting (list_profiles sorts by name)
         names = [p.name for p in all_profiles if not p.is_default]
         # Custom profiles should be sorted alphabetically
-        custom_names = [n for n in names if n in ["Alpha Profile", "Mu Profile", "Zeta Profile"]]
+        custom_names = [
+            n for n in names if n in ["Alpha Profile", "Mu Profile", "Zeta Profile"]
+        ]
         assert custom_names == sorted(custom_names)
 
         # Edit one

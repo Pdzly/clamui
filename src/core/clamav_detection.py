@@ -19,6 +19,9 @@ from .flatpak import (
     wrap_host_command,
 )
 
+# Database file extensions that ClamAV uses
+_DATABASE_EXTENSIONS = {".cvd", ".cld", ".cud"}
+
 
 def check_clamav_installed() -> tuple[bool, str | None]:
     """
@@ -33,12 +36,18 @@ def check_clamav_installed() -> tuple[bool, str | None]:
     clamscan_path = which_host_command("clamscan")
 
     if clamscan_path is None:
-        return (False, "ClamAV is not installed. Please install it with: sudo apt install clamav")
+        return (
+            False,
+            "ClamAV is not installed. Please install it with: sudo apt install clamav",
+        )
 
     # Try to get version to verify it's working
     try:
         result = subprocess.run(
-            wrap_host_command(["clamscan", "--version"]), capture_output=True, text=True, timeout=10
+            wrap_host_command(["clamscan", "--version"]),
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
 
         if result.returncode == 0:
@@ -95,7 +104,10 @@ def check_freshclam_installed() -> tuple[bool, str | None]:
             version = result.stdout.strip()
             return (True, version)
         else:
-            return (False, f"freshclam found but returned error: {result.stderr.strip()}")
+            return (
+                False,
+                f"freshclam found but returned error: {result.stderr.strip()}",
+            )
 
     except subprocess.TimeoutExpired:
         return (False, "freshclam check timed out")
@@ -138,7 +150,10 @@ def check_clamdscan_installed() -> tuple[bool, str | None]:
             version = result.stdout.strip()
             return (True, version)
         else:
-            return (False, f"clamdscan found but returned error: {result.stderr.strip()}")
+            return (
+                False,
+                f"clamdscan found but returned error: {result.stderr.strip()}",
+            )
 
     except subprocess.TimeoutExpired:
         return (False, "clamdscan check timed out")
@@ -209,7 +224,9 @@ def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | 
             return (True, "PONG")
         else:
             # Check stderr and stdout for error messages
-            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            error_msg = (
+                result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            )
             return (False, f"Daemon not responding: {error_msg}")
 
     except subprocess.TimeoutExpired:
@@ -238,3 +255,45 @@ def get_freshclam_path() -> str | None:
         The full path to freshclam if found, None otherwise
     """
     return which_host_command("freshclam")
+
+
+def check_database_available() -> tuple[bool, str | None]:
+    """
+    Check if ClamAV virus database files are available.
+
+    The database files have extensions .cvd (compressed), .cld (incremental),
+    or .cud (diff). At least one of these must exist for ClamAV to scan.
+
+    Returns:
+        Tuple of (is_available, error_message):
+        - (True, None) if database files exist
+        - (False, error_message) if no database files found
+    """
+    from pathlib import Path
+
+    from .flatpak import get_clamav_database_dir
+
+    # Determine database directory based on environment
+    if is_flatpak():
+        db_dir_path = get_clamav_database_dir()
+        if db_dir_path is None:
+            return (False, "Could not determine Flatpak database directory")
+        db_dir = db_dir_path
+    else:
+        db_dir = Path("/var/lib/clamav")
+
+    # Check if directory exists
+    if not db_dir.exists():
+        return (False, f"Database directory does not exist: {db_dir}")
+
+    # Check for database files with valid extensions
+    try:
+        for file in db_dir.iterdir():
+            if file.suffix.lower() in _DATABASE_EXTENSIONS:
+                return (True, None)
+    except PermissionError:
+        return (False, f"Permission denied accessing: {db_dir}")
+    except OSError as e:
+        return (False, f"Error accessing database: {e}")
+
+    return (False, "No virus database files found. Please download the database first.")

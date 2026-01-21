@@ -176,7 +176,7 @@ class TrayService:
         "threat": "NeedsAttention",
     }
 
-    DBUS_NAME = "io.github.linx_systems.ClamUI"
+    DBUS_NAME = "io.github.linx_systems.ClamUI.tray"
     SNI_PATH = "/StatusNotifierItem"
     MENU_PATH = "/MenuBar"
 

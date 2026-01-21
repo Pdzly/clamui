@@ -260,7 +260,9 @@ class TestProfileManagerCircularExclusions:
         """Create a ProfileManager with a temporary directory."""
         return ProfileManager(config_dir=temp_config_dir)
 
-    def test_check_circular_exclusions_warns_when_all_excluded(self, manager, temp_config_dir):
+    def test_check_circular_exclusions_warns_when_all_excluded(
+        self, manager, temp_config_dir
+    ):
         """Test that warning is added when exclusion would exclude all targets."""
         warnings: list[str] = []
         # Create a target inside the temp dir
@@ -277,7 +279,9 @@ class TestProfileManagerCircularExclusions:
         assert len(warnings) > 0
         assert "exclude all" in warnings[0].lower()
 
-    def test_check_circular_exclusions_no_warning_when_partial(self, manager, temp_config_dir):
+    def test_check_circular_exclusions_no_warning_when_partial(
+        self, manager, temp_config_dir
+    ):
         """Test that no warning when exclusion doesn't cover all targets."""
         warnings: list[str] = []
         target1 = Path(temp_config_dir) / "target1"
@@ -1031,7 +1035,9 @@ class TestProfileManagerThreadSafety:
                 with lock:
                     errors.append(e)
 
-        threads = [threading.Thread(target=create_profile, args=(i,)) for i in range(10)]
+        threads = [
+            threading.Thread(target=create_profile, args=(i,)) for i in range(10)
+        ]
 
         for t in threads:
             t.start()
@@ -1242,8 +1248,13 @@ class TestProfileManagerPathCaching:
 
         # Verify caches have entries
         cache_info = ProfileManager.get_cache_info()
-        assert cache_info["expanduser"]["currsize"] > 0 or cache_info["expanduser"]["misses"] > 0
-        assert cache_info["resolve"]["currsize"] > 0 or cache_info["resolve"]["misses"] > 0
+        assert (
+            cache_info["expanduser"]["currsize"] > 0
+            or cache_info["expanduser"]["misses"] > 0
+        )
+        assert (
+            cache_info["resolve"]["currsize"] > 0 or cache_info["resolve"]["misses"] > 0
+        )
 
         # Clear caches
         ProfileManager.clear_path_cache()
@@ -1331,9 +1342,13 @@ class TestProfileManagerPathCaching:
         # Verify cache usage on second validation
         cache_info2 = ProfileManager.get_cache_info()
         # Should have some cache activity from validation
-        assert (cache_info2["expanduser"]["misses"] + cache_info2["resolve"]["misses"]) > 0
+        assert (
+            cache_info2["expanduser"]["misses"] + cache_info2["resolve"]["misses"]
+        ) > 0
 
-    def test_cache_handles_duplicate_paths_in_validation(self, manager, temp_config_dir):
+    def test_cache_handles_duplicate_paths_in_validation(
+        self, manager, temp_config_dir
+    ):
         """Test that cache efficiently handles duplicate paths in validation."""
         ProfileManager.clear_path_cache()
 
@@ -1468,5 +1483,186 @@ class TestProfileManagerPathCaching:
 
         # Should have cache hits on second call
         assert (
-            cache_info_after_second["resolve"]["hits"] > cache_info_after_first["resolve"]["hits"]
+            cache_info_after_second["resolve"]["hits"]
+            > cache_info_after_first["resolve"]["hits"]
         )
+
+
+class TestXdgMigration:
+    """Tests for XDG path migration in ProfileManager."""
+
+    @pytest.fixture
+    def temp_config_dir(self):
+        """Create a temporary directory for profile storage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield Path(tmpdir)
+
+    def test_new_install_uses_xdg_path(self, temp_config_dir, monkeypatch):
+        """Test that new installations use XDG path for Quick Scan."""
+        # Mock get_xdg_user_dir to return a localized path
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: "/home/user/Téléchargements" if x == "DOWNLOAD" else None,
+        )
+
+        manager = ProfileManager(config_dir=temp_config_dir)
+        quick_scan = manager.get_profile_by_name("Quick Scan")
+
+        assert quick_scan is not None
+        assert quick_scan.targets == ["/home/user/Téléchargements"]
+
+    def test_new_install_fallback_to_hardcoded(self, temp_config_dir, monkeypatch):
+        """Test fallback to ~/Downloads when xdg-user-dir unavailable."""
+        # Mock get_xdg_user_dir to return None (command not available)
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: None,
+        )
+
+        manager = ProfileManager(config_dir=temp_config_dir)
+        quick_scan = manager.get_profile_by_name("Quick Scan")
+
+        assert quick_scan is not None
+        assert quick_scan.targets == ["~/Downloads"]
+
+    def test_migrate_existing_quick_scan(self, temp_config_dir, monkeypatch):
+        """Test migration updates existing Quick Scan with ~/Downloads."""
+        # First, create a profile with old hardcoded path (simulate pre-migration state)
+        profiles_file = temp_config_dir / "profiles.json"
+        old_profile_data = {
+            "profiles": [
+                {
+                    "id": "test-quick-scan-id",
+                    "name": "Quick Scan",
+                    "targets": ["~/Downloads"],
+                    "exclusions": {},
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                    "updated_at": "2024-01-01T00:00:00+00:00",
+                    "is_default": True,
+                    "description": "Fast scan",
+                    "options": {},
+                }
+            ]
+        }
+        temp_config_dir.mkdir(parents=True, exist_ok=True)
+        with open(profiles_file, "w") as f:
+            json.dump(old_profile_data, f)
+
+        # Mock get_xdg_user_dir to return XDG path
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: "/home/user/Downloads" if x == "DOWNLOAD" else None,
+        )
+
+        # Create manager - should trigger migration
+        manager = ProfileManager(config_dir=temp_config_dir)
+        quick_scan = manager.get_profile_by_name("Quick Scan")
+
+        assert quick_scan is not None
+        assert quick_scan.targets == ["/home/user/Downloads"]
+
+    def test_migration_runs_once(self, temp_config_dir, monkeypatch):
+        """Test that migration only runs once."""
+        call_count = {"count": 0}
+
+        def mock_xdg(x):
+            call_count["count"] += 1
+            return "/home/user/Downloads" if x == "DOWNLOAD" else None
+
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            mock_xdg,
+        )
+
+        # First manager - runs migration
+        ProfileManager(config_dir=temp_config_dir)
+        first_count = call_count["count"]
+
+        # Second manager - should skip migration (version already set)
+        call_count["count"] = 0
+        ProfileManager(config_dir=temp_config_dir)
+        second_count = call_count["count"]
+
+        # Migration should run on first init but not second
+        assert first_count > 0
+        # On second init, only _ensure_default_profiles calls get_xdg_user_dir,
+        # but since profiles already exist, it won't be called
+        # Migration is skipped due to version check
+        assert second_count == 0
+
+    def test_migration_skips_customized_quick_scan(self, temp_config_dir, monkeypatch):
+        """Test migration doesn't overwrite customized Quick Scan targets."""
+        # Create profile with custom targets (user modified it)
+        profiles_file = temp_config_dir / "profiles.json"
+        custom_profile_data = {
+            "profiles": [
+                {
+                    "id": "test-quick-scan-id",
+                    "name": "Quick Scan",
+                    "targets": ["/custom/scan/path"],  # User customized
+                    "exclusions": {},
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                    "updated_at": "2024-01-01T00:00:00+00:00",
+                    "is_default": True,
+                    "description": "Fast scan",
+                    "options": {},
+                }
+            ]
+        }
+        temp_config_dir.mkdir(parents=True, exist_ok=True)
+        with open(profiles_file, "w") as f:
+            json.dump(custom_profile_data, f)
+
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: "/home/user/Downloads" if x == "DOWNLOAD" else None,
+        )
+
+        manager = ProfileManager(config_dir=temp_config_dir)
+        quick_scan = manager.get_profile_by_name("Quick Scan")
+
+        # Custom targets should be preserved
+        assert quick_scan is not None
+        assert quick_scan.targets == ["/custom/scan/path"]
+
+    def test_migration_state_saved_to_settings(self, temp_config_dir, monkeypatch):
+        """Test that migration state is saved to settings.json."""
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: "/home/user/Downloads" if x == "DOWNLOAD" else None,
+        )
+
+        ProfileManager(config_dir=temp_config_dir)
+
+        settings_file = temp_config_dir / "settings.json"
+        assert settings_file.exists()
+
+        with open(settings_file) as f:
+            settings = json.load(f)
+
+        assert "_migrations" in settings
+        assert settings["_migrations"].get("xdg_migration_version") == 1
+
+    def test_migration_preserves_existing_settings(self, temp_config_dir, monkeypatch):
+        """Test that migration preserves existing settings in settings.json."""
+        # Create settings with existing content
+        settings_file = temp_config_dir / "settings.json"
+        temp_config_dir.mkdir(parents=True, exist_ok=True)
+        with open(settings_file, "w") as f:
+            json.dump({"existing_setting": "value", "another": 123}, f)
+
+        monkeypatch.setattr(
+            "src.core.flatpak.get_xdg_user_dir",
+            lambda x: "/home/user/Downloads" if x == "DOWNLOAD" else None,
+        )
+
+        ProfileManager(config_dir=temp_config_dir)
+
+        with open(settings_file) as f:
+            settings = json.load(f)
+
+        # Existing settings should be preserved
+        assert settings.get("existing_setting") == "value"
+        assert settings.get("another") == 123
+        # Migration state should be added
+        assert settings["_migrations"]["xdg_migration_version"] == 1

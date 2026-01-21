@@ -252,6 +252,54 @@ def wrap_host_command(command: list[str]) -> list[str]:
     return list(command)
 
 
+def get_xdg_user_dir(dir_type: str) -> str | None:
+    """
+    Get the XDG user directory path for a given type.
+
+    Uses xdg-user-dir command to get localized paths (e.g., "Dokumente"
+    for Documents in German locale).
+
+    Args:
+        dir_type: XDG directory type (DOWNLOAD, DOCUMENTS, DESKTOP,
+                  MUSIC, PICTURES, VIDEOS, TEMPLATES, PUBLICSHARE)
+
+    Returns:
+        Absolute path to the directory, or None if lookup fails
+
+    Example:
+        >>> get_xdg_user_dir("DOWNLOAD")
+        '/home/user/Downloads'  # or '/home/user/Téléchargements' in French
+    """
+    valid_types = {
+        "DOWNLOAD",
+        "DOCUMENTS",
+        "DESKTOP",
+        "MUSIC",
+        "PICTURES",
+        "VIDEOS",
+        "TEMPLATES",
+        "PUBLICSHARE",
+    }
+
+    if dir_type not in valid_types:
+        return None
+
+    try:
+        cmd = wrap_host_command(["xdg-user-dir", dir_type])
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return None
+
+
 def which_host_command(binary: str) -> str | None:
     """
     Find binary path, checking bundled Flatpak binaries first, then host system.

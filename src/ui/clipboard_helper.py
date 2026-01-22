@@ -19,7 +19,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
-from src.core.clipboard import (
+from ..core.clipboard import (
     CLIPBOARD_ASYNC_THRESHOLD,
     CLIPBOARD_SYNC_THRESHOLD,
     ClipboardOperationResult,

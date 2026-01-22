@@ -119,7 +119,7 @@ class ProfileManager:
         This is called during initialization to ensure built-in profiles
         are always available.
         """
-        from src.core.flatpak import get_xdg_user_dir
+        from ..core.flatpak import get_xdg_user_dir
 
         # Get names of existing default profiles
         existing_default_names: set[str] = set()
@@ -228,7 +228,7 @@ class ProfileManager:
         Replaces hardcoded ~/Downloads with xdg-user-dir DOWNLOAD result
         for the built-in "Quick Scan" profile.
         """
-        from src.core.flatpak import get_xdg_user_dir
+        from ..core.flatpak import get_xdg_user_dir
 
         # Check if migration already done
         migration_state = self._load_migration_state()
@@ -403,7 +403,9 @@ class ProfileManager:
             raise ValueError("Profile name cannot be empty")
 
         if len(stripped_name) > MAX_PROFILE_NAME_LENGTH:
-            raise ValueError(f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters")
+            raise ValueError(
+                f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters"
+            )
 
         # Check for duplicate name
         if self.name_exists(stripped_name, exclude_id):
@@ -485,7 +487,9 @@ class ProfileManager:
 
         return warnings
 
-    def _validate_exclusions(self, exclusions: dict[str, Any], targets: list[str]) -> list[str]:
+    def _validate_exclusions(
+        self, exclusions: dict[str, Any], targets: list[str]
+    ) -> list[str]:
         """
         Validate exclusion settings.
 
@@ -602,12 +606,16 @@ class ProfileManager:
                         break
 
                 # Check if target is the same as or is a child of exclusion
-                if not (target_path == excl_path or self._is_subpath(target_path, excl_path)):
+                if not (
+                    target_path == excl_path or self._is_subpath(target_path, excl_path)
+                ):
                     all_excluded = False
                     break
 
             if all_excluded and len(targets) > 0:
-                warnings.append(f"Exclusion '{exclusion}' would exclude all scan targets")
+                warnings.append(
+                    f"Exclusion '{exclusion}' would exclude all scan targets"
+                )
 
     def _is_subpath(self, path: Path, parent: Path) -> bool:
         """
@@ -768,7 +776,9 @@ class ProfileManager:
 
         # Validate updated fields (raises ValueError if invalid)
         # Pass profile_id to exclude_id so name uniqueness check excludes this profile
-        self._validate_profile(new_name, new_targets, new_exclusions, exclude_id=profile_id)
+        self._validate_profile(
+            new_name, new_targets, new_exclusions, exclude_id=profile_id
+        )
 
         with self._lock:
             profile = self._profiles.get(profile_id)
@@ -976,7 +986,9 @@ class ProfileManager:
         required_fields = ["name"]
         for field in required_fields:
             if field not in profile_data:
-                raise ValueError(f"Invalid profile data: missing required field '{field}'")
+                raise ValueError(
+                    f"Invalid profile data: missing required field '{field}'"
+                )
 
         # Extract profile data with defaults
         name = str(profile_data.get("name", ""))

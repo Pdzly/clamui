@@ -211,6 +211,21 @@ Important: Always run `uv run ruff format src/ tests/` and `uv run ruff check --
 
 ## Code Patterns & Conventions
 
+### Import Conventions (Package Compatibility)
+
+**Always use relative imports** within the `src/` package to ensure compatibility when installed as `clamui`:
+
+```python
+# CORRECT - relative imports (work in both development and installed)
+from ..core.clipboard import copy_to_clipboard
+from .view_helpers import create_empty_state
+
+# WRONG - absolute src imports (break when installed)
+from src.core.clipboard import copy_to_clipboard
+```
+
+The package is installed as `clamui`, not `src`. Absolute `src.*` imports only work during development but fail when installed via pip/deb/flatpak.
+
 ### Async Operations (GTK Thread Safety)
 
 All long-running operations use background threads with `GLib.idle_add()` for UI updates:

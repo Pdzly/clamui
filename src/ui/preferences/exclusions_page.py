@@ -12,6 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin
 
 # Preset exclusion templates for common development directories
@@ -89,7 +90,7 @@ class ExclusionsPage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Exclusions",
-            icon_name="action-unavailable-symbolic",
+            icon_name=resolve_icon_name("action-unavailable-symbolic"),
         )
 
         # Preset exclusions group
@@ -165,7 +166,7 @@ class ExclusionsPage(PreferencesPageMixin):
 
         # Remove button
         remove_button = Gtk.Button()
-        remove_button.set_icon_name("user-trash-symbolic")
+        remove_button.set_icon_name(resolve_icon_name("user-trash-symbolic"))
         remove_button.set_valign(Gtk.Align.CENTER)
         remove_button.add_css_class("flat")
         remove_button.set_tooltip_text("Remove exclusion")

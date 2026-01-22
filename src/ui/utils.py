@@ -4,7 +4,121 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Adw, Gdk, Gtk
+
+# Fallbacks for icon names that may be missing in some icon themes (e.g., KDE).
+ICON_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "software-update-available-symbolic": (
+        "system-software-update-symbolic",
+        "view-refresh-symbolic",
+        "emblem-synchronizing-symbolic",
+    ),
+    "security-high-symbolic": (
+        "security-high",
+        "emblem-ok-symbolic",
+        "object-select-symbolic",
+    ),
+    "security-medium-symbolic": (
+        "security-medium",
+        "dialog-warning-symbolic",
+        "object-select-symbolic",
+    ),
+    "shield-safe-symbolic": (
+        "security-high-symbolic",
+        "emblem-ok-symbolic",
+        "object-select-symbolic",
+    ),
+    "folder-saved-search-symbolic": (
+        "folder-symbolic",
+        "folder-open-symbolic",
+        "document-open-recent-symbolic",
+    ),
+    "action-unavailable-symbolic": (
+        "dialog-warning-symbolic",
+        "dialog-information-symbolic",
+        "edit-delete-symbolic",
+    ),
+    "emblem-synchronizing-symbolic": (
+        "view-refresh-symbolic",
+        "media-playback-start-symbolic",
+    ),
+    "emblem-system-symbolic": ("preferences-system-symbolic",),
+    "preferences-system-time-symbolic": (
+        "x-office-calendar-symbolic",
+        "alarm-symbolic",
+        "preferences-system-symbolic",
+    ),
+    "system-run-symbolic": (
+        "utilities-terminal-symbolic",
+        "preferences-system-symbolic",
+    ),
+    "utilities-terminal-symbolic": (
+        "system-run-symbolic",
+        "preferences-system-symbolic",
+    ),
+    "applications-science-symbolic": (
+        "applications-system-symbolic",
+        "preferences-system-symbolic",
+    ),
+    "applications-system-symbolic": ("preferences-system-symbolic",),
+    "help-about-symbolic": ("dialog-information-symbolic",),
+    "info-symbolic": ("dialog-information-symbolic",),
+    "web-browser-symbolic": (
+        "network-server-symbolic",
+        "system-file-manager-symbolic",
+    ),
+    "network-workgroup-symbolic": ("network-server-symbolic",),
+    "document-properties-symbolic": (
+        "dialog-information-symbolic",
+        "document-open-symbolic",
+    ),
+    "drive-harddisk-symbolic": ("drive-harddisk", "folder-symbolic"),
+    "avatar-default-symbolic": ("user-identity-symbolic", "dialog-information-symbolic"),
+    "alarm-symbolic": ("x-office-calendar-symbolic", "dialog-information-symbolic"),
+}
+
+
+def resolve_icon_name(icon_name: str | None, fallback: str | None = None) -> str | None:
+    """
+    Resolve an icon name to one that exists in the current icon theme.
+
+    This avoids missing icons on themes that don't ship every symbolic name.
+    """
+    if not icon_name:
+        return icon_name
+
+    display = Gdk.Display.get_default()
+    if display is None:
+        return fallback or icon_name
+
+    theme = Gtk.IconTheme.get_for_display(display)
+    candidates: list[str] = []
+
+    def add_candidate(name: str | None) -> None:
+        if name and name not in candidates:
+            candidates.append(name)
+
+    add_candidate(icon_name)
+    if icon_name.endswith("-symbolic"):
+        add_candidate(icon_name[: -len("-symbolic")])
+    else:
+        add_candidate(f"{icon_name}-symbolic")
+
+    for candidate in ICON_FALLBACKS.get(icon_name, ()):
+        add_candidate(candidate)
+
+    add_candidate(fallback)
+    add_candidate("dialog-information-symbolic")
+    add_candidate("dialog-warning-symbolic")
+    add_candidate("dialog-error-symbolic")
+    add_candidate("io.github.linx_systems.ClamUI")
+
+    for candidate in candidates:
+        if theme.has_icon(candidate):
+            return candidate
+
+    return icon_name
 
 
 def add_row_icon(row: Adw.ActionRow | Adw.ExpanderRow, icon_name: str) -> Gtk.Image:
@@ -21,6 +135,22 @@ def add_row_icon(row: Adw.ActionRow | Adw.ExpanderRow, icon_name: str) -> Gtk.Im
     Returns:
         The Gtk.Image widget, useful for dynamic icon updates
     """
-    icon = Gtk.Image.new_from_icon_name(icon_name)
+    icon = Gtk.Image.new_from_icon_name(resolve_icon_name(icon_name))
     row.add_prefix(icon)
     return icon
+
+
+def present_dialog(dialog: Adw.Window, parent: Gtk.Window) -> None:
+    """
+    Present a modal dialog window with proper parent relationship.
+
+    This helper provides a consistent way to present Adw.Window-based dialogs
+    that mimics the Adw.Dialog.present(parent) API pattern. Use this for
+    backwards compatibility with libadwaita < 1.5.
+
+    Args:
+        dialog: The Adw.Window dialog to present
+        parent: The parent window for the dialog
+    """
+    dialog.set_transient_for(parent)
+    dialog.present()

@@ -66,9 +66,9 @@ class TestVirusTotalSetupDialogInit:
 
         dialog = VirusTotalSetupDialog()
 
-        # Verify dialog was configured
+        # Verify dialog was configured (Adw.Window uses set_default_size)
         dialog.set_title.assert_called()
-        assert dialog.set_content_width.called
+        assert dialog.set_default_size.called
 
     def test_initializes_with_transient_parent(self, vt_setup_dialog_module):
         """Test initialization with transient parent."""
@@ -268,7 +268,9 @@ class TestVirusTotalSetupDialogWebsiteActions:
         VirusTotalSetupDialog = vt_setup_dialog_module.VirusTotalSetupDialog
 
         with mock.patch.object(VirusTotalSetupDialog, "_setup_ui"):
-            with mock.patch("src.ui.virustotal_setup_dialog.webbrowser") as mock_browser:
+            with mock.patch(
+                "src.ui.virustotal_setup_dialog.webbrowser"
+            ) as mock_browser:
                 dialog = VirusTotalSetupDialog()
                 dialog._show_toast = mock.MagicMock()
 

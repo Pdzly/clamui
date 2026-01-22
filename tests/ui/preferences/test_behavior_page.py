@@ -480,5 +480,7 @@ class TestBehaviorPageFileManagerIntegration:
         mock_dialog_class.assert_called_once_with(
             settings_manager=settings_manager,
         )
-        mock_dialog_instance.present.assert_called_once_with(parent_window)
+        # Adw.Window pattern: set_transient_for then present
+        mock_dialog_instance.set_transient_for.assert_called_once_with(parent_window)
+        mock_dialog_instance.present.assert_called_once()
         _clear_src_modules()

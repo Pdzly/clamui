@@ -162,9 +162,9 @@ class TrayService:
 
     # Icon mapping for different protection states
     ICON_MAP = {
-        "protected": "security-high-symbolic",
+        "protected": "object-select-symbolic",
         "warning": "dialog-warning-symbolic",
-        "scanning": "emblem-synchronizing-symbolic",
+        "scanning": "view-refresh-symbolic",
         "threat": "dialog-error-symbolic",
     }
 
@@ -349,7 +349,7 @@ class TrayService:
         """Get the current icon name based on status."""
         if self._using_custom_icons and self._icon_generator:
             return self._icon_generator.get_icon_name(self._current_status)
-        return self.ICON_MAP.get(self._current_status, "security-high-symbolic")
+        return self.ICON_MAP.get(self._current_status, "object-select-symbolic")
 
     def _get_icon_theme_path(self) -> str:
         """Get the icon theme path for custom icons."""

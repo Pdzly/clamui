@@ -12,6 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin, populate_bool_field, populate_int_field, populate_text_field
 
 
@@ -46,7 +47,7 @@ class DatabasePage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Database Updates",
-            icon_name="software-update-available-symbolic",
+            icon_name=resolve_icon_name("software-update-available-symbolic"),
         )
 
         # Create a temporary instance to use mixin methods
@@ -97,7 +98,7 @@ class DatabasePage(PreferencesPageMixin):
         database_dir_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         database_dir_row.set_show_apply_button(False)
         # Add folder icon as prefix
-        folder_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
+        folder_icon = Gtk.Image.new_from_icon_name(resolve_icon_name("folder-symbolic"))
         folder_icon.set_margin_start(6)
         database_dir_row.add_prefix(folder_icon)
         widgets_dict["DatabaseDirectory"] = database_dir_row
@@ -109,7 +110,9 @@ class DatabasePage(PreferencesPageMixin):
         log_file_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         log_file_row.set_show_apply_button(False)
         # Add document icon as prefix
-        log_icon = Gtk.Image.new_from_icon_name("text-x-generic-symbolic")
+        log_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("text-x-generic-symbolic")
+        )
         log_icon.set_margin_start(6)
         log_file_row.add_prefix(log_icon)
         widgets_dict["UpdateLogFile"] = log_file_row
@@ -121,7 +124,9 @@ class DatabasePage(PreferencesPageMixin):
         notify_clamd_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         notify_clamd_row.set_show_apply_button(False)
         # Add settings icon as prefix
-        notify_icon = Gtk.Image.new_from_icon_name("emblem-system-symbolic")
+        notify_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("emblem-system-symbolic")
+        )
         notify_icon.set_margin_start(6)
         notify_clamd_row.add_prefix(notify_icon)
         widgets_dict["NotifyClamd"] = notify_clamd_row
@@ -177,7 +182,9 @@ class DatabasePage(PreferencesPageMixin):
         mirror_row.set_input_purpose(Gtk.InputPurpose.URL)
         mirror_row.set_show_apply_button(False)
         # Add network icon as prefix
-        mirror_icon = Gtk.Image.new_from_icon_name("network-server-symbolic")
+        mirror_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("network-server-symbolic")
+        )
         mirror_icon.set_margin_start(6)
         mirror_row.add_prefix(mirror_icon)
         widgets_dict["DatabaseMirror"] = mirror_row
@@ -212,7 +219,9 @@ class DatabasePage(PreferencesPageMixin):
         proxy_server_row.set_input_purpose(Gtk.InputPurpose.URL)
         proxy_server_row.set_show_apply_button(False)
         # Add network icon as prefix
-        server_icon = Gtk.Image.new_from_icon_name("network-workgroup-symbolic")
+        server_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("network-workgroup-symbolic")
+        )
         server_icon.set_margin_start(6)
         proxy_server_row.add_prefix(server_icon)
         widgets_dict["HTTPProxyServer"] = proxy_server_row
@@ -233,7 +242,9 @@ class DatabasePage(PreferencesPageMixin):
         proxy_user_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         proxy_user_row.set_show_apply_button(False)
         # Add user icon as prefix
-        user_icon = Gtk.Image.new_from_icon_name("avatar-default-symbolic")
+        user_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("avatar-default-symbolic")
+        )
         user_icon.set_margin_start(6)
         proxy_user_row.add_prefix(user_icon)
         widgets_dict["HTTPProxyUsername"] = proxy_user_row

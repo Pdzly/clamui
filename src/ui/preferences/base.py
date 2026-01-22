@@ -16,8 +16,12 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ..utils import resolve_icon_name
 
-def populate_bool_field(config, widgets_dict: dict, key: str, default: bool = False) -> None:
+
+def populate_bool_field(
+    config, widgets_dict: dict, key: str, default: bool = False
+) -> None:
     """
     Populate a boolean switch widget from config.
 
@@ -65,7 +69,9 @@ def populate_text_field(config, widgets_dict: dict, key: str) -> None:
         widgets_dict[key].set_text(config.get_value(key))
 
 
-def populate_multivalue_field(config, widgets_dict: dict, key: str, separator: str = ", ") -> None:
+def populate_multivalue_field(
+    config, widgets_dict: dict, key: str, separator: str = ", "
+) -> None:
     """
     Populate a text entry widget with comma-separated values from config.
 
@@ -113,7 +119,9 @@ class PreferencesPageMixin:
 
         # Create lock icon - using system-lock-screen-symbolic
         # Alternative: changes-allow-symbolic for a shield-style icon
-        lock_icon = Gtk.Image.new_from_icon_name("system-lock-screen-symbolic")
+        lock_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("system-lock-screen-symbolic")
+        )
         lock_icon.add_css_class("dim-label")
         lock_icon.set_tooltip_text("Requires administrator privileges to modify")
 
@@ -129,12 +137,9 @@ class PreferencesPageMixin:
         """
         if not os.path.exists(folder_path):
             # Show error if folder doesn't exist
-            dialog = Adw.AlertDialog()
-            dialog.set_heading("Folder Not Found")
-            dialog.set_body(f"The folder '{folder_path}' does not exist.")
-            dialog.add_response("ok", "OK")
-            dialog.set_default_response("ok")
-            dialog.present(self)
+            self._show_simple_dialog(
+                "Folder Not Found", f"The folder '{folder_path}' does not exist."
+            )
             return
 
         try:
@@ -146,12 +151,60 @@ class PreferencesPageMixin:
             )
         except Exception as e:
             # Show error dialog if opening fails
-            dialog = Adw.AlertDialog()
-            dialog.set_heading("Error Opening Folder")
-            dialog.set_body(f"Could not open folder: {str(e)}")
-            dialog.add_response("ok", "OK")
-            dialog.set_default_response("ok")
-            dialog.present(self)
+            self._show_simple_dialog(
+                "Error Opening Folder", f"Could not open folder: {str(e)}"
+            )
+
+    def _show_simple_dialog(self, title: str, message: str):
+        """
+        Show a simple message dialog with an OK button.
+
+        Uses Adw.Window for compatibility with libadwaita < 1.5.
+
+        Args:
+            title: Dialog title/heading
+            message: Message body text
+        """
+        dialog = Adw.Window()
+        dialog.set_title(title)
+        dialog.set_default_size(350, -1)
+        dialog.set_modal(True)
+        dialog.set_deletable(True)
+        dialog.set_transient_for(self)
+
+        # Create content
+        toolbar_view = Adw.ToolbarView()
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content_box.set_margin_start(24)
+        content_box.set_margin_end(24)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(24)
+
+        # Message label
+        label = Gtk.Label()
+        label.set_text(message)
+        label.set_wrap(True)
+        label.set_xalign(0)
+        content_box.append(label)
+
+        # OK button
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_halign(Gtk.Align.END)
+        button_box.set_margin_top(12)
+
+        ok_button = Gtk.Button(label="OK")
+        ok_button.add_css_class("suggested-action")
+        ok_button.connect("clicked", lambda btn: dialog.close())
+        button_box.append(ok_button)
+
+        content_box.append(button_box)
+        toolbar_view.set_content(content_box)
+        dialog.set_content(toolbar_view)
+
+        dialog.present()
 
     def _show_error_dialog(self, title: str, message: str):
         """
@@ -161,12 +214,7 @@ class PreferencesPageMixin:
             title: Dialog title
             message: Error message text
         """
-        dialog = Adw.AlertDialog()
-        dialog.set_heading(title)
-        dialog.set_body(message)
-        dialog.add_response("ok", "OK")
-        dialog.set_default_response("ok")
-        dialog.present(self)
+        self._show_simple_dialog(title, message)
 
     def _show_success_dialog(self, title: str, message: str):
         """
@@ -176,12 +224,7 @@ class PreferencesPageMixin:
             title: Dialog title
             message: Success message text
         """
-        dialog = Adw.AlertDialog()
-        dialog.set_heading(title)
-        dialog.set_body(message)
-        dialog.add_response("ok", "OK")
-        dialog.set_default_response("ok")
-        dialog.present(self)
+        self._show_simple_dialog(title, message)
 
     def _create_file_location_group(
         self, page: Adw.PreferencesPage, title: str, file_path: str, description: str
@@ -209,7 +252,9 @@ class PreferencesPageMixin:
         path_row.set_subtitle_selectable(True)
 
         # Add folder icon as prefix
-        folder_icon = Gtk.Image.new_from_icon_name("folder-open-symbolic")
+        folder_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("folder-open-symbolic")
+        )
         folder_icon.set_margin_start(6)
         path_row.add_prefix(folder_icon)
 

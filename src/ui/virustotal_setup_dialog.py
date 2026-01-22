@@ -21,6 +21,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 from ..core.keyring_manager import set_api_key, validate_api_key_format
+from .utils import resolve_icon_name
 
 if TYPE_CHECKING:
     from ..core.settings_manager import SettingsManager
@@ -32,12 +33,15 @@ VT_API_KEY_URL = "https://www.virustotal.com/gui/my-apikey"
 VT_UPLOAD_URL = "https://www.virustotal.com/gui/home/upload"
 
 
-class VirusTotalSetupDialog(Adw.Dialog):
+class VirusTotalSetupDialog(Adw.Window):
     """
     A dialog for configuring VirusTotal API key.
 
     Shown when user attempts to scan with VirusTotal but no API key is configured.
     Provides options to enter an API key, open the website, or remember the choice.
+
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
 
     Usage:
         dialog = VirusTotalSetupDialog(
@@ -45,7 +49,8 @@ class VirusTotalSetupDialog(Adw.Dialog):
             on_key_saved=lambda key: start_scan(key),
             on_open_website=lambda: webbrowser.open(url),
         )
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(
@@ -78,9 +83,11 @@ class VirusTotalSetupDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("VirusTotal Setup")
-        self.set_content_width(450)
-        self.set_content_height(400)
-        self.set_can_close(True)
+        self.set_default_size(450, 400)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -116,7 +123,7 @@ class VirusTotalSetupDialog(Adw.Dialog):
         toolbar_view.set_content(scrolled)
 
         self._toast_overlay.set_child(toolbar_view)
-        self.set_child(self._toast_overlay)
+        self.set_content(self._toast_overlay)
 
     def _create_info_section(self, preferences_page: Adw.PreferencesPage):
         """Create the information section."""
@@ -135,11 +142,13 @@ class VirusTotalSetupDialog(Adw.Dialog):
         link_row.connect("activated", self._on_get_api_key_clicked)
 
         # Add chevron for navigation
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         link_row.add_suffix(chevron)
 
-        info_icon = Gtk.Image.new_from_icon_name("network-server-symbolic")
+        info_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("network-server-symbolic")
+        )
         info_icon.add_css_class("dim-label")
         link_row.add_prefix(info_icon)
 
@@ -190,15 +199,19 @@ class VirusTotalSetupDialog(Adw.Dialog):
         # Open website option
         website_row = Adw.ActionRow()
         website_row.set_title("Upload file manually")
-        website_row.set_subtitle("Open VirusTotal website to upload files without API key")
+        website_row.set_subtitle(
+            "Open VirusTotal website to upload files without API key"
+        )
         website_row.set_activatable(True)
         website_row.connect("activated", self._on_open_website_clicked)
 
-        website_icon = Gtk.Image.new_from_icon_name("web-browser-symbolic")
+        website_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("web-browser-symbolic")
+        )
         website_icon.add_css_class("dim-label")
         website_row.add_prefix(website_icon)
 
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         website_row.add_suffix(chevron)
 
@@ -207,10 +220,14 @@ class VirusTotalSetupDialog(Adw.Dialog):
         # Remember decision option
         self._remember_switch = Adw.SwitchRow()
         self._remember_switch.set_title("Remember my choice")
-        self._remember_switch.set_subtitle("Don't ask again when scanning without API key")
+        self._remember_switch.set_subtitle(
+            "Don't ask again when scanning without API key"
+        )
         self._remember_switch.set_active(False)
 
-        remember_icon = Gtk.Image.new_from_icon_name("preferences-system-symbolic")
+        remember_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("preferences-system-symbolic")
+        )
         remember_icon.add_css_class("dim-label")
         self._remember_switch.add_prefix(remember_icon)
 
@@ -271,13 +288,17 @@ class VirusTotalSetupDialog(Adw.Dialog):
             if self._on_key_saved:
                 self._on_key_saved(api_key)
         else:
-            self._show_toast(f"Failed to save: {error}" if error else "Failed to save API key")
+            self._show_toast(
+                f"Failed to save: {error}" if error else "Failed to save API key"
+            )
 
     def _on_open_website_clicked(self, row: Adw.ActionRow):
         """Open VirusTotal upload page."""
         # Save remember preference if enabled
         if self._remember_switch.get_active() and self._settings_manager:
-            self._settings_manager.set("virustotal_remember_no_key_action", "open_website")
+            self._settings_manager.set(
+                "virustotal_remember_no_key_action", "open_website"
+            )
 
         try:
             webbrowser.open(VT_UPLOAD_URL)

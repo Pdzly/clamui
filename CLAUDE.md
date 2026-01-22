@@ -321,6 +321,67 @@ Additional Flatpak utilities in `flatpak.py`:
 - Use `gi.require_version()` before importing
 - Set CSS classes via `add_css_class()`
 
+### libadwaita Version Compatibility
+
+ClamUI targets **libadwaita 1.0+** for broad distribution compatibility (Ubuntu 22.04, Pop!\_OS 22.04, etc.).
+
+**Important:** Do NOT use APIs introduced in libadwaita 1.5+:
+
+| Avoid (1.5+)      | Use Instead (1.0+)               |
+| ----------------- | -------------------------------- |
+| `Adw.Dialog`      | `Adw.Window`                     |
+| `Adw.AlertDialog` | `Adw.Window` with custom content |
+
+**libadwaita versions by distribution:**
+
+| Distribution                  | libadwaita Version |
+| ----------------------------- | ------------------ |
+| Ubuntu 22.04 / Pop!\_OS 22.04 | 1.1.x              |
+| Ubuntu 24.04                  | 1.5.x              |
+| Fedora 40+                    | 1.5.x              |
+
+**Dialog Pattern (using Adw.Window):**
+
+```python
+class MyDialog(Adw.Window):
+    def __init__(self, parent: Gtk.Window | None = None):
+        super().__init__()
+        self.set_title("Dialog Title")
+        self.set_default_size(400, 300)  # Not set_content_width/height
+        self.set_modal(True)
+        self.set_deletable(True)  # Not set_can_close
+        self.set_content(content_widget)  # Not set_child
+
+        if parent:
+            self.set_transient_for(parent)
+
+        # Use "close-request" signal, not "closed"
+        self.connect("close-request", self._on_close_request)
+
+    def _on_close_request(self, dialog):
+        # Handle close
+        return False  # Allow close to proceed
+```
+
+**Presenting dialogs:**
+
+```python
+# Set transient parent, then present (not dialog.present(parent))
+dialog.set_transient_for(parent_window)
+dialog.present()
+```
+
+**API migration reference:**
+
+| Adw.Dialog (1.5+)       | Adw.Window (1.0+)                      |
+| ----------------------- | -------------------------------------- |
+| `set_content_width(w)`  | `set_default_size(w, h)`               |
+| `set_content_height(h)` | `set_default_size(w, h)`               |
+| `set_child(widget)`     | `set_content(widget)`                  |
+| `set_can_close(bool)`   | `set_deletable(bool)`                  |
+| `present(parent)`       | `set_transient_for(parent); present()` |
+| `connect("closed", cb)` | `connect("close-request", cb)`         |
+
 ### Icon Usage (Adwaita Only)
 
 Always use standard Adwaita symbolic icons. Never use:

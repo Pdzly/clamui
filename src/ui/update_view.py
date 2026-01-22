@@ -11,7 +11,7 @@ from gi.repository import Adw, Gtk
 
 from ..core.updater import FreshclamUpdater, UpdateResult, UpdateStatus
 from ..core.utils import check_freshclam_installed
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import StatusLevel, set_status_class
 
 
@@ -196,7 +196,9 @@ class UpdateView(Gtk.Box):
 
         # Freshclam status icon
         self._freshclam_status_icon = Gtk.Image()
-        self._freshclam_status_icon.set_from_icon_name("dialog-question-symbolic")
+        self._freshclam_status_icon.set_from_icon_name(
+            resolve_icon_name("dialog-question-symbolic")
+        )
 
         # Freshclam status label
         self._freshclam_status_label = Gtk.Label()
@@ -214,7 +216,9 @@ class UpdateView(Gtk.Box):
 
         if is_installed:
             self._freshclam_available = True
-            self._freshclam_status_icon.set_from_icon_name("object-select-symbolic")
+            self._freshclam_status_icon.set_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             self._freshclam_status_icon.add_css_class("success")
             self._freshclam_status_label.set_text(f"freshclam: {version_or_error}")
 
@@ -223,7 +227,9 @@ class UpdateView(Gtk.Box):
             self._force_update_button.set_sensitive(True)
         else:
             self._freshclam_available = False
-            self._freshclam_status_icon.set_from_icon_name("dialog-warning-symbolic")
+            self._freshclam_status_icon.set_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             self._freshclam_status_icon.add_css_class("warning")
             self._freshclam_status_label.set_text(
                 version_or_error or "freshclam not found"

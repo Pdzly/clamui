@@ -22,6 +22,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk
 
+from .utils import resolve_icon_name
+
 # =============================================================================
 # Status Level Enum and Banner Helper
 # =============================================================================
@@ -128,7 +130,7 @@ def create_empty_state(config: EmptyStateConfig) -> Gtk.Box:
 
     # Empty state icon
     icon = Gtk.Image()
-    icon.set_from_icon_name(config.icon_name)
+    icon.set_from_icon_name(resolve_icon_name(config.icon_name))
     icon.set_pixel_size(config.icon_size)
     icon.add_css_class("dim-label")
     empty_box.append(icon)
@@ -355,7 +357,7 @@ def create_header_button_box(
             # Create button from config
             button = Gtk.Button()
             if button_config.icon_name:
-                button.set_icon_name(button_config.icon_name)
+                button.set_icon_name(resolve_icon_name(button_config.icon_name))
             if button_config.label:
                 button.set_label(button_config.label)
             if button_config.tooltip:
@@ -407,7 +409,7 @@ def create_refresh_header(
     header_box.append(spinner)
 
     refresh_button = Gtk.Button()
-    refresh_button.set_icon_name("view-refresh-symbolic")
+    refresh_button.set_icon_name(resolve_icon_name("view-refresh-symbolic"))
     refresh_button.set_tooltip_text(tooltip)
     refresh_button.add_css_class("flat")
     refresh_button.connect("clicked", on_refresh_clicked)

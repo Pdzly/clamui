@@ -138,8 +138,8 @@ class TestCloseBehaviorDialogCallback:
         # Set a choice
         dialog._choice = "minimize"
 
-        # Simulate dialog close
-        dialog._on_dialog_closed(dialog)
+        # Simulate dialog close (Adw.Window uses close-request signal)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with("minimize", False)
         _clear_src_modules()
@@ -159,8 +159,8 @@ class TestCloseBehaviorDialogCallback:
         # Set a choice
         dialog._choice = "quit"
 
-        # Simulate dialog close
-        dialog._on_dialog_closed(dialog)
+        # Simulate dialog close (Adw.Window uses close-request signal)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with("quit", True)
         _clear_src_modules()

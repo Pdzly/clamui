@@ -28,7 +28,7 @@ from ..core.quarantine import (
     QuarantineStatus,
 )
 from .pagination import PaginatedListController
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import EmptyStateConfig, create_empty_state, create_loading_row
 
 # Backward compatibility constants for tests
@@ -200,7 +200,7 @@ class QuarantineView(Gtk.Box):
 
         # Refresh button
         refresh_button = Gtk.Button()
-        refresh_button.set_icon_name("view-refresh-symbolic")
+        refresh_button.set_icon_name(resolve_icon_name("view-refresh-symbolic"))
         refresh_button.set_tooltip_text("Refresh quarantine list")
         refresh_button.add_css_class("flat")
         refresh_button.connect("clicked", self._on_refresh_clicked)
@@ -640,7 +640,7 @@ class QuarantineView(Gtk.Box):
 
         # Threat icon
         icon = Gtk.Image()
-        icon.set_from_icon_name("dialog-warning-symbolic")
+        icon.set_from_icon_name(resolve_icon_name("dialog-warning-symbolic"))
         icon.set_pixel_size(20)
         icon.add_css_class("dim-label")
         header_box.append(icon)

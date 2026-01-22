@@ -15,7 +15,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 from ...core.flatpak import is_flatpak
-from ..utils import add_row_icon
+from ..utils import add_row_icon, resolve_icon_name
 from .base import (
     PreferencesPageMixin,
     populate_bool_field,
@@ -66,7 +66,7 @@ class ScannerPage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Scanner Settings",
-            icon_name="document-properties-symbolic",
+            icon_name=resolve_icon_name("document-properties-symbolic"),
         )
 
         # Create a temporary instance to use mixin methods
@@ -210,11 +210,15 @@ class ScannerPage(PreferencesPageMixin):
         is_connected, message = check_clamd_connection()
         if is_connected:
             status_row.set_subtitle("✓ Daemon available")
-            status_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             status_icon.add_css_class("success")
         else:
             status_row.set_subtitle(f"⚠ Not available: {message}")
-            status_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             status_icon.add_css_class("warning")
 
         status_row.add_suffix(status_icon)
@@ -246,7 +250,7 @@ class ScannerPage(PreferencesPageMixin):
         )
 
         # Add chevron to indicate it's clickable
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         learn_more_row.add_suffix(chevron)
 
@@ -307,7 +311,9 @@ class ScannerPage(PreferencesPageMixin):
             # Update icon
             for child in list(status_row):
                 if isinstance(child, Gtk.Image):
-                    child.set_from_icon_name("object-select-symbolic")
+                    child.set_from_icon_name(
+                        resolve_icon_name("object-select-symbolic")
+                    )
                     child.remove_css_class("warning")
                     child.add_css_class("success")
                     break
@@ -315,7 +321,9 @@ class ScannerPage(PreferencesPageMixin):
             status_row.set_subtitle(f"⚠ Not available: {message}")
             for child in list(status_row):
                 if isinstance(child, Gtk.Image):
-                    child.set_from_icon_name("dialog-warning-symbolic")
+                    child.set_from_icon_name(
+                        resolve_icon_name("dialog-warning-symbolic")
+                    )
                     child.remove_css_class("success")
                     child.add_css_class("warning")
                     break
@@ -342,15 +350,12 @@ class ScannerPage(PreferencesPageMixin):
         # Check if file exists
         if not docs_path.exists():
             # Show error if documentation doesn't exist
-            dialog = Adw.AlertDialog()
-            dialog.set_heading("Documentation Not Found")
-            dialog.set_body(
+            ScannerPage._show_message_dialog(
+                parent_window,
+                "Documentation Not Found",
                 "The scan backends documentation file could not be found. "
-                "It may have been moved or deleted."
+                "It may have been moved or deleted.",
             )
-            dialog.add_response("ok", "OK")
-            dialog.set_default_response("ok")
-            dialog.present(parent_window)
             return
 
         try:
@@ -362,12 +367,64 @@ class ScannerPage(PreferencesPageMixin):
             )
         except Exception as e:
             # Show error dialog if opening fails
-            dialog = Adw.AlertDialog()
-            dialog.set_heading("Error Opening Documentation")
-            dialog.set_body(f"Could not open documentation file: {str(e)}")
-            dialog.add_response("ok", "OK")
-            dialog.set_default_response("ok")
-            dialog.present(parent_window)
+            ScannerPage._show_message_dialog(
+                parent_window,
+                "Error Opening Documentation",
+                f"Could not open documentation file: {str(e)}",
+            )
+
+    @staticmethod
+    def _show_message_dialog(parent_window, title: str, message: str):
+        """
+        Show a simple message dialog with an OK button.
+
+        Uses Adw.Window for compatibility with libadwaita < 1.5.
+
+        Args:
+            parent_window: Parent window for the dialog
+            title: Dialog title/heading
+            message: Message body text
+        """
+        dialog = Adw.Window()
+        dialog.set_title(title)
+        dialog.set_default_size(400, -1)
+        dialog.set_modal(True)
+        dialog.set_deletable(True)
+        dialog.set_transient_for(parent_window)
+
+        # Create content
+        toolbar_view = Adw.ToolbarView()
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content_box.set_margin_start(24)
+        content_box.set_margin_end(24)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(24)
+
+        # Message label
+        label = Gtk.Label()
+        label.set_text(message)
+        label.set_wrap(True)
+        label.set_xalign(0)
+        content_box.append(label)
+
+        # OK button
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_halign(Gtk.Align.END)
+        button_box.set_margin_top(12)
+
+        ok_button = Gtk.Button(label="OK")
+        ok_button.add_css_class("suggested-action")
+        ok_button.connect("clicked", lambda btn: dialog.close())
+        button_box.append(ok_button)
+
+        content_box.append(button_box)
+        toolbar_view.set_content(content_box)
+        dialog.set_content(toolbar_view)
+
+        dialog.present()
 
     @staticmethod
     def _create_scanning_group(page: Adw.PreferencesPage, widgets_dict: dict, helper):
@@ -525,7 +582,9 @@ class ScannerPage(PreferencesPageMixin):
         log_file_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         log_file_row.set_show_apply_button(False)
         # Add document icon as prefix
-        log_icon = Gtk.Image.new_from_icon_name("text-x-generic-symbolic")
+        log_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("text-x-generic-symbolic")
+        )
         log_icon.set_margin_start(6)
         log_file_row.add_prefix(log_icon)
         widgets_dict["LogFile"] = log_file_row

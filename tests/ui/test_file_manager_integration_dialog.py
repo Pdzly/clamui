@@ -36,8 +36,8 @@ class TestFileManagerIntegrationDialog:
 
         dialog = FileManagerIntegrationDialog()
 
-        dialog.set_content_width.assert_called_with(500)
-        dialog.set_content_height.assert_called_with(450)
+        # Adw.Window uses set_default_size instead of set_content_width/height
+        dialog.set_default_size.assert_called_with(500, 450)
 
     def test_on_skip_saves_preference(self, mock_gi_modules):
         """Test skip button saves 'prompted' preference."""

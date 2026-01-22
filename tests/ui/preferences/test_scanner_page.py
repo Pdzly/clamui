@@ -66,7 +66,9 @@ class TestScannerPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -91,7 +93,9 @@ class TestScannerPageCreation:
 
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -146,7 +150,9 @@ class TestScannerPageCreation:
         """Test create_page creates all widgets when clamd is available."""
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -192,7 +198,9 @@ class TestScannerPageCreation:
         """Test create_page shows unavailable message when clamd is not available."""
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -227,7 +235,9 @@ class TestScannerPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -251,7 +261,9 @@ class TestScannerPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -276,7 +288,9 @@ class TestScannerPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -300,7 +314,9 @@ class TestScannerPageCreation:
         adw = mock_gi_modules["adw"]
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 mock_config_path,
                 widgets_dict,
@@ -360,7 +376,9 @@ class TestScannerPageBackendSelection:
         from src.ui.preferences.scanner_page import ScannerPage
 
         widgets_dict = {}
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 "/etc/clamav/clamd.conf",
                 widgets_dict,
@@ -381,7 +399,9 @@ class TestScannerPageBackendSelection:
         from src.ui.preferences.scanner_page import ScannerPage
 
         widgets_dict = {}
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 "/etc/clamav/clamd.conf",
                 widgets_dict,
@@ -402,7 +422,9 @@ class TestScannerPageBackendSelection:
         from src.ui.preferences.scanner_page import ScannerPage
 
         widgets_dict = {}
-        with mock.patch("src.core.utils.check_clamd_connection", return_value=(True, "Connected")):
+        with mock.patch(
+            "src.core.utils.check_clamd_connection", return_value=(True, "Connected")
+        ):
             ScannerPage.create_page(
                 "/etc/clamav/clamd.conf",
                 widgets_dict,
@@ -414,7 +436,9 @@ class TestScannerPageBackendSelection:
         # Should set to index 2 for "clamscan" - use widgets_dict since ComboRow uses side_effect
         widgets_dict["backend_row"].set_selected.assert_called_with(2)
 
-    def test_update_backend_subtitle_sets_correct_subtitle_for_auto(self, mock_gi_modules):
+    def test_update_backend_subtitle_sets_correct_subtitle_for_auto(
+        self, mock_gi_modules
+    ):
         """Test _update_backend_subtitle sets correct subtitle for auto."""
         mock_row = mock.MagicMock()
 
@@ -427,7 +451,9 @@ class TestScannerPageBackendSelection:
         args = mock_row.set_subtitle.call_args[0]
         assert "Automatically uses daemon" in args[0] or "Recommended" in args[0]
 
-    def test_update_backend_subtitle_sets_correct_subtitle_for_daemon(self, mock_gi_modules):
+    def test_update_backend_subtitle_sets_correct_subtitle_for_daemon(
+        self, mock_gi_modules
+    ):
         """Test _update_backend_subtitle sets correct subtitle for daemon."""
         mock_row = mock.MagicMock()
 
@@ -440,7 +466,9 @@ class TestScannerPageBackendSelection:
         args = mock_row.set_subtitle.call_args[0]
         assert "Fastest" in args[0] or "in-memory" in args[0]
 
-    def test_update_backend_subtitle_sets_correct_subtitle_for_clamscan(self, mock_gi_modules):
+    def test_update_backend_subtitle_sets_correct_subtitle_for_clamscan(
+        self, mock_gi_modules
+    ):
         """Test _update_backend_subtitle sets correct subtitle for clamscan."""
         mock_row = mock.MagicMock()
 
@@ -500,7 +528,9 @@ class TestScannerPageBackendSelection:
 
         from src.ui.preferences.scanner_page import ScannerPage
 
-        with mock.patch.object(ScannerPage, "_update_backend_subtitle") as mock_update_subtitle:
+        with mock.patch.object(
+            ScannerPage, "_update_backend_subtitle"
+        ) as mock_update_subtitle:
             ScannerPage._on_backend_changed(mock_row, mock_settings_manager)
 
             # Should update subtitle
@@ -556,7 +586,9 @@ class TestScannerPageDaemonStatus:
 class TestScannerPageLearnMore:
     """Tests for learn more documentation link."""
 
-    def test_on_learn_more_clicked_opens_documentation_when_exists(self, mock_gi_modules, tmp_path):
+    def test_on_learn_more_clicked_opens_documentation_when_exists(
+        self, mock_gi_modules, tmp_path
+    ):
         """Test _on_learn_more_clicked opens documentation when file exists."""
         mock_parent_window = mock.MagicMock()
 
@@ -584,56 +616,66 @@ class TestScannerPageLearnMore:
         adw = mock_gi_modules["adw"]
         mock_parent_window = mock.MagicMock()
         mock_dialog = mock.MagicMock()
-        adw.AlertDialog.return_value = mock_dialog
+        mock_window_class = mock.MagicMock(return_value=mock_dialog)
 
         from src.ui.preferences.scanner_page import ScannerPage
 
         # Mock the Path and exists check
         with mock.patch("src.ui.preferences.scanner_page.Path") as mock_path:
-            # Make the docs path not exist
-            # Chain: Path(__file__).parent.parent.parent.parent / "docs" / "SCAN_BACKENDS.md"
-            mock_docs_path = mock.MagicMock()
-            mock_docs_path.exists.return_value = False
-            # Need to chain two __truediv__ calls
-            intermediate_mock = mock.MagicMock()
-            intermediate_mock.__truediv__.return_value = mock_docs_path
-            mock_path.return_value.parent.parent.parent.parent.__truediv__.return_value = (
-                intermediate_mock
-            )
+            with mock.patch.object(adw, "Window", mock_window_class):
+                # Make the docs path not exist
+                # Chain: Path(__file__).parent.parent.parent.parent / "docs" / "SCAN_BACKENDS.md"
+                mock_docs_path = mock.MagicMock()
+                mock_docs_path.exists.return_value = False
+                # Need to chain two __truediv__ calls
+                intermediate_mock = mock.MagicMock()
+                intermediate_mock.__truediv__.return_value = mock_docs_path
+                mock_path.return_value.parent.parent.parent.parent.__truediv__.return_value = (
+                    intermediate_mock
+                )
 
-            ScannerPage._on_learn_more_clicked(mock_parent_window)
+                ScannerPage._on_learn_more_clicked(mock_parent_window)
 
-            # Should create and present error dialog
-            adw.AlertDialog.assert_called_once()
-            mock_dialog.present.assert_called_once_with(mock_parent_window)
+                # Should create and present Adw.Window-based error dialog
+                mock_window_class.assert_called_once()
+                mock_dialog.set_transient_for.assert_called_once_with(
+                    mock_parent_window
+                )
+                mock_dialog.present.assert_called_once()
 
     def test_on_learn_more_clicked_shows_error_when_open_fails(self, mock_gi_modules):
         """Test _on_learn_more_clicked shows error when opening file fails."""
         adw = mock_gi_modules["adw"]
         mock_parent_window = mock.MagicMock()
         mock_dialog = mock.MagicMock()
-        adw.AlertDialog.return_value = mock_dialog
+        mock_window_class = mock.MagicMock(return_value=mock_dialog)
 
         from src.ui.preferences.scanner_page import ScannerPage
 
         with mock.patch("src.ui.preferences.scanner_page.Path") as mock_path:
             with mock.patch("subprocess.Popen") as mock_popen:
-                # Make the docs path exist
-                mock_docs_path = mock.MagicMock()
-                mock_docs_path.exists.return_value = True
-                mock_path.return_value.parent.parent.parent.parent = mock.MagicMock()
-                mock_path.return_value.parent.parent.parent.parent.__truediv__.return_value = (
-                    mock_docs_path
-                )
+                with mock.patch.object(adw, "Window", mock_window_class):
+                    # Make the docs path exist
+                    mock_docs_path = mock.MagicMock()
+                    mock_docs_path.exists.return_value = True
+                    mock_path.return_value.parent.parent.parent.parent = (
+                        mock.MagicMock()
+                    )
+                    mock_path.return_value.parent.parent.parent.parent.__truediv__.return_value = (
+                        mock_docs_path
+                    )
 
-                # Make Popen raise an exception
-                mock_popen.side_effect = Exception("Failed to open")
+                    # Make Popen raise an exception
+                    mock_popen.side_effect = Exception("Failed to open")
 
-                ScannerPage._on_learn_more_clicked(mock_parent_window)
+                    ScannerPage._on_learn_more_clicked(mock_parent_window)
 
-                # Should create and present error dialog
-                adw.AlertDialog.assert_called_once()
-                mock_dialog.present.assert_called_once_with(mock_parent_window)
+                    # Should create and present Adw.Window-based error dialog
+                    mock_window_class.assert_called_once()
+                    mock_dialog.set_transient_for.assert_called_once_with(
+                        mock_parent_window
+                    )
+                    mock_dialog.present.assert_called_once()
 
 
 class TestScannerPagePopulateFields:
@@ -738,7 +780,9 @@ class TestScannerPagePopulateFields:
         # Should not raise exception
         ScannerPage.populate_fields(mock_config, mock_widgets)
 
-    def test_populate_fields_sets_log_file_path(self, mock_gi_modules, mock_config, mock_widgets):
+    def test_populate_fields_sets_log_file_path(
+        self, mock_gi_modules, mock_config, mock_widgets
+    ):
         """Test populate_fields sets log file path."""
         from src.ui.preferences.scanner_page import ScannerPage
 
@@ -763,7 +807,9 @@ class TestScannerPagePopulateFields:
         mock_widgets["LogVerbose"].set_active.assert_called_with(True)
         mock_widgets["LogSyslog"].set_active.assert_called_with(True)
 
-    def test_populate_fields_skips_missing_keys(self, mock_gi_modules, mock_config, mock_widgets):
+    def test_populate_fields_skips_missing_keys(
+        self, mock_gi_modules, mock_config, mock_widgets
+    ):
         """Test populate_fields handles missing keys with defaults."""
         from src.ui.preferences.scanner_page import ScannerPage
 
@@ -836,7 +882,9 @@ class TestScannerPageCollectData:
 
         assert result == {}
 
-    def test_collect_data_converts_switches_to_yes_no(self, mock_gi_modules, mock_widgets):
+    def test_collect_data_converts_switches_to_yes_no(
+        self, mock_gi_modules, mock_widgets
+    ):
         """Test collect_data converts switch states to yes/no strings."""
         from src.ui.preferences.scanner_page import ScannerPage
 
@@ -853,7 +901,9 @@ class TestScannerPageCollectData:
         assert result["ScanHTML"] == "no"
         assert result["LogSyslog"] == "no"
 
-    def test_collect_data_converts_numeric_to_string(self, mock_gi_modules, mock_widgets):
+    def test_collect_data_converts_numeric_to_string(
+        self, mock_gi_modules, mock_widgets
+    ):
         """Test collect_data converts numeric values to strings."""
         from src.ui.preferences.scanner_page import ScannerPage
 
@@ -901,7 +951,9 @@ class TestScannerPageCollectData:
         assert "LogVerbose" in result
         assert "LogSyslog" in result
 
-    def test_collect_data_includes_all_performance_settings(self, mock_gi_modules, mock_widgets):
+    def test_collect_data_includes_all_performance_settings(
+        self, mock_gi_modules, mock_widgets
+    ):
         """Test collect_data includes all performance settings."""
         from src.ui.preferences.scanner_page import ScannerPage
 

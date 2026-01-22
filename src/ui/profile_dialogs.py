@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 
 from gi.repository import Adw, GLib, GObject, Gtk
 
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 
 if TYPE_CHECKING:
     from ..profiles.models import ScanProfile
     from ..profiles.profile_manager import ProfileManager
 
 
-class ProfileDialog(Adw.Dialog):
+class ProfileDialog(Adw.Window):
     """
     A dialog for creating or editing scan profiles.
 
@@ -27,21 +27,29 @@ class ProfileDialog(Adw.Dialog):
     - Target directories/files to scan
     - Exclusion paths and patterns
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         # Create new profile
         dialog = ProfileDialog(profile_manager=app.profile_manager)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
 
         # Edit existing profile
         dialog = ProfileDialog(profile_manager=app.profile_manager, profile=existing_profile)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     # Maximum profile name length
     MAX_NAME_LENGTH = 50
 
     def __init__(
-        self, profile_manager: "ProfileManager" = None, profile: "ScanProfile" = None, **kwargs
+        self,
+        profile_manager: "ProfileManager" = None,
+        profile: "ScanProfile" = None,
+        **kwargs,
     ):
         """
         Initialize the profile dialog.
@@ -83,9 +91,11 @@ class ProfileDialog(Adw.Dialog):
         else:
             self.set_title("New Profile")
 
-        self.set_content_width(500)
-        self.set_content_height(600)
-        self.set_can_close(True)
+        self.set_default_size(500, 600)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -131,8 +141,8 @@ class ProfileDialog(Adw.Dialog):
         scrolled.set_child(preferences_page)
         toolbar_view.set_content(scrolled)
 
-        # Set the toolbar view as the dialog child
-        self.set_child(toolbar_view)
+        # Set the toolbar view as the dialog content
+        self.set_content(toolbar_view)
 
     def _create_basic_info_group(self, preferences_page: Adw.PreferencesPage):
         """Create the basic profile info group."""
@@ -174,14 +184,14 @@ class ProfileDialog(Adw.Dialog):
         button_box.set_halign(Gtk.Align.END)
 
         add_folder_btn = Gtk.Button()
-        add_folder_btn.set_icon_name("folder-new-symbolic")
+        add_folder_btn.set_icon_name(resolve_icon_name("folder-new-symbolic"))
         add_folder_btn.set_tooltip_text("Add folder")
         add_folder_btn.add_css_class("flat")
         add_folder_btn.connect("clicked", self._on_add_target_folder_clicked)
         button_box.append(add_folder_btn)
 
         add_file_btn = Gtk.Button()
-        add_file_btn.set_icon_name("document-new-symbolic")
+        add_file_btn.set_icon_name(resolve_icon_name("document-new-symbolic"))
         add_file_btn.set_tooltip_text("Add file")
         add_file_btn.add_css_class("flat")
         add_file_btn.connect("clicked", self._on_add_target_file_clicked)
@@ -218,14 +228,14 @@ class ProfileDialog(Adw.Dialog):
         button_box.set_halign(Gtk.Align.END)
 
         add_path_btn = Gtk.Button()
-        add_path_btn.set_icon_name("folder-new-symbolic")
+        add_path_btn.set_icon_name(resolve_icon_name("folder-new-symbolic"))
         add_path_btn.set_tooltip_text("Add exclusion path")
         add_path_btn.add_css_class("flat")
         add_path_btn.connect("clicked", self._on_add_exclusion_path_clicked)
         button_box.append(add_path_btn)
 
         add_pattern_btn = Gtk.Button()
-        add_pattern_btn.set_icon_name("edit-symbolic")
+        add_pattern_btn.set_icon_name(resolve_icon_name("edit-symbolic"))
         add_pattern_btn.set_tooltip_text("Add exclusion pattern")
         add_pattern_btn.add_css_class("flat")
         add_pattern_btn.connect("clicked", self._on_add_exclusion_pattern_clicked)
@@ -241,7 +251,9 @@ class ProfileDialog(Adw.Dialog):
         # Placeholder for empty list
         self._exclusions_placeholder = Adw.ActionRow()
         self._exclusions_placeholder.set_title("No exclusions added")
-        self._exclusions_placeholder.set_subtitle("Add paths or patterns to exclude from scanning")
+        self._exclusions_placeholder.set_subtitle(
+            "Add paths or patterns to exclude from scanning"
+        )
         add_row_icon(self._exclusions_placeholder, "action-unavailable-symbolic")
         self._exclusions_placeholder.add_css_class("dim-label")
         self._exclusions_listbox.append(self._exclusions_placeholder)
@@ -277,7 +289,9 @@ class ProfileDialog(Adw.Dialog):
             self._show_validation_error("Profile name is required")
             self._save_button.set_sensitive(False)
         elif len(name) > self.MAX_NAME_LENGTH:
-            self._show_validation_error(f"Name must be {self.MAX_NAME_LENGTH} characters or less")
+            self._show_validation_error(
+                f"Name must be {self.MAX_NAME_LENGTH} characters or less"
+            )
             self._save_button.set_sensitive(False)
         else:
             self._hide_validation_error()
@@ -307,7 +321,9 @@ class ProfileDialog(Adw.Dialog):
     def _on_add_exclusion_path_clicked(self, button):
         """Handle add exclusion path button click."""
         self._open_file_dialog(
-            select_folder=True, multiple=True, callback=self._on_exclusion_paths_selected
+            select_folder=True,
+            multiple=True,
+            callback=self._on_exclusion_paths_selected,
         )
 
     def _on_add_exclusion_pattern_clicked(self, button):
@@ -315,7 +331,8 @@ class ProfileDialog(Adw.Dialog):
         # Show pattern entry dialog
         dialog = PatternEntryDialog()
         dialog.connect("response", self._on_pattern_dialog_response)
-        dialog.present(self.get_root())
+        dialog.set_transient_for(self)
+        dialog.present()
 
     def _on_pattern_dialog_response(self, dialog, response):
         """Handle pattern entry dialog response."""
@@ -411,7 +428,9 @@ class ProfileDialog(Adw.Dialog):
 
         # Create target row
         row = self._create_path_row(
-            path=path, icon_name="folder-symbolic", on_remove=lambda: self._remove_target(path)
+            path=path,
+            icon_name="folder-symbolic",
+            on_remove=lambda: self._remove_target(path),
         )
         self._targets_listbox.append(row)
 
@@ -481,7 +500,7 @@ class ProfileDialog(Adw.Dialog):
 
         # Remove button
         remove_btn = Gtk.Button()
-        remove_btn.set_icon_name("user-trash-symbolic")
+        remove_btn.set_icon_name(resolve_icon_name("user-trash-symbolic"))
         remove_btn.set_tooltip_text("Remove")
         remove_btn.add_css_class("flat")
         remove_btn.add_css_class("error")
@@ -636,14 +655,18 @@ class ProfileDialog(Adw.Dialog):
         }
 
 
-class PatternEntryDialog(Adw.Dialog):
+class PatternEntryDialog(Adw.Window):
     """
     A simple dialog for entering exclusion patterns.
+
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
 
     Usage:
         dialog = PatternEntryDialog()
         dialog.connect("response", on_response)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     __gsignals__ = {"response": (GObject.SignalFlags.RUN_LAST, None, (str,))}
@@ -653,9 +676,11 @@ class PatternEntryDialog(Adw.Dialog):
         super().__init__(**kwargs)
 
         self.set_title("Add Exclusion Pattern")
-        self.set_content_width(400)
-        self.set_content_height(200)
-        self.set_can_close(True)
+        self.set_default_size(400, 200)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
         self._setup_ui()
 
@@ -697,13 +722,15 @@ class PatternEntryDialog(Adw.Dialog):
         self._pattern_row = Adw.EntryRow()
         self._pattern_row.set_title("Pattern")
         self._pattern_row.connect("changed", self._on_pattern_changed)
-        self._pattern_row.connect("entry-activated", lambda r: self._on_add_clicked(None))
+        self._pattern_row.connect(
+            "entry-activated", lambda r: self._on_add_clicked(None)
+        )
         pattern_group.add(self._pattern_row)
 
         content_box.append(pattern_group)
 
         toolbar_view.set_content(content_box)
-        self.set_child(toolbar_view)
+        self.set_content(toolbar_view)
 
     def _on_pattern_changed(self, entry_row):
         """Handle pattern entry changes."""
@@ -727,15 +754,26 @@ class PatternEntryDialog(Adw.Dialog):
         return self._pattern_row.get_text().strip()
 
 
-class DeleteProfileDialog(Adw.AlertDialog):
+class DeleteProfileDialog(Adw.Window):
     """
     Confirmation dialog for deleting a profile.
 
+    Uses Adw.Window instead of Adw.AlertDialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
+        def on_response(dialog, response):
+            if response == "delete":
+                # Delete the profile
+                pass
+
         dialog = DeleteProfileDialog(profile_name="Quick Scan")
         dialog.connect("response", on_response)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
+
+    __gsignals__ = {"response": (GObject.SignalFlags.RUN_LAST, None, (str,))}
 
     def __init__(self, profile_name: str, **kwargs):
         """
@@ -747,29 +785,108 @@ class DeleteProfileDialog(Adw.AlertDialog):
         """
         super().__init__(**kwargs)
 
-        self.set_heading("Delete Profile?")
-        self.set_body(
+        self._profile_name = profile_name
+        self._heading = "Delete Profile?"
+        self._body = (
             f'Are you sure you want to delete the profile "{profile_name}"?\n\n'
             "This action cannot be undone."
         )
 
-        self.add_response("cancel", "Cancel")
-        self.add_response("delete", "Delete")
+        self.set_title(self._heading)
+        self.set_default_size(400, -1)  # Natural height
 
-        self.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
-        self.set_default_response("cancel")
-        self.set_close_response("cancel")
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
+
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Set up the dialog UI."""
+        # Create main container with toolbar view for header bar
+        toolbar_view = Adw.ToolbarView()
+
+        # Create header bar
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        # Main content box
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content_box.set_margin_start(24)
+        content_box.set_margin_end(24)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(24)
+
+        # Warning icon
+        warning_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("dialog-warning-symbolic")
+        )
+        warning_icon.set_pixel_size(48)
+        warning_icon.add_css_class("warning")
+        warning_icon.set_halign(Gtk.Align.CENTER)
+        content_box.append(warning_icon)
+
+        # Body text
+        body_label = Gtk.Label()
+        body_label.set_text(self._body)
+        body_label.set_wrap(True)
+        body_label.set_xalign(0.5)
+        body_label.set_justify(Gtk.Justification.CENTER)
+        content_box.append(body_label)
+
+        # Button box
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        button_box.set_halign(Gtk.Align.CENTER)
+        button_box.set_margin_top(12)
+
+        # Cancel button
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.connect("clicked", self._on_cancel_clicked)
+        button_box.append(cancel_button)
+
+        # Delete button
+        delete_button = Gtk.Button(label="Delete")
+        delete_button.add_css_class("destructive-action")
+        delete_button.connect("clicked", self._on_delete_clicked)
+        button_box.append(delete_button)
+
+        content_box.append(button_box)
+
+        toolbar_view.set_content(content_box)
+        self.set_content(toolbar_view)
+
+    def _on_cancel_clicked(self, button):
+        """Handle cancel button click."""
+        self.emit("response", "cancel")
+        self.close()
+
+    def _on_delete_clicked(self, button):
+        """Handle delete button click."""
+        self.emit("response", "delete")
+        self.close()
+
+    def get_heading(self) -> str:
+        """Get the dialog heading/title (for test compatibility)."""
+        return self._heading
+
+    def get_body(self) -> str:
+        """Get the dialog body text (for test compatibility)."""
+        return self._body
 
 
-class ProfileListDialog(Adw.Dialog):
+class ProfileListDialog(Adw.Window):
     """
     A dialog for managing scan profiles.
 
     Displays a list of all profiles with options to create, edit, and delete profiles.
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         dialog = ProfileListDialog(profile_manager=app.profile_manager)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(self, profile_manager: "ProfileManager" = None, **kwargs):
@@ -799,9 +916,11 @@ class ProfileListDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("Manage Profiles")
-        self.set_content_width(500)
-        self.set_content_height(500)
-        self.set_can_close(True)
+        self.set_default_size(500, 500)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -813,14 +932,14 @@ class ProfileListDialog(Adw.Dialog):
 
         # Import profile button
         import_button = Gtk.Button()
-        import_button.set_icon_name("document-open-symbolic")
+        import_button.set_icon_name(resolve_icon_name("document-open-symbolic"))
         import_button.set_tooltip_text("Import profile from file")
         import_button.connect("clicked", self._on_import_clicked)
         header_bar.pack_end(import_button)
 
         # New profile button
         new_profile_button = Gtk.Button()
-        new_profile_button.set_icon_name("list-add-symbolic")
+        new_profile_button.set_icon_name(resolve_icon_name("list-add-symbolic"))
         new_profile_button.set_tooltip_text("Create new profile")
         new_profile_button.add_css_class("suggested-action")
         new_profile_button.connect("clicked", self._on_new_profile_clicked)
@@ -840,7 +959,9 @@ class ProfileListDialog(Adw.Dialog):
         # Profiles group
         self._profiles_group = Adw.PreferencesGroup()
         self._profiles_group.set_title("Scan Profiles")
-        self._profiles_group.set_description("Select a profile to edit or use for scanning")
+        self._profiles_group.set_description(
+            "Select a profile to edit or use for scanning"
+        )
 
         # Profiles list box
         self._profiles_listbox = Gtk.ListBox()
@@ -850,7 +971,9 @@ class ProfileListDialog(Adw.Dialog):
         # Placeholder for empty list
         self._profiles_placeholder = Adw.ActionRow()
         self._profiles_placeholder.set_title("No profiles available")
-        self._profiles_placeholder.set_subtitle("Click the + button to create a new profile")
+        self._profiles_placeholder.set_subtitle(
+            "Click the + button to create a new profile"
+        )
         add_row_icon(self._profiles_placeholder, "document-new-symbolic")
         self._profiles_placeholder.add_css_class("dim-label")
 
@@ -860,8 +983,8 @@ class ProfileListDialog(Adw.Dialog):
         scrolled.set_child(preferences_page)
         toolbar_view.set_content(scrolled)
 
-        # Set the toolbar view as the dialog child
-        self.set_child(toolbar_view)
+        # Set the toolbar view as the dialog content
+        self.set_content(toolbar_view)
 
     def _refresh_profile_list(self):
         """Refresh the profile list from the profile manager."""
@@ -922,24 +1045,28 @@ class ProfileListDialog(Adw.Dialog):
 
         # Use profile button
         use_button = Gtk.Button()
-        use_button.set_icon_name("media-playback-start-symbolic")
+        use_button.set_icon_name(resolve_icon_name("media-playback-start-symbolic"))
         use_button.set_tooltip_text("Use this profile")
         use_button.add_css_class("flat")
         use_button.add_css_class("success")
-        use_button.connect("clicked", lambda btn, p=profile: self._on_use_profile_clicked(p))
+        use_button.connect(
+            "clicked", lambda btn, p=profile: self._on_use_profile_clicked(p)
+        )
         button_box.append(use_button)
 
         # Edit button
         edit_button = Gtk.Button()
-        edit_button.set_icon_name("document-edit-symbolic")
+        edit_button.set_icon_name(resolve_icon_name("document-edit-symbolic"))
         edit_button.set_tooltip_text("Edit profile")
         edit_button.add_css_class("flat")
-        edit_button.connect("clicked", lambda btn, p=profile: self._on_edit_profile_clicked(p))
+        edit_button.connect(
+            "clicked", lambda btn, p=profile: self._on_edit_profile_clicked(p)
+        )
         button_box.append(edit_button)
 
         # Delete button (disabled for default profiles)
         delete_button = Gtk.Button()
-        delete_button.set_icon_name("user-trash-symbolic")
+        delete_button.set_icon_name(resolve_icon_name("user-trash-symbolic"))
         delete_button.set_tooltip_text("Delete profile")
         delete_button.add_css_class("flat")
         if profile.is_default:
@@ -954,10 +1081,12 @@ class ProfileListDialog(Adw.Dialog):
 
         # Export button
         export_button = Gtk.Button()
-        export_button.set_icon_name("document-save-symbolic")
+        export_button.set_icon_name(resolve_icon_name("document-save-symbolic"))
         export_button.set_tooltip_text("Export profile")
         export_button.add_css_class("flat")
-        export_button.connect("clicked", lambda btn, p=profile: self._on_export_profile_clicked(p))
+        export_button.connect(
+            "clicked", lambda btn, p=profile: self._on_export_profile_clicked(p)
+        )
         button_box.append(export_button)
 
         row.add_suffix(button_box)
@@ -974,7 +1103,8 @@ class ProfileListDialog(Adw.Dialog):
         """Handle new profile button click."""
         dialog = ProfileDialog(profile_manager=self._profile_manager)
         dialog.set_on_profile_saved(self._on_profile_saved)
-        dialog.present(self.get_root())
+        dialog.set_transient_for(self)
+        dialog.present()
 
     def _on_edit_profile_clicked(self, profile: "ScanProfile"):
         """
@@ -985,7 +1115,8 @@ class ProfileListDialog(Adw.Dialog):
         """
         dialog = ProfileDialog(profile_manager=self._profile_manager, profile=profile)
         dialog.set_on_profile_saved(self._on_profile_saved)
-        dialog.present(self.get_root())
+        dialog.set_transient_for(self)
+        dialog.present()
 
     def _on_delete_profile_clicked(self, profile: "ScanProfile"):
         """
@@ -995,8 +1126,11 @@ class ProfileListDialog(Adw.Dialog):
             profile: The profile to delete
         """
         dialog = DeleteProfileDialog(profile_name=profile.name)
-        dialog.connect("response", lambda d, r, p=profile: self._on_delete_response(r, p))
-        dialog.present(self.get_root())
+        dialog.connect(
+            "response", lambda d, r, p=profile: self._on_delete_response(r, p)
+        )
+        dialog.set_transient_for(self)
+        dialog.present()
 
     def _on_delete_response(self, response: str, profile: "ScanProfile"):
         """
@@ -1040,7 +1174,9 @@ class ProfileListDialog(Adw.Dialog):
         dialog.set_title("Export Profile")
 
         # Generate default filename from profile name
-        safe_name = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in profile.name)
+        safe_name = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in profile.name
+        )
         dialog.set_initial_name(f"{safe_name}.json")
 
         # Set up file filter for JSON files
@@ -1089,7 +1225,9 @@ class ProfileListDialog(Adw.Dialog):
             # Export the profile
             from pathlib import Path
 
-            self._profile_manager.export_profile(self._exporting_profile_id, Path(file_path))
+            self._profile_manager.export_profile(
+                self._exporting_profile_id, Path(file_path)
+            )
 
         except GLib.Error:
             # User cancelled the dialog

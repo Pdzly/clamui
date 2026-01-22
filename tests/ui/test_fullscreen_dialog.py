@@ -84,19 +84,20 @@ class TestFullscreenLogDialogCreation:
         dialog = dialog_class(title="Test", content="")
         assert dialog is not None
         # Empty content should show placeholder
-        assert dialog.get_content() == ""
+        assert dialog.get_text_content() == ""
 
     def test_dialog_can_close(self, dialog_class):
-        """Test that dialog is configured to allow closing."""
+        """Test that dialog is configured to allow closing (deletable)."""
         dialog = dialog_class(title="Test", content="Content")
-        assert dialog.get_can_close() is True
+        assert dialog.get_deletable() is True
 
     def test_dialog_has_content_dimensions(self, dialog_class):
         """Test that dialog has reasonable default dimensions."""
         dialog = dialog_class(title="Test", content="Content")
-        # Should have content width/height set
-        assert dialog.get_content_width() > 0
-        assert dialog.get_content_height() > 0
+        # Should have default size set (Adw.Window uses get_default_size)
+        width, height = dialog.get_default_size()
+        assert width > 0
+        assert height > 0
 
 
 class TestFullscreenLogDialogContent:
@@ -118,45 +119,45 @@ class TestFullscreenLogDialogContent:
 
     def test_get_content_returns_initial(self, dialog):
         """Test that get_content returns the initial content."""
-        assert dialog.get_content() == "Initial content"
+        assert dialog.get_text_content() == "Initial content"
 
     def test_set_content_updates_content(self, dialog):
         """Test that set_content updates the displayed content."""
-        dialog.set_content("New content here")
-        assert dialog.get_content() == "New content here"
+        dialog.set_text_content("New content here")
+        assert dialog.get_text_content() == "New content here"
 
     def test_set_content_with_multiline(self, dialog):
         """Test set_content with multiline content."""
         multiline_content = "Line 1\nLine 2\nLine 3"
-        dialog.set_content(multiline_content)
-        assert dialog.get_content() == multiline_content
+        dialog.set_text_content(multiline_content)
+        assert dialog.get_text_content() == multiline_content
 
     def test_set_content_with_empty_string(self, dialog):
         """Test that setting empty content shows placeholder."""
-        dialog.set_content("")
+        dialog.set_text_content("")
         # get_content returns empty string when placeholder is shown
-        assert dialog.get_content() == ""
+        assert dialog.get_text_content() == ""
 
     def test_get_content_empty_returns_empty_string(self, empty_dialog):
         """Test that get_content returns empty string for empty dialog."""
-        assert empty_dialog.get_content() == ""
+        assert empty_dialog.get_text_content() == ""
 
     def test_set_content_after_empty(self, empty_dialog):
         """Test setting content after dialog was empty."""
-        empty_dialog.set_content("Now has content")
-        assert empty_dialog.get_content() == "Now has content"
+        empty_dialog.set_text_content("Now has content")
+        assert empty_dialog.get_text_content() == "Now has content"
 
     def test_set_content_with_special_characters(self, dialog):
         """Test set_content with special characters."""
         special_content = "Path: /home/user/test\nStatus: OK ✓\nTime: 10:30:00"
-        dialog.set_content(special_content)
-        assert dialog.get_content() == special_content
+        dialog.set_text_content(special_content)
+        assert dialog.get_text_content() == special_content
 
     def test_set_content_with_long_lines(self, dialog):
         """Test set_content with long lines."""
         long_line = "A" * 1000
-        dialog.set_content(long_line)
-        assert dialog.get_content() == long_line
+        dialog.set_text_content(long_line)
+        assert dialog.get_text_content() == long_line
 
 
 class TestFullscreenLogDialogBuffer:
@@ -189,11 +190,11 @@ class TestFullscreenLogDialogBuffer:
         """Test that direct buffer modification is reflected in get_content."""
         buffer = dialog.get_text_buffer()
         buffer.set_text("Modified via buffer")
-        assert dialog.get_content() == "Modified via buffer"
+        assert dialog.get_text_content() == "Modified via buffer"
 
     def test_set_content_updates_buffer(self, dialog):
         """Test that set_content updates the underlying buffer."""
-        dialog.set_content("New via set_content")
+        dialog.set_text_content("New via set_content")
         buffer = dialog.get_text_buffer()
         start = buffer.get_start_iter()
         end = buffer.get_end_iter()
@@ -225,7 +226,7 @@ class TestFullscreenLogDialogPlaceholder:
         """Test that get_content returns empty string when placeholder shown."""
         dialog = dialog_class(title="Test", content="")
         # get_content should return "" even though buffer has placeholder
-        assert dialog.get_content() == ""
+        assert dialog.get_text_content() == ""
 
     def test_set_content_replaces_placeholder(self, dialog_class):
         """Test that setting content replaces the placeholder."""
@@ -237,7 +238,7 @@ class TestFullscreenLogDialogPlaceholder:
         assert buffer.get_text(start, end, False) == dialog_class.EMPTY_PLACEHOLDER
 
         # Set real content
-        dialog.set_content("Real content")
+        dialog.set_text_content("Real content")
 
         # Verify placeholder is replaced
         start = buffer.get_start_iter()
@@ -247,10 +248,10 @@ class TestFullscreenLogDialogPlaceholder:
     def test_clearing_content_shows_placeholder_again(self, dialog_class):
         """Test that clearing content shows placeholder again."""
         dialog = dialog_class(title="Test", content="Some content")
-        assert dialog.get_content() == "Some content"
+        assert dialog.get_text_content() == "Some content"
 
         # Clear content
-        dialog.set_content("")
+        dialog.set_text_content("")
 
         # Check buffer shows placeholder
         buffer = dialog.get_text_buffer()
@@ -259,4 +260,4 @@ class TestFullscreenLogDialogPlaceholder:
         assert buffer.get_text(start, end, False) == dialog_class.EMPTY_PLACEHOLDER
 
         # get_content should return empty string
-        assert dialog.get_content() == ""
+        assert dialog.get_text_content() == ""

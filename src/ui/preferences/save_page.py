@@ -19,6 +19,7 @@ from ...core.clamav_config import (
     validate_config,
     write_config_with_elevation,
 )
+from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin
 from .database_page import DatabasePage
 from .onaccess_page import OnAccessPage
@@ -114,12 +115,7 @@ class SavePage(PreferencesPageMixin):
             title: Dialog title
             message: Error message text
         """
-        dialog = Adw.AlertDialog()
-        dialog.set_heading(title)
-        dialog.set_body(message)
-        dialog.add_response("ok", "OK")
-        dialog.set_default_response("ok")
-        dialog.present(self._window)
+        self._show_simple_dialog(title, message)
 
     def _show_success_dialog(self, title: str, message: str):
         """
@@ -132,12 +128,58 @@ class SavePage(PreferencesPageMixin):
             title: Dialog title
             message: Success message text
         """
-        dialog = Adw.AlertDialog()
-        dialog.set_heading(title)
-        dialog.set_body(message)
-        dialog.add_response("ok", "OK")
-        dialog.set_default_response("ok")
-        dialog.present(self._window)
+        self._show_simple_dialog(title, message)
+
+    def _show_simple_dialog(self, title: str, message: str):
+        """
+        Show a simple message dialog with an OK button.
+
+        Uses Adw.Window for compatibility with libadwaita < 1.5.
+
+        Args:
+            title: Dialog title/heading
+            message: Message body text
+        """
+        dialog = Adw.Window()
+        dialog.set_title(title)
+        dialog.set_default_size(350, -1)
+        dialog.set_modal(True)
+        dialog.set_deletable(True)
+        dialog.set_transient_for(self._window)
+
+        # Create content
+        toolbar_view = Adw.ToolbarView()
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content_box.set_margin_start(24)
+        content_box.set_margin_end(24)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(24)
+
+        # Message label
+        label = Gtk.Label()
+        label.set_text(message)
+        label.set_wrap(True)
+        label.set_xalign(0)
+        content_box.append(label)
+
+        # OK button
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_halign(Gtk.Align.END)
+        button_box.set_margin_top(12)
+
+        ok_button = Gtk.Button(label="OK")
+        ok_button.add_css_class("suggested-action")
+        ok_button.connect("clicked", lambda btn: dialog.close())
+        button_box.append(ok_button)
+
+        content_box.append(button_box)
+        toolbar_view.set_content(content_box)
+        dialog.set_content(toolbar_view)
+
+        dialog.present()
 
     def create_page(self) -> Adw.PreferencesPage:
         """
@@ -151,7 +193,7 @@ class SavePage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Save & Apply",
-            icon_name="document-save-symbolic",
+            icon_name=resolve_icon_name("document-save-symbolic"),
         )
 
         # Information banner explaining what needs to be saved
@@ -162,7 +204,9 @@ class SavePage(PreferencesPageMixin):
         auto_save_row = Adw.ActionRow()
         auto_save_row.set_title("Auto-Saved")
         auto_save_row.set_subtitle("Scan Backend, Exclusions")
-        auto_save_icon = Gtk.Image.new_from_icon_name("emblem-default-symbolic")
+        auto_save_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("emblem-default-symbolic")
+        )
         auto_save_icon.add_css_class("success")
         auto_save_row.add_prefix(auto_save_icon)
         info_group.add(auto_save_row)
@@ -175,7 +219,9 @@ class SavePage(PreferencesPageMixin):
             "Database Updates, Scanner, On-Access, Scheduled Scans"
         )
         manual_save_row.set_subtitle_lines(1)
-        lock_icon = Gtk.Image.new_from_icon_name("system-lock-screen-symbolic")
+        lock_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("system-lock-screen-symbolic")
+        )
         lock_icon.add_css_class("warning")
         manual_save_row.add_prefix(lock_icon)
         info_group.add(manual_save_row)

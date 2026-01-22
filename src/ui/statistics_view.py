@@ -24,7 +24,7 @@ from ..core.statistics_calculator import (
     StatisticsCalculator,
     Timeframe,
 )
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import (
     EmptyStateConfig,
     StatusLevel,
@@ -136,7 +136,7 @@ class StatisticsView(Gtk.Box):
 
         # Refresh button
         refresh_button = Gtk.Button()
-        refresh_button.set_icon_name("view-refresh-symbolic")
+        refresh_button.set_icon_name(resolve_icon_name("view-refresh-symbolic"))
         refresh_button.set_tooltip_text("Refresh statistics")
         refresh_button.add_css_class("flat")
         refresh_button.connect("clicked", self._on_refresh_clicked)
@@ -588,7 +588,7 @@ class StatisticsView(Gtk.Box):
         quick_scan_row.connect("activated", self._on_quick_scan_clicked)
 
         # Add chevron to indicate it's activatable
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         quick_scan_row.add_suffix(chevron)
 
@@ -602,7 +602,7 @@ class StatisticsView(Gtk.Box):
         view_logs_row.set_activatable(True)
         view_logs_row.connect("activated", self._on_view_logs_clicked)
 
-        chevron2 = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron2 = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron2.add_css_class("dim-label")
         view_logs_row.add_suffix(chevron2)
 
@@ -757,7 +757,9 @@ class StatisticsView(Gtk.Box):
         """Update the protection status display."""
         if self._current_protection is None:
             self._protection_row.set_subtitle("Unable to determine status")
-            self._protection_row_icon.set_from_icon_name("dialog-question-symbolic")
+            self._protection_row_icon.set_from_icon_name(
+                resolve_icon_name("dialog-question-symbolic")
+            )
             self._status_badge.set_label("Unknown")
             return
 
@@ -768,19 +770,27 @@ class StatisticsView(Gtk.Box):
 
         # Update icon and badge based on protection level
         if status.level == ProtectionLevel.PROTECTED.value:
-            self._protection_row_icon.set_from_icon_name("object-select-symbolic")
+            self._protection_row_icon.set_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             self._status_badge.set_label("Protected")
             set_status_class(self._status_badge, StatusLevel.SUCCESS)
         elif status.level == ProtectionLevel.AT_RISK.value:
-            self._protection_row_icon.set_from_icon_name("dialog-warning-symbolic")
+            self._protection_row_icon.set_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             self._status_badge.set_label("At Risk")
             set_status_class(self._status_badge, StatusLevel.WARNING)
         elif status.level == ProtectionLevel.UNPROTECTED.value:
-            self._protection_row_icon.set_from_icon_name("dialog-error-symbolic")
+            self._protection_row_icon.set_from_icon_name(
+                resolve_icon_name("dialog-error-symbolic")
+            )
             self._status_badge.set_label("Unprotected")
             set_status_class(self._status_badge, StatusLevel.ERROR)
         else:
-            self._protection_row_icon.set_from_icon_name("dialog-question-symbolic")
+            self._protection_row_icon.set_from_icon_name(
+                resolve_icon_name("dialog-question-symbolic")
+            )
             self._status_badge.set_label("Unknown")
             clear_status_classes(self._status_badge)
 
@@ -854,7 +864,7 @@ class StatisticsView(Gtk.Box):
 
         # Error icon
         icon = Gtk.Image()
-        icon.set_from_icon_name("dialog-error-symbolic")
+        icon.set_from_icon_name(resolve_icon_name("dialog-error-symbolic"))
         icon.set_pixel_size(48)
         icon.add_css_class("dim-label")
         error_box.append(icon)
@@ -888,7 +898,9 @@ class StatisticsView(Gtk.Box):
         self._threats_label.remove_css_class("error")
 
         self._protection_row.set_subtitle("No scan history available")
-        self._protection_row_icon.set_from_icon_name("dialog-information-symbolic")
+        self._protection_row_icon.set_from_icon_name(
+            resolve_icon_name("dialog-information-symbolic")
+        )
         self._status_badge.set_label("No Data")
         self._status_badge.remove_css_class("success")
         self._status_badge.remove_css_class("warning")
@@ -915,7 +927,9 @@ class StatisticsView(Gtk.Box):
         self._threats_label.remove_css_class("error")
 
         self._protection_row.set_subtitle("Unable to determine status")
-        self._protection_row_icon.set_from_icon_name("dialog-error-symbolic")
+        self._protection_row_icon.set_from_icon_name(
+            resolve_icon_name("dialog-error-symbolic")
+        )
         self._status_badge.set_label("Error")
         set_status_class(self._status_badge, StatusLevel.ERROR)
 

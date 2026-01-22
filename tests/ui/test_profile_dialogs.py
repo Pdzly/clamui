@@ -91,26 +91,34 @@ class TestProfileDialogCreation:
         assert dialog is not None
         assert dialog.get_title() == "New Profile"
 
-    def test_dialog_can_close(self, dialog_class):
-        """Test that dialog is configured to allow closing."""
+    def test_dialog_is_deletable(self, dialog_class):
+        """Test that dialog is configured to allow closing (deletable)."""
         dialog = dialog_class()
-        assert dialog.get_can_close() is True
+        assert dialog.get_deletable() is True
 
-    def test_dialog_has_content_dimensions(self, dialog_class):
+    def test_dialog_is_modal(self, dialog_class):
+        """Test that dialog is configured as modal."""
+        dialog = dialog_class()
+        assert dialog.get_modal() is True
+
+    def test_dialog_has_default_size(self, dialog_class):
         """Test that dialog has reasonable default dimensions."""
         dialog = dialog_class()
-        assert dialog.get_content_width() > 0
-        assert dialog.get_content_height() > 0
+        width, height = dialog.get_default_size()
+        assert width > 0
+        assert height > 0
 
-    def test_dialog_content_width_is_500(self, dialog_class):
-        """Test that dialog has content width of 500."""
+    def test_dialog_default_width_is_500(self, dialog_class):
+        """Test that dialog has default width of 500."""
         dialog = dialog_class()
-        assert dialog.get_content_width() == 500
+        width, _ = dialog.get_default_size()
+        assert width == 500
 
-    def test_dialog_content_height_is_600(self, dialog_class):
-        """Test that dialog has content height of 600."""
+    def test_dialog_default_height_is_600(self, dialog_class):
+        """Test that dialog has default height of 600."""
         dialog = dialog_class()
-        assert dialog.get_content_height() == 600
+        _, height = dialog.get_default_size()
+        assert height == 600
 
 
 class TestProfileDialogEditMode:
@@ -295,20 +303,27 @@ class TestPatternEntryDialogCreation:
         dialog = dialog_class()
         assert dialog.get_title() == "Add Exclusion Pattern"
 
-    def test_dialog_can_close(self, dialog_class):
-        """Test that dialog is configured to allow closing."""
+    def test_dialog_is_deletable(self, dialog_class):
+        """Test that dialog is configured to allow closing (deletable)."""
         dialog = dialog_class()
-        assert dialog.get_can_close() is True
+        assert dialog.get_deletable() is True
 
-    def test_dialog_content_width(self, dialog_class):
-        """Test that dialog has content width of 400."""
+    def test_dialog_is_modal(self, dialog_class):
+        """Test that dialog is configured as modal."""
         dialog = dialog_class()
-        assert dialog.get_content_width() == 400
+        assert dialog.get_modal() is True
 
-    def test_dialog_content_height(self, dialog_class):
-        """Test that dialog has content height of 200."""
+    def test_dialog_default_width(self, dialog_class):
+        """Test that dialog has default width of 400."""
         dialog = dialog_class()
-        assert dialog.get_content_height() == 200
+        width, _ = dialog.get_default_size()
+        assert width == 400
+
+    def test_dialog_default_height(self, dialog_class):
+        """Test that dialog has default height of 200."""
+        dialog = dialog_class()
+        _, height = dialog.get_default_size()
+        assert height == 200
 
 
 class TestPatternEntryDialogGetPattern:
@@ -364,16 +379,17 @@ class TestDeleteProfileDialogCreation:
         body = dialog.get_body()
         assert "cannot be undone" in body
 
-    def test_dialog_has_cancel_response(self, dialog_class):
-        """Test that dialog has cancel response."""
+    def test_dialog_is_modal(self, dialog_class):
+        """Test that dialog is configured as modal."""
         dialog = dialog_class(profile_name="Test")
-        # AlertDialog default response should be set
-        assert dialog.get_default_response() == "cancel"
+        # Adw.Window-based dialog should be modal
+        assert dialog.get_modal() is True
 
-    def test_dialog_has_close_response(self, dialog_class):
-        """Test that dialog close response is cancel."""
+    def test_dialog_is_deletable(self, dialog_class):
+        """Test that dialog is deletable (can be closed)."""
         dialog = dialog_class(profile_name="Test")
-        assert dialog.get_close_response() == "cancel"
+        # Adw.Window-based dialog should be deletable
+        assert dialog.get_deletable() is True
 
 
 class TestDeleteProfileDialogWithSpecialNames:
@@ -438,20 +454,27 @@ class TestProfileListDialogCreation:
         dialog = dialog_class()
         assert dialog.get_title() == "Manage Profiles"
 
-    def test_dialog_can_close(self, dialog_class):
-        """Test that dialog is configured to allow closing."""
+    def test_dialog_is_deletable(self, dialog_class):
+        """Test that dialog is configured to allow closing (deletable)."""
         dialog = dialog_class()
-        assert dialog.get_can_close() is True
+        assert dialog.get_deletable() is True
 
-    def test_dialog_content_width(self, dialog_class):
-        """Test that dialog has content width of 500."""
+    def test_dialog_is_modal(self, dialog_class):
+        """Test that dialog is configured as modal."""
         dialog = dialog_class()
-        assert dialog.get_content_width() == 500
+        assert dialog.get_modal() is True
 
-    def test_dialog_content_height(self, dialog_class):
-        """Test that dialog has content height of 500."""
+    def test_dialog_default_width(self, dialog_class):
+        """Test that dialog has default width of 500."""
         dialog = dialog_class()
-        assert dialog.get_content_height() == 500
+        width, _ = dialog.get_default_size()
+        assert width == 500
+
+    def test_dialog_default_height(self, dialog_class):
+        """Test that dialog has default height of 500."""
+        dialog = dialog_class()
+        _, height = dialog.get_default_size()
+        assert height == 500
 
 
 class TestProfileListDialogCallback:
@@ -488,7 +511,9 @@ class TestProfileListDialogWithMockManager:
         """Create a mock profile manager for testing."""
 
         class MockProfile:
-            def __init__(self, id, name, description="", targets=None, is_default=False):
+            def __init__(
+                self, id, name, description="", targets=None, is_default=False
+            ):
                 self.id = id
                 self.name = name
                 self.description = description
@@ -501,7 +526,9 @@ class TestProfileListDialogWithMockManager:
                 self._profiles = [
                     MockProfile("1", "Quick Scan", "A quick scan", ["/home"], False),
                     MockProfile("2", "Full Scan", "Complete system scan", ["/"], True),
-                    MockProfile("3", "Custom Scan", "", ["/home/user/downloads"], False),
+                    MockProfile(
+                        "3", "Custom Scan", "", ["/home/user/downloads"], False
+                    ),
                 ]
 
             def list_profiles(self):
@@ -648,7 +675,9 @@ class TestProfileDialogWithPartialExclusions:
         assert "/home/cache" in data["exclusions"]["paths"]
         assert "patterns" not in data["exclusions"]
 
-    def test_loads_exclusion_patterns_only(self, dialog_class, profile_with_patterns_only):
+    def test_loads_exclusion_patterns_only(
+        self, dialog_class, profile_with_patterns_only
+    ):
         """Test loading profile with only exclusion patterns."""
         dialog = dialog_class(profile=profile_with_patterns_only)
         data = dialog.get_profile_data()

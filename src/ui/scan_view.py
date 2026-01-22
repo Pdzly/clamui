@@ -23,7 +23,7 @@ from ..core.utils import (
 )
 from .profile_dialogs import ProfileListDialog
 from .scan_results_dialog import ScanResultsDialog
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import StatusLevel, set_status_class
 
 if TYPE_CHECKING:
@@ -446,7 +446,7 @@ class ScanView(Gtk.Box):
 
         # Create manage profiles button
         manage_profiles_btn = Gtk.Button()
-        manage_profiles_btn.set_icon_name("emblem-system-symbolic")
+        manage_profiles_btn.set_icon_name(resolve_icon_name("emblem-system-symbolic"))
         manage_profiles_btn.set_tooltip_text("Manage profiles")
         manage_profiles_btn.add_css_class("flat")
         manage_profiles_btn.set_valign(Gtk.Align.CENTER)
@@ -595,8 +595,9 @@ class ScanView(Gtk.Box):
             # Set callback for when a profile is selected to run
             dialog.set_on_profile_selected(self._on_profile_run_from_dialog)
             # Refresh profiles when dialog is closed
-            dialog.connect("closed", self._on_profiles_dialog_closed)
-            dialog.present(root)
+            dialog.connect("close-request", self._on_profiles_dialog_closed)
+            dialog.set_transient_for(root)
+            dialog.present()
 
     def _on_profiles_dialog_closed(self, dialog):
         """
@@ -638,7 +639,7 @@ class ScanView(Gtk.Box):
 
         # Add Files button
         self._add_files_button = Gtk.Button()
-        self._add_files_button.set_icon_name("document-new-symbolic")
+        self._add_files_button.set_icon_name(resolve_icon_name("document-new-symbolic"))
         self._add_files_button.set_tooltip_text("Add files")
         self._add_files_button.add_css_class("flat")
         self._add_files_button.connect("clicked", self._on_select_file_clicked)
@@ -646,7 +647,7 @@ class ScanView(Gtk.Box):
 
         # Add Folders button
         self._add_folders_button = Gtk.Button()
-        self._add_folders_button.set_icon_name("folder-new-symbolic")
+        self._add_folders_button.set_icon_name(resolve_icon_name("folder-new-symbolic"))
         self._add_folders_button.set_tooltip_text("Add folders")
         self._add_folders_button.add_css_class("flat")
         self._add_folders_button.connect("clicked", self._on_select_folder_clicked)
@@ -654,7 +655,9 @@ class ScanView(Gtk.Box):
 
         # Clear All button (visible when multiple paths exist)
         self._clear_all_button = Gtk.Button()
-        self._clear_all_button.set_icon_name("edit-clear-all-symbolic")
+        self._clear_all_button.set_icon_name(
+            resolve_icon_name("edit-clear-all-symbolic")
+        )
         self._clear_all_button.set_tooltip_text("Clear all")
         self._clear_all_button.add_css_class("flat")
         self._clear_all_button.connect("clicked", self._on_clear_all_clicked)
@@ -708,7 +711,7 @@ class ScanView(Gtk.Box):
 
         # Remove button
         remove_btn = Gtk.Button()
-        remove_btn.set_icon_name("edit-delete-symbolic")
+        remove_btn.set_icon_name(resolve_icon_name("edit-delete-symbolic"))
         remove_btn.set_tooltip_text("Remove")
         remove_btn.add_css_class("flat")
         remove_btn.add_css_class("error")
@@ -1091,7 +1094,8 @@ class ScanView(Gtk.Box):
             quarantine_manager=self._quarantine_manager,
             settings_manager=self._settings_manager,
         )
-        dialog.present(root)
+        dialog.set_transient_for(root)
+        dialog.present()
 
     def _on_scan_clicked(self, button):
         """
@@ -1145,7 +1149,8 @@ class ScanView(Gtk.Box):
                     app.activate_action("show-update", None)
 
         dialog = DatabaseMissingDialog(callback=on_dialog_response)
-        dialog.present(root)
+        dialog.set_transient_for(root)
+        dialog.present()
 
     def _on_eicar_test_clicked(self, button):
         """

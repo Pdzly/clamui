@@ -12,7 +12,7 @@ from collections.abc import Callable
 from gi.repository import Adw, Gtk
 
 
-class CloseBehaviorDialog(Adw.Dialog):
+class CloseBehaviorDialog(Adw.Window):
     """
     A dialog asking the user what to do when closing the window.
 
@@ -22,13 +22,17 @@ class CloseBehaviorDialog(Adw.Dialog):
 
     Also includes a "Remember my choice" checkbox.
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         def on_response(choice: str | None, remember: bool):
             # choice is "minimize", "quit", or None if dismissed
             pass
 
         dialog = CloseBehaviorDialog(callback=on_response)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(
@@ -59,12 +63,14 @@ class CloseBehaviorDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("Close Application?")
-        self.set_content_width(400)
-        self.set_content_height(-1)  # Natural height
-        self.set_can_close(True)
+        self.set_default_size(400, -1)  # Natural height
 
-        # Connect to close signal for when user dismisses without choosing
-        self.connect("closed", self._on_dialog_closed)
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
+
+        # Connect to close-request signal for when user dismisses without choosing
+        self.connect("close-request", self._on_dialog_close_request)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -95,7 +101,9 @@ class CloseBehaviorDialog(Adw.Dialog):
         # Minimize to tray option
         self._minimize_row = Adw.ActionRow()
         self._minimize_row.set_title("Minimize to tray")
-        self._minimize_row.set_subtitle("Hide the window but keep ClamUI running in the background")
+        self._minimize_row.set_subtitle(
+            "Hide the window but keep ClamUI running in the background"
+        )
         self._minimize_row.set_activatable(True)
 
         minimize_check = Gtk.CheckButton()
@@ -152,7 +160,7 @@ class CloseBehaviorDialog(Adw.Dialog):
         content_box.append(button_box)
 
         toolbar_view.set_content(content_box)
-        self.set_child(toolbar_view)
+        self.set_content(toolbar_view)
 
         # Connect check button signals to enable confirm button
         self._minimize_check.connect("toggled", self._on_option_toggled)
@@ -160,7 +168,9 @@ class CloseBehaviorDialog(Adw.Dialog):
 
     def _on_option_toggled(self, button):
         """Handle option toggle - enable confirm button when an option is selected."""
-        has_selection = self._minimize_check.get_active() or self._quit_check.get_active()
+        has_selection = (
+            self._minimize_check.get_active() or self._quit_check.get_active()
+        )
         self._confirm_button.set_sensitive(has_selection)
 
     def _on_cancel_clicked(self, button):
@@ -178,8 +188,9 @@ class CloseBehaviorDialog(Adw.Dialog):
             self._choice = None
         self.close()
 
-    def _on_dialog_closed(self, dialog):
-        """Handle dialog close - call the callback with the result."""
+    def _on_dialog_close_request(self, window):
+        """Handle dialog close request - call the callback with the result."""
         remember = self._remember_check.get_active()
         if self._callback:
             self._callback(self._choice, remember)
+        return False  # Allow the window to close

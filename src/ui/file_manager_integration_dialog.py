@@ -22,6 +22,7 @@ from ..core.file_manager_integration import (
     get_available_integrations,
     install_integration,
 )
+from .utils import resolve_icon_name
 
 if TYPE_CHECKING:
     from ..core.settings_manager import SettingsManager
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class FileManagerIntegrationDialog(Adw.Dialog):
+class FileManagerIntegrationDialog(Adw.Window):
     """
     A dialog for configuring file manager integration.
 
@@ -37,12 +38,16 @@ class FileManagerIntegrationDialog(Adw.Dialog):
     but not yet installed. Allows the user to select which file managers to
     integrate with.
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         dialog = FileManagerIntegrationDialog(
             settings_manager=settings_manager,
             on_complete=lambda: print("Done"),
         )
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(
@@ -72,9 +77,11 @@ class FileManagerIntegrationDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("File Manager Integration")
-        self.set_content_width(500)
-        self.set_content_height(450)
-        self.set_can_close(True)
+        self.set_default_size(500, 450)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -110,7 +117,7 @@ class FileManagerIntegrationDialog(Adw.Dialog):
         toolbar_view.set_content(scrolled)
 
         self._toast_overlay.set_child(toolbar_view)
-        self.set_child(self._toast_overlay)
+        self.set_content(self._toast_overlay)
 
     def _create_info_section(self, preferences_page: Adw.PreferencesPage):
         """Create the information section."""
@@ -130,7 +137,9 @@ class FileManagerIntegrationDialog(Adw.Dialog):
             "No system files are modified."
         )
 
-        info_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+        info_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("dialog-information-symbolic")
+        )
         info_icon.add_css_class("dim-label")
         info_row.add_prefix(info_icon)
 
@@ -158,9 +167,13 @@ class FileManagerIntegrationDialog(Adw.Dialog):
             # No file managers detected
             no_fm_row = Adw.ActionRow()
             no_fm_row.set_title("No supported file managers detected")
-            no_fm_row.set_subtitle("ClamUI supports Nemo, Nautilus, and Dolphin file managers.")
+            no_fm_row.set_subtitle(
+                "ClamUI supports Nemo, Nautilus, and Dolphin file managers."
+            )
 
-            warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            warning_icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             warning_icon.add_css_class("dim-label")
             no_fm_row.add_prefix(warning_icon)
 
@@ -191,7 +204,7 @@ class FileManagerIntegrationDialog(Adw.Dialog):
 
         # Add file manager icon
         icon_name = self._get_file_manager_icon(integration.file_manager)
-        icon = Gtk.Image.new_from_icon_name(icon_name)
+        icon = Gtk.Image.new_from_icon_name(resolve_icon_name(icon_name))
         icon.add_css_class("dim-label")
         row.add_prefix(icon)
 

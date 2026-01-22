@@ -14,6 +14,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin
 
 
@@ -53,7 +54,7 @@ class ScheduledPage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Scheduled Scans",
-            icon_name="alarm-symbolic",
+            icon_name=resolve_icon_name("alarm-symbolic"),
         )
 
         # Create scheduled scans configuration group

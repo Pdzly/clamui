@@ -14,13 +14,18 @@ from collections.abc import Callable
 
 from gi.repository import Adw, Gtk
 
+from .utils import resolve_icon_name
 
-class DatabaseMissingDialog(Adw.Dialog):
+
+class DatabaseMissingDialog(Adw.Window):
     """
     Dialog prompting user to download the virus database or cancel scan.
 
     Shows a warning that the virus database is required for scanning,
     with options to navigate to the Update view to download it or cancel.
+
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
 
     Usage:
         def on_response(choice: str | None):
@@ -30,7 +35,8 @@ class DatabaseMissingDialog(Adw.Dialog):
                 pass
 
         dialog = DatabaseMissingDialog(callback=on_response)
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(
@@ -57,12 +63,14 @@ class DatabaseMissingDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("Virus Database Required")
-        self.set_content_width(400)
-        self.set_content_height(-1)  # Natural height
-        self.set_can_close(True)
+        self.set_default_size(400, -1)  # Natural height
 
-        # Connect to close signal for when user dismisses without choosing
-        self.connect("closed", self._on_dialog_closed)
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
+
+        # Connect to close-request signal for when user dismisses without choosing
+        self.connect("close-request", self._on_dialog_close_request)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -85,7 +93,9 @@ class DatabaseMissingDialog(Adw.Dialog):
         icon_title_box.set_halign(Gtk.Align.CENTER)
 
         # Warning icon
-        warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+        warning_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("dialog-warning-symbolic")
+        )
         warning_icon.set_pixel_size(48)
         warning_icon.add_css_class("warning")
         icon_title_box.append(warning_icon)
@@ -130,7 +140,7 @@ class DatabaseMissingDialog(Adw.Dialog):
         content_box.append(button_box)
 
         toolbar_view.set_content(content_box)
-        self.set_child(toolbar_view)
+        self.set_content(toolbar_view)
 
     def _on_cancel_clicked(self, button):
         """Handle cancel button click."""
@@ -142,7 +152,8 @@ class DatabaseMissingDialog(Adw.Dialog):
         self._choice = "download"
         self.close()
 
-    def _on_dialog_closed(self, dialog):
-        """Handle dialog close - call the callback with the result."""
+    def _on_dialog_close_request(self, window):
+        """Handle dialog close request - call the callback with the result."""
         if self._callback:
             self._callback(self._choice)
+        return False  # Allow the window to close

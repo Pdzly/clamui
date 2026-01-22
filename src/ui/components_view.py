@@ -16,7 +16,7 @@ from ..core.utils import (
     check_clamdscan_installed,
     check_freshclam_installed,
 )
-from .utils import add_row_icon
+from .utils import add_row_icon, resolve_icon_name
 from .view_helpers import StatusLevel, clear_status_classes, set_status_class
 
 # Setup guide content for each component
@@ -210,7 +210,7 @@ class ComponentsView(Gtk.Box):
         status_box.set_valign(Gtk.Align.CENTER)
 
         status_icon = Gtk.Image()
-        status_icon.set_from_icon_name("dialog-question-symbolic")
+        status_icon.set_from_icon_name(resolve_icon_name("dialog-question-symbolic"))
         status_box.append(status_icon)
 
         status_label = Gtk.Label()
@@ -325,7 +325,7 @@ class ComponentsView(Gtk.Box):
 
         # Copy button
         copy_button = Gtk.Button()
-        copy_button.set_icon_name("edit-copy-symbolic")
+        copy_button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
         copy_button.set_tooltip_text("Copy to clipboard")
         copy_button.set_valign(Gtk.Align.CENTER)
         copy_button.add_css_class("flat")
@@ -348,8 +348,10 @@ class ComponentsView(Gtk.Box):
         clipboard.set(command)
 
         # Visual feedback - change icon temporarily
-        button.set_icon_name("object-select-symbolic")
-        GLib.timeout_add(1500, lambda: button.set_icon_name("edit-copy-symbolic"))
+        button.set_icon_name(resolve_icon_name("object-select-symbolic"))
+        GLib.timeout_add(
+            1500, lambda: button.set_icon_name(resolve_icon_name("edit-copy-symbolic"))
+        )
 
     def _add_flatpak_bundled_message(self, content_box: Gtk.Box, component_id: str):
         """
@@ -374,7 +376,7 @@ class ComponentsView(Gtk.Box):
 
         # Info icon
         info_icon = Gtk.Image()
-        info_icon.set_from_icon_name("info-symbolic")
+        info_icon.set_from_icon_name(resolve_icon_name("info-symbolic"))
         info_icon.set_icon_size(Gtk.IconSize.LARGE)
         info_icon.add_css_class("dim-label")
         info_box.append(info_icon)
@@ -408,7 +410,7 @@ class ComponentsView(Gtk.Box):
 
         # Refresh button
         self._refresh_button = Gtk.Button()
-        self._refresh_button.set_icon_name("view-refresh-symbolic")
+        self._refresh_button.set_icon_name(resolve_icon_name("view-refresh-symbolic"))
         self._refresh_button.set_tooltip_text("Refresh Status")
         self._refresh_button.add_css_class("flat")
         self._refresh_button.connect("clicked", self._on_refresh_clicked)
@@ -491,7 +493,7 @@ class ComponentsView(Gtk.Box):
         is_flatpak_bundled = is_flatpak() and component_id in ("clamscan", "freshclam")
 
         if is_installed:
-            status_icon.set_from_icon_name("object-select-symbolic")
+            status_icon.set_from_icon_name(resolve_icon_name("object-select-symbolic"))
             set_status_class(status_icon, StatusLevel.SUCCESS)
             if is_flatpak_bundled:
                 status_label.set_text("Bundled")
@@ -508,13 +510,13 @@ class ComponentsView(Gtk.Box):
         else:
             # In Flatpak, bundled components should always be available
             if is_flatpak_bundled:
-                status_icon.set_from_icon_name("dialog-error-symbolic")
+                status_icon.set_from_icon_name(resolve_icon_name("dialog-error-symbolic"))
                 set_status_class(status_icon, StatusLevel.ERROR)
                 status_label.set_text("Unavailable")
                 expander.set_subtitle("Flatpak package issue - component should be bundled")
                 expander.set_enable_expansion(False)
             else:
-                status_icon.set_from_icon_name("dialog-warning-symbolic")
+                status_icon.set_from_icon_name(resolve_icon_name("dialog-warning-symbolic"))
                 set_status_class(status_icon, StatusLevel.WARNING)
                 status_label.set_text("Not installed")
                 expander.set_subtitle("Not installed - expand for setup instructions")
@@ -547,7 +549,7 @@ class ComponentsView(Gtk.Box):
         guide_row = self._guide_rows.get(component_id)
 
         if status == DaemonStatus.RUNNING:
-            status_icon.set_from_icon_name("object-select-symbolic")
+            status_icon.set_from_icon_name(resolve_icon_name("object-select-symbolic"))
             set_status_class(status_icon, StatusLevel.SUCCESS)
             status_label.set_text("Running")
             expander.set_subtitle("Daemon is running")
@@ -556,7 +558,7 @@ class ComponentsView(Gtk.Box):
                 guide_row.set_visible(False)
             expander.set_enable_expansion(False)
         elif status == DaemonStatus.STOPPED:
-            status_icon.set_from_icon_name("media-playback-stop-symbolic")
+            status_icon.set_from_icon_name(resolve_icon_name("media-playback-stop-symbolic"))
             set_status_class(status_icon, StatusLevel.WARNING)
             status_label.set_text("Stopped")
             expander.set_subtitle("Daemon is installed but not running")
@@ -565,7 +567,7 @@ class ComponentsView(Gtk.Box):
                 guide_row.set_visible(True)
             expander.set_enable_expansion(True)
         elif status == DaemonStatus.NOT_INSTALLED:
-            status_icon.set_from_icon_name("dialog-warning-symbolic")
+            status_icon.set_from_icon_name(resolve_icon_name("dialog-warning-symbolic"))
             set_status_class(status_icon, StatusLevel.WARNING)
             status_label.set_text("Not installed")
             expander.set_subtitle("Not installed - expand for setup instructions")
@@ -574,7 +576,7 @@ class ComponentsView(Gtk.Box):
                 guide_row.set_visible(True)
             expander.set_enable_expansion(True)
         else:  # UNKNOWN
-            status_icon.set_from_icon_name("dialog-question-symbolic")
+            status_icon.set_from_icon_name(resolve_icon_name("dialog-question-symbolic"))
             status_label.set_text("Unknown")
             expander.set_subtitle(message or "Unable to determine status")
             # Show guide and enable expansion for unknown status

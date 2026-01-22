@@ -95,7 +95,13 @@ class MockAdwPreferencesWindow(MockGtkWidget):
 
 
 class MockAdwDialog(MockGtkWidget):
-    """Mock for Adw.Dialog."""
+    """Mock for Adw.Dialog (legacy - now using Adw.Window for libadwaita 1.0+ compat)."""
+
+    pass
+
+
+class MockAdwWindow(MockGtkWidget):
+    """Mock for Adw.Window (used for dialogs in libadwaita 1.0+)."""
 
     pass
 
@@ -230,6 +236,7 @@ def mock_gi_modules():
 
     mock_adw.PreferencesWindow = MockAdwPreferencesWindow
     mock_adw.Dialog = MockAdwDialog
+    mock_adw.Window = MockAdwWindow
     mock_adw.ApplicationWindow = MockAdwApplicationWindow
 
     # Widget row constructors return unique MagicMock instances to track calls separately
@@ -239,7 +246,9 @@ def mock_gi_modules():
     mock_adw.SwitchRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.EntryRow = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
     mock_adw.SpinRow = MagicMock()
-    mock_adw.SpinRow.new_with_range = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
+    mock_adw.SpinRow.new_with_range = MagicMock(
+        side_effect=lambda *args, **kwargs: MagicMock()
+    )
     # Container widgets - tests may set return_value to control what's returned
     mock_adw.PreferencesGroup = MagicMock()
     mock_adw.PreferencesPage = MagicMock()

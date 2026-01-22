@@ -105,7 +105,7 @@ class TestDatabaseMissingDialogCallback:
         dialog._choice = "download"
 
         # Simulate dialog close
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with("download")
         _clear_src_modules()
@@ -122,7 +122,7 @@ class TestDatabaseMissingDialogCallback:
         dialog._choice = None
 
         # Simulate dialog close
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with(None)
         _clear_src_modules()
@@ -136,7 +136,7 @@ class TestDatabaseMissingDialogCallback:
         dialog._choice = "download"
 
         # Should not raise an error
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
         _clear_src_modules()
 
 
@@ -156,7 +156,7 @@ class TestDatabaseMissingDialogFlow:
         assert dialog._choice == "download"
 
         # Dialog closes
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with("download")
         _clear_src_modules()
@@ -174,7 +174,7 @@ class TestDatabaseMissingDialogFlow:
         assert dialog._choice is None
 
         # Dialog closes
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with(None)
         _clear_src_modules()
@@ -191,7 +191,7 @@ class TestDatabaseMissingDialogFlow:
         assert dialog._choice is None
 
         # Dialog closes
-        dialog._on_dialog_closed(dialog)
+        dialog._on_dialog_close_request(dialog)
 
         callback.assert_called_once_with(None)
         _clear_src_modules()

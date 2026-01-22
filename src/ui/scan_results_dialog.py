@@ -17,6 +17,7 @@ from gi.repository import Adw, GLib, Gtk
 from ..core.quarantine import QuarantineManager, QuarantineStatus
 from ..core.scanner import ScanResult, ScanStatus, ThreatDetail
 from ..core.utils import copy_to_clipboard, format_flatpak_portal_path
+from .utils import resolve_icon_name
 
 if TYPE_CHECKING:
     from ..core.settings_manager import SettingsManager
@@ -29,7 +30,7 @@ LOAD_MORE_BATCH_SIZE = 25
 LARGE_RESULT_THRESHOLD = 50
 
 
-class ScanResultsDialog(Adw.Dialog):
+class ScanResultsDialog(Adw.Window):
     """
     A dialog for displaying scan results with threat details and actions.
 
@@ -39,13 +40,17 @@ class ScanResultsDialog(Adw.Dialog):
     - Per-threat actions (Quarantine, Exclude, Copy Path)
     - Bulk "Quarantine All" action
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         dialog = ScanResultsDialog(
             scan_result=result,
             quarantine_manager=quarantine_manager,
             settings_manager=settings_manager
         )
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     def __init__(
@@ -89,9 +94,11 @@ class ScanResultsDialog(Adw.Dialog):
     def _setup_dialog(self):
         """Configure the dialog properties."""
         self.set_title("Scan Results")
-        self.set_content_width(700)
-        self.set_content_height(500)
-        self.set_can_close(True)
+        self.set_default_size(700, 500)
+
+        # Configure as modal dialog
+        self.set_modal(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -106,7 +113,7 @@ class ScanResultsDialog(Adw.Dialog):
 
         # Export button (left side)
         export_button = Gtk.Button()
-        export_button.set_icon_name("document-save-symbolic")
+        export_button.set_icon_name(resolve_icon_name("document-save-symbolic"))
         export_button.set_tooltip_text("Export results")
         export_button.add_css_class("flat")
         export_button.connect("clicked", self._on_export_clicked)
@@ -121,7 +128,9 @@ class ScanResultsDialog(Adw.Dialog):
             else:
                 self._quarantine_all_button.set_label(f"Quarantine All ({count})")
             self._quarantine_all_button.add_css_class("suggested-action")
-            self._quarantine_all_button.connect("clicked", self._on_quarantine_all_clicked)
+            self._quarantine_all_button.connect(
+                "clicked", self._on_quarantine_all_clicked
+            )
             header_bar.pack_end(self._quarantine_all_button)
 
         toolbar_view.add_top_bar(header_bar)
@@ -150,7 +159,7 @@ class ScanResultsDialog(Adw.Dialog):
         toolbar_view.set_content(scrolled)
 
         self._toast_overlay.set_child(toolbar_view)
-        self.set_child(self._toast_overlay)
+        self.set_content(self._toast_overlay)
 
     def _create_stats_section(self, parent: Gtk.Box):
         """Create the statistics section."""
@@ -165,7 +174,9 @@ class ScanResultsDialog(Adw.Dialog):
         if self._scan_result.status == ScanStatus.CLEAN:
             expander.set_title("Scan Complete")
             expander.set_subtitle("No threats found")
-            icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
+            icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             icon.add_css_class("success")
         elif self._scan_result.status == ScanStatus.INFECTED:
             threat_text = (
@@ -175,12 +186,16 @@ class ScanResultsDialog(Adw.Dialog):
             )
             expander.set_title("Threats Detected")
             expander.set_subtitle(f"{threat_text} found")
-            icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             icon.add_css_class("warning")
         else:
             expander.set_title("Scan Error")
             expander.set_subtitle(self._scan_result.error_message or "Unknown error")
-            icon = Gtk.Image.new_from_icon_name("dialog-error-symbolic")
+            icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("dialog-error-symbolic")
+            )
             icon.add_css_class("error")
 
         expander.add_suffix(icon)
@@ -194,7 +209,9 @@ class ScanResultsDialog(Adw.Dialog):
 
         # Add stat rows
         stats_content.append(
-            self._create_stat_row("Files scanned:", f"{self._scan_result.scanned_files:,}")
+            self._create_stat_row(
+                "Files scanned:", f"{self._scan_result.scanned_files:,}"
+            )
         )
         stats_content.append(
             self._create_stat_row("Directories:", f"{self._scan_result.scanned_dirs:,}")
@@ -202,11 +219,15 @@ class ScanResultsDialog(Adw.Dialog):
 
         if self._scan_result.infected_count > 0:
             stats_content.append(
-                self._create_stat_row("Threats found:", str(self._scan_result.infected_count))
+                self._create_stat_row(
+                    "Threats found:", str(self._scan_result.infected_count)
+                )
             )
 
         if self._scan_result.error_message:
-            stats_content.append(self._create_stat_row("Error:", self._scan_result.error_message))
+            stats_content.append(
+                self._create_stat_row("Error:", self._scan_result.error_message)
+            )
 
         expander.add_row(stats_content)
         stats_group.add(expander)
@@ -355,7 +376,9 @@ class ScanResultsDialog(Adw.Dialog):
         quarantine_btn.set_label("Quarantine")
         quarantine_btn.add_css_class("pill")
         quarantine_btn.add_css_class("threat-action-btn")
-        quarantine_btn.connect("clicked", lambda btn: self._on_quarantine_single(btn, threat))
+        quarantine_btn.connect(
+            "clicked", lambda btn: self._on_quarantine_single(btn, threat)
+        )
         actions_box.append(quarantine_btn)
 
         # Exclude button
@@ -383,7 +406,9 @@ class ScanResultsDialog(Adw.Dialog):
 
     def _on_quarantine_single(self, button: Gtk.Button, threat: ThreatDetail):
         """Quarantine a single threat file."""
-        result = self._quarantine_manager.quarantine_file(threat.file_path, threat.threat_name)
+        result = self._quarantine_manager.quarantine_file(
+            threat.file_path, threat.threat_name
+        )
 
         if result.status == QuarantineStatus.SUCCESS:
             button.set_label("Quarantined")

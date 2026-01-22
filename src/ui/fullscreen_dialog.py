@@ -10,19 +10,23 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 
-class FullscreenLogDialog(Adw.Dialog):
+class FullscreenLogDialog(Adw.Window):
     """
     A maximized dialog for displaying log content in fullscreen.
 
     Provides a read-only text view with monospace font styling for viewing
     log content in an expanded, easier-to-read format.
 
+    Uses Adw.Window instead of Adw.Dialog for compatibility with
+    libadwaita < 1.5 (Ubuntu 22.04, Pop!_OS 22.04).
+
     Usage:
         dialog = FullscreenLogDialog(
             title="Scan Results",
             content="Log content here..."
         )
-        dialog.present(parent_window)
+        dialog.set_transient_for(parent_window)
+        dialog.present()
     """
 
     # Placeholder text for empty content
@@ -48,8 +52,8 @@ class FullscreenLogDialog(Adw.Dialog):
         # Set up the UI
         self._setup_ui()
 
-        # Set initial content
-        self.set_content(content)
+        # Set initial text content
+        self.set_text_content(content)
 
     def _setup_dialog(self):
         """Configure the dialog properties."""
@@ -57,11 +61,13 @@ class FullscreenLogDialog(Adw.Dialog):
         self.set_title(self._title)
 
         # Make dialog follow content size with reasonable defaults
-        self.set_content_width(900)
-        self.set_content_height(600)
+        self.set_default_size(900, 600)
+
+        # Configure as modal dialog
+        self.set_modal(True)
 
         # Allow the dialog to be closed
-        self.set_can_close(True)
+        self.set_deletable(True)
 
     def _setup_ui(self):
         """Set up the dialog UI layout."""
@@ -96,12 +102,12 @@ class FullscreenLogDialog(Adw.Dialog):
         scrolled.set_child(self._text_view)
         toolbar_view.set_content(scrolled)
 
-        # Set the toolbar view as the dialog child
-        self.set_child(toolbar_view)
+        # Set the toolbar view as the dialog content
+        self.set_content(toolbar_view)
 
-    def set_content(self, content: str) -> None:
+    def set_text_content(self, content: str) -> None:
         """
-        Update the displayed content.
+        Update the displayed text content.
 
         Args:
             content: The text content to display. If empty, shows placeholder.
@@ -113,9 +119,9 @@ class FullscreenLogDialog(Adw.Dialog):
         else:
             buffer.set_text(self.EMPTY_PLACEHOLDER)
 
-    def get_content(self) -> str:
+    def get_text_content(self) -> str:
         """
-        Get the current content.
+        Get the current text content.
 
         Returns:
             The current text content, or empty string if only placeholder shown.

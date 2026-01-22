@@ -23,6 +23,7 @@ from ...core.keyring_manager import (
     set_api_key,
     validate_api_key_format,
 )
+from ..utils import resolve_icon_name
 
 if TYPE_CHECKING:
     from ...core.settings_manager import SettingsManager
@@ -64,7 +65,7 @@ class VirusTotalPage:
         """
         page = Adw.PreferencesPage(
             title="VirusTotal",
-            icon_name="network-server-symbolic",
+            icon_name=resolve_icon_name("network-server-symbolic"),
         )
 
         # Store references for callbacks
@@ -111,11 +112,15 @@ class VirusTotalPage:
         current_key = get_api_key(settings_manager)
         if current_key:
             status_row.set_subtitle(f"Configured ({mask_api_key(current_key)})")
-            status_icon = Gtk.Image.new_from_icon_name("object-select-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             status_icon.add_css_class("success")
         else:
             status_row.set_subtitle("Not configured")
-            status_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            status_icon = Gtk.Image.new_from_icon_name(
+                resolve_icon_name("dialog-warning-symbolic")
+            )
             status_icon.add_css_class("warning")
 
         status_row.add_suffix(status_icon)
@@ -182,11 +187,13 @@ class VirusTotalPage:
             "activated", lambda row: VirusTotalPage._on_get_api_key_clicked()
         )
 
-        link_icon = Gtk.Image.new_from_icon_name("network-server-symbolic")
+        link_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("network-server-symbolic")
+        )
         link_icon.add_css_class("dim-label")
         link_row.add_prefix(link_icon)
 
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         link_row.add_suffix(chevron)
 
@@ -256,7 +263,9 @@ class VirusTotalPage:
         rate_limit_row.set_title("Rate Limit")
         rate_limit_row.set_subtitle("Free tier: 4 requests per minute, 500 per day")
 
-        info_icon = Gtk.Image.new_from_icon_name("dialog-information-symbolic")
+        info_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("dialog-information-symbolic")
+        )
         info_icon.add_css_class("dim-label")
         rate_limit_row.add_prefix(info_icon)
 
@@ -267,7 +276,9 @@ class VirusTotalPage:
         size_limit_row.set_title("Maximum File Size")
         size_limit_row.set_subtitle("Files up to 650 MB can be scanned")
 
-        size_icon = Gtk.Image.new_from_icon_name("drive-harddisk-symbolic")
+        size_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("drive-harddisk-symbolic")
+        )
         size_icon.add_css_class("dim-label")
         size_limit_row.add_prefix(size_icon)
 
@@ -320,7 +331,9 @@ class VirusTotalPage:
 
             # Update status
             page._status_row.set_subtitle(f"Configured ({mask_api_key(api_key)})")
-            page._status_icon.set_from_icon_name("object-select-symbolic")
+            page._status_icon.set_from_icon_name(
+                resolve_icon_name("object-select-symbolic")
+            )
             page._status_icon.remove_css_class("warning")
             page._status_icon.add_css_class("success")
 
@@ -338,39 +351,76 @@ class VirusTotalPage:
         page: Adw.PreferencesPage, settings_manager: "SettingsManager"
     ):
         """Delete the API key after confirmation."""
-        # Show confirmation dialog
-        dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete API Key?")
-        dialog.set_body(
+        # Show confirmation dialog using Adw.Window for libadwaita < 1.5 compatibility
+        dialog = Adw.Window()
+        dialog.set_title("Delete API Key?")
+        dialog.set_default_size(400, -1)
+        dialog.set_modal(True)
+        dialog.set_deletable(True)
+        dialog.set_transient_for(page._parent_window)
+
+        # Create content
+        toolbar_view = Adw.ToolbarView()
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content_box.set_margin_start(24)
+        content_box.set_margin_end(24)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(24)
+
+        # Message label
+        label = Gtk.Label()
+        label.set_text(
             "This will remove your VirusTotal API key. "
             "You'll need to enter it again to use VirusTotal scanning."
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
-        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
+        label.set_wrap(True)
+        label.set_xalign(0)
+        content_box.append(label)
 
-        def on_response(dialog, response):
-            if response == "delete":
-                success = delete_api_key(settings_manager)
+        # Button box
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        button_box.set_halign(Gtk.Align.END)
+        button_box.set_margin_top(12)
 
-                if success:
-                    VirusTotalPage._show_toast(page, "API key deleted")
+        # Cancel button
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.connect("clicked", lambda btn: dialog.close())
+        button_box.append(cancel_button)
 
-                    # Update status
-                    page._status_row.set_subtitle("Not configured")
-                    page._status_icon.set_from_icon_name("dialog-warning-symbolic")
-                    page._status_icon.remove_css_class("success")
-                    page._status_icon.add_css_class("warning")
+        # Delete button
+        def on_delete_confirmed(btn):
+            dialog.close()
+            success = delete_api_key(settings_manager)
 
-                    # Disable delete button
-                    page._delete_button.set_sensitive(False)
-                else:
-                    VirusTotalPage._show_toast(page, "Failed to delete API key")
+            if success:
+                VirusTotalPage._show_toast(page, "API key deleted")
 
-        dialog.connect("response", on_response)
-        dialog.present(page._parent_window)
+                # Update status
+                page._status_row.set_subtitle("Not configured")
+                page._status_icon.set_from_icon_name(
+                    resolve_icon_name("dialog-warning-symbolic")
+                )
+                page._status_icon.remove_css_class("success")
+                page._status_icon.add_css_class("warning")
+
+                # Disable delete button
+                page._delete_button.set_sensitive(False)
+            else:
+                VirusTotalPage._show_toast(page, "Failed to delete API key")
+
+        delete_button = Gtk.Button(label="Delete")
+        delete_button.add_css_class("destructive-action")
+        delete_button.connect("clicked", on_delete_confirmed)
+        button_box.append(delete_button)
+
+        content_box.append(button_box)
+        toolbar_view.set_content(content_box)
+        dialog.set_content(toolbar_view)
+
+        dialog.present()
 
     @staticmethod
     def _on_no_key_action_changed(

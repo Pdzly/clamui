@@ -13,6 +13,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
 from ...core.flatpak import is_flatpak
+from ..utils import resolve_icon_name
 from .base import PreferencesPageMixin
 
 
@@ -64,7 +65,7 @@ class BehaviorPage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="Behavior",
-            icon_name="preferences-system-symbolic",
+            icon_name=resolve_icon_name("preferences-system-symbolic"),
         )
 
         # Window Behavior group (only if tray is available)
@@ -144,12 +145,14 @@ class BehaviorPage(PreferencesPageMixin):
         row.connect("activated", self._on_file_manager_integration_clicked)
 
         # Icon prefix
-        icon = Gtk.Image.new_from_icon_name("system-file-manager-symbolic")
+        icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("system-file-manager-symbolic")
+        )
         icon.add_css_class("dim-label")
         row.add_prefix(icon)
 
         # Chevron suffix
-        chevron = Gtk.Image.new_from_icon_name("go-next-symbolic")
+        chevron = Gtk.Image.new_from_icon_name(resolve_icon_name("go-next-symbolic"))
         chevron.add_css_class("dim-label")
         row.add_suffix(chevron)
 
@@ -163,7 +166,8 @@ class BehaviorPage(PreferencesPageMixin):
         dialog = FileManagerIntegrationDialog(
             settings_manager=self._settings_manager,
         )
-        dialog.present(self._parent_window)
+        dialog.set_transient_for(self._parent_window)
+        dialog.present()
 
     def _load_close_behavior(self):
         """Load the current close behavior setting into the ComboRow."""

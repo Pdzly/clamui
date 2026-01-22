@@ -12,6 +12,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
+from ..utils import resolve_icon_name
 from .base import (
     PreferencesPageMixin,
     populate_bool_field,
@@ -61,7 +62,7 @@ class OnAccessPage(PreferencesPageMixin):
         """
         page = Adw.PreferencesPage(
             title="On Access",
-            icon_name="security-high-symbolic",
+            icon_name=resolve_icon_name("security-high-symbolic"),
         )
 
         # Create a temporary instance to use mixin methods
@@ -117,7 +118,7 @@ class OnAccessPage(PreferencesPageMixin):
         include_path_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         include_path_row.set_show_apply_button(False)
         # Add folder icon as prefix
-        include_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
+        include_icon = Gtk.Image.new_from_icon_name(resolve_icon_name("folder-symbolic"))
         include_icon.set_margin_start(6)
         include_path_row.add_prefix(include_icon)
         widgets_dict["OnAccessIncludePath"] = include_path_row
@@ -129,7 +130,7 @@ class OnAccessPage(PreferencesPageMixin):
         exclude_path_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         exclude_path_row.set_show_apply_button(False)
         # Add folder icon as prefix with different style
-        exclude_icon = Gtk.Image.new_from_icon_name("folder-symbolic")
+        exclude_icon = Gtk.Image.new_from_icon_name(resolve_icon_name("folder-symbolic"))
         exclude_icon.set_margin_start(6)
         exclude_path_row.add_prefix(exclude_icon)
         widgets_dict["OnAccessExcludePath"] = exclude_path_row
@@ -276,7 +277,9 @@ class OnAccessPage(PreferencesPageMixin):
         warning_row.set_subtitle("Exclude clamav user or UID to prevent scan loops")
         warning_row.add_css_class("warning")
         # Add warning icon as prefix
-        warning_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+        warning_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("dialog-warning-symbolic")
+        )
         warning_icon.set_margin_start(6)
         warning_row.add_prefix(warning_icon)
         group.add(warning_row)
@@ -287,7 +290,9 @@ class OnAccessPage(PreferencesPageMixin):
         exclude_uname_row.set_input_purpose(Gtk.InputPurpose.FREE_FORM)
         exclude_uname_row.set_show_apply_button(False)
         # Add user icon as prefix
-        user_icon = Gtk.Image.new_from_icon_name("avatar-default-symbolic")
+        user_icon = Gtk.Image.new_from_icon_name(
+            resolve_icon_name("avatar-default-symbolic")
+        )
         user_icon.set_margin_start(6)
         exclude_uname_row.add_prefix(user_icon)
         widgets_dict["OnAccessExcludeUname"] = exclude_uname_row

@@ -110,7 +110,10 @@ clamui/
 │   └── architecture/
 │       └── tray-subprocess.md  # System tray architecture
 ├── scripts/
-│   └── clamui-scheduled-scan   # Scheduled scan CLI wrapper
+│   ├── clamui-scheduled-scan   # Scheduled scan CLI wrapper
+│   └── hooks/                  # Git hooks for development
+│       ├── install-hooks.sh    # Hook installer (run after clone)
+│       └── pre-commit          # Blocks absolute src.* imports
 ├── flathub/                    # Flatpak packaging
 ├── debian/                     # Debian packaging
 ├── icons/                      # Application icons
@@ -170,9 +173,14 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 \
 # Install Python dependencies with uv
 uv sync --dev
 
+# Install git hooks (REQUIRED)
+./scripts/hooks/install-hooks.sh
+
 # Run from source
 uv run clamui
 ```
+
+**Important:** The pre-commit hook is **required** for development. It prevents absolute `src.*` imports which break when ClamUI is installed as a Debian package. See [Import Conventions](#import-conventions-package-compatibility) for details.
 
 ### Testing
 

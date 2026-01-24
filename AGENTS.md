@@ -2,6 +2,21 @@
 
 This document provides project-specific guidance for AI agents working on the ClamUI codebase.
 
+## Required Setup
+
+**Before making any commits**, ensure git hooks are installed:
+
+```bash
+./scripts/hooks/install-hooks.sh
+```
+
+This installs the **pre-commit hook** which checks for absolute `src.*` imports. These imports break when ClamUI is installed as a Debian package (installed as `clamui`, not `src`).
+
+**What the hook checks:**
+
+- Blocks commits with `from src.` or `import src.` in `src/` files
+- Suggests using relative imports instead (`from ..core.module import X`)
+
 ## Project-Specific Agent Notes
 
 ### Security Reviews

@@ -78,6 +78,13 @@ def check_symlink_safety(path: Path) -> tuple[bool, str | None]:
             return (False, f"Symlink target does not exist: {path} -> {resolved}")
 
         if is_in_user_dir:
+            # Special case: /var/home is a legitimate user home on immutable distros
+            # (Fedora Silverblue, Kinoite, etc. where /home -> /var/home)
+            if is_path_under(resolved, Path("/var/home")):
+                if is_symlink:
+                    return (True, f"Path is a symlink: {path} -> {resolved}")
+                return (True, None)
+
             for protected in protected_dirs:
                 if is_path_under(resolved, protected):
                     return (
@@ -145,7 +152,10 @@ def validate_path(path: str) -> tuple[bool, str | None]:
             # Try to list directory contents to verify access
             next(resolved_path.iterdir(), None)
         except PermissionError:
-            return (False, f"Permission denied: Cannot access directory contents of {path}")
+            return (
+                False,
+                f"Permission denied: Cannot access directory contents of {path}",
+            )
         except OSError as e:
             return (False, f"Error accessing directory: {str(e)}")
 

@@ -181,6 +181,50 @@ class TestCheckSymlinkSafety:
         assert message is not None
         assert "protected directory" in message.lower()
 
+    def test_check_symlink_safety_var_home_immutable_distro(self):
+        """Test check_symlink_safety allows /var/home paths on immutable distros.
+
+        On Fedora Silverblue, Kinoite, etc., /home is a symlink to /var/home.
+        Paths like /home/user/Downloads resolve to /var/home/user/Downloads,
+        which should NOT be blocked as a "protected directory escape".
+        """
+        # Simulate: /home/user/Downloads -> /var/home/user/Downloads
+        user_path = Path("/home/emryn/Downloads")
+
+        with mock.patch.object(Path, "is_symlink", return_value=False):
+            with mock.patch.object(Path, "resolve", return_value=Path("/var/home/emryn/Downloads")):
+                with mock.patch.object(Path, "exists", return_value=True):
+                    is_safe, message = check_symlink_safety(user_path)
+                    assert is_safe is True
+                    # No warning message since the path itself isn't a symlink
+                    assert message is None
+
+    def test_check_symlink_safety_var_home_with_symlink(self):
+        """Test check_symlink_safety allows symlinks resolving to /var/home."""
+        # Simulate a symlink in /home that resolves to /var/home
+        symlink_path = Path("/home/emryn/link_to_docs")
+
+        with mock.patch.object(Path, "is_symlink", return_value=True):
+            with mock.patch.object(Path, "resolve", return_value=Path("/var/home/emryn/Documents")):
+                with mock.patch.object(Path, "exists", return_value=True):
+                    is_safe, message = check_symlink_safety(symlink_path)
+                    assert is_safe is True
+                    assert message is not None
+                    assert "symlink" in message.lower()
+
+    def test_check_symlink_safety_var_log_still_blocked(self):
+        """Test check_symlink_safety still blocks /var/log (non-home /var paths)."""
+        # Symlink from /home to /var/log should still be blocked
+        symlink_path = Path("/home/emryn/malicious_link")
+
+        with mock.patch.object(Path, "is_symlink", return_value=True):
+            with mock.patch.object(Path, "resolve", return_value=Path("/var/log/syslog")):
+                with mock.patch.object(Path, "exists", return_value=True):
+                    is_safe, message = check_symlink_safety(symlink_path)
+                    assert is_safe is False
+                    assert message is not None
+                    assert "protected directory" in message.lower()
+
 
 class TestValidatePath:
     """Tests for the validate_path function."""
@@ -447,7 +491,8 @@ class TestFormatScanPath:
 
         # Mock format_flatpak_portal_path to simulate portal path formatting
         with mock.patch(
-            "src.core.path_validation.format_flatpak_portal_path", return_value="[Portal] test.txt"
+            "src.core.path_validation.format_flatpak_portal_path",
+            return_value="[Portal] test.txt",
         ):
             result = format_scan_path(portal_path)
             assert result == "[Portal] test.txt"
@@ -464,7 +509,8 @@ class TestFormatScanPath:
         portal_formatted = "[Portal] test.txt"
 
         with mock.patch(
-            "src.core.path_validation.format_flatpak_portal_path", return_value=portal_formatted
+            "src.core.path_validation.format_flatpak_portal_path",
+            return_value=portal_formatted,
         ):
             result = format_scan_path("/some/path")
             assert result == portal_formatted

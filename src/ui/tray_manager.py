@@ -178,7 +178,7 @@ class TrayManager:
 
         # Try as module path
         # This handles the case when installed as a package
-        import src.ui.tray_service as tray_service_module
+        from . import tray_service as tray_service_module
 
         module_path = Path(tray_service_module.__file__)
         if module_path.exists():
@@ -374,7 +374,9 @@ class TrayManager:
         logger.debug("Action callbacks configured")
 
     def set_window_toggle_callback(
-        self, on_toggle: Callable[[], None], get_visible: Callable[[], bool] | None = None
+        self,
+        on_toggle: Callable[[], None],
+        get_visible: Callable[[], bool] | None = None,
     ) -> None:
         """
         Set the callback for window show/hide toggle.
@@ -426,7 +428,9 @@ class TrayManager:
         """
         self._send_command({"action": "update_window_visible", "visible": visible})
 
-    def update_profiles(self, profiles: list[dict], current_profile_id: str | None = None) -> None:
+    def update_profiles(
+        self, profiles: list[dict], current_profile_id: str | None = None
+    ) -> None:
         """
         Update the profiles list in the tray menu.
 

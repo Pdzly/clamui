@@ -209,6 +209,45 @@ check_prerequisites() {
 }
 
 #
+# Import Validation Functions
+#
+
+# Check for absolute src.* imports that would break installed package
+check_absolute_imports() {
+	log_info "=== Checking for Absolute Imports ==="
+	echo
+
+	log_info "Scanning src/ for absolute src.* imports..."
+
+	# Search for absolute imports in src/ directory
+	# These break when installed as 'clamui' package
+	IMPORT_ERRORS=$(grep -rn --include="*.py" -E "^(from|import) src\." "$PROJECT_ROOT/src/" 2>/dev/null || true)
+
+	if [ -n "$IMPORT_ERRORS" ]; then
+		log_error "Found absolute src.* imports that will break when installed!"
+		echo
+		log_error "The following files have problematic imports:"
+		echo "$IMPORT_ERRORS" | while read -r line; do
+			log_error "  $line"
+		done
+		echo
+		log_error "REASON: The Debian package installs to /usr/lib/python3/dist-packages/clamui/"
+		log_error "        Absolute 'src.*' imports only work during development."
+		echo
+		log_info "FIX: Use relative imports instead:"
+		log_info "  from ..core.module import X    (parent package)"
+		log_info "  from .module import X          (same package)"
+		echo
+		log_info "See CLAUDE.md 'Import Conventions' section for details."
+		return 1
+	fi
+
+	log_success "No absolute src.* imports found"
+	echo
+	return 0
+}
+
+#
 # Directory Structure Creation Functions
 #
 
@@ -579,6 +618,12 @@ main() {
 
 	# Check all prerequisites first
 	check_prerequisites
+
+	# Check for absolute imports that would break the installed package
+	if ! check_absolute_imports; then
+		log_error "Import validation failed. Fix the imports before building."
+		exit 1
+	fi
 
 	# Extract version from pyproject.toml
 	log_info "=== Extracting Package Version ==="

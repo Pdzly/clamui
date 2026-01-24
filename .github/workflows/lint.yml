@@ -24,6 +24,16 @@ jobs:
       - name: Install Ruff
         run: pip install ruff
 
+      - name: Check for absolute src.* imports
+        run: |
+          # Absolute src.* imports break when installed as 'clamui' package
+          # Use relative imports instead: from ..module import X
+          if grep -rn --include="*.py" -E "^(from|import) src\." src/; then
+            echo "::error::Found absolute src.* imports. Use relative imports (from ..module import X) instead."
+            exit 1
+          fi
+          echo "No absolute src.* imports found."
+
       - name: Run Ruff linting
         run: ruff check src/ tests/ --output-format=github
 

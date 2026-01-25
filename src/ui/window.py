@@ -71,6 +71,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Track if a close behavior dialog is currently shown
         self._close_dialog_pending = False
 
+        # Track if a scan-in-progress dialog is currently shown
+        self._scan_dialog_pending = False
+
         # Connect to the window's surface to detect state changes
         # We need to do this after the window is realized
         self.connect("realize", self._on_window_realized)
@@ -170,7 +173,8 @@ class MainWindow(Adw.ApplicationWindow):
         """
         Handle window close request.
 
-        Depending on the close_behavior setting:
+        First checks if a scan is in progress (shows confirmation dialog).
+        Then, depending on the close_behavior setting:
         - None (unset): Show dialog to ask user
         - "ask": Show dialog every time
         - "minimize": Hide to tray
@@ -182,12 +186,21 @@ class MainWindow(Adw.ApplicationWindow):
         Returns:
             True to prevent close, False to allow close
         """
+        # Check for active scan FIRST (before any other close handling)
+        if self._is_scan_active() and not self._scan_dialog_pending:
+            self._show_scan_in_progress_dialog()
+            return True  # Prevent close while dialog is shown
+
+        # If a scan dialog is pending, prevent additional close requests
+        if self._scan_dialog_pending:
+            return True
+
         # If tray is not available, always allow normal close
         if not self._is_tray_available():
             logger.debug("Tray not available, allowing normal close")
             return False
 
-        # If a dialog is already pending, prevent additional close requests
+        # If a close behavior dialog is already pending, prevent additional requests
         if self._close_dialog_pending:
             return True
 
@@ -265,7 +278,9 @@ class MainWindow(Adw.ApplicationWindow):
         dialog.set_transient_for(self)
         dialog.present()
 
-    def _on_close_behavior_dialog_response(self, choice: str | None, remember: bool) -> None:
+    def _on_close_behavior_dialog_response(
+        self, choice: str | None, remember: bool
+    ) -> None:
         """
         Handle the close behavior dialog response.
 
@@ -293,6 +308,110 @@ class MainWindow(Adw.ApplicationWindow):
         elif choice == "quit":
             # Actually quit the application
             self._application.quit()
+
+    # Scan-in-progress close handling
+
+    def _is_scan_active(self) -> bool:
+        """
+        Check if a scan is currently in progress.
+
+        Returns:
+            True if the application reports an active scan
+        """
+        if not hasattr(self._application, "is_scan_active"):
+            return False
+        return self._application.is_scan_active
+
+    def _show_scan_in_progress_dialog(self) -> None:
+        """
+        Show the scan in progress confirmation dialog.
+
+        Presents a dialog warning the user that a scan is running,
+        offering to cancel and close or continue scanning.
+        """
+        from .scan_in_progress_dialog import ScanInProgressDialog
+
+        self._scan_dialog_pending = True
+
+        dialog = ScanInProgressDialog(callback=self._on_scan_dialog_response)
+        dialog.set_transient_for(self)
+        dialog.present()
+
+    def _on_scan_dialog_response(self, choice: str | None) -> None:
+        """
+        Handle the scan in progress dialog response.
+
+        Args:
+            choice: "cancel_and_close" or None if dismissed/keep scanning
+        """
+        self._scan_dialog_pending = False
+
+        if choice is None:
+            # User chose to keep scanning or dismissed dialog - do nothing
+            logger.debug("Scan dialog dismissed, continuing scan")
+            return
+
+        if choice == "cancel_and_close":
+            # Cancel the active scan
+            self._cancel_active_scan()
+            # Proceed with close (will go through normal close flow)
+            self._proceed_with_close()
+
+    def _cancel_active_scan(self) -> None:
+        """
+        Cancel the currently active scan.
+
+        Accesses the scan view through the application and triggers cancellation.
+        """
+        if not hasattr(self._application, "scan_view"):
+            return
+
+        scan_view = self._application.scan_view
+        if scan_view is None:
+            return
+
+        # Set cancel flag and cancel current scan
+        if hasattr(scan_view, "_cancel_all_requested"):
+            scan_view._cancel_all_requested = True
+        if hasattr(scan_view, "_scanner") and scan_view._scanner is not None:
+            scan_view._scanner.cancel()
+
+        logger.info("Active scan cancelled due to window close")
+
+    def _proceed_with_close(self) -> None:
+        """
+        Proceed with the close operation after canceling a scan.
+
+        Re-triggers the close request which will now follow the normal
+        close behavior flow (tray dialog if applicable, or quit).
+        """
+        # Use idle_add to allow scan cancellation to complete
+        GLib.idle_add(self._do_proceed_with_close)
+
+    def _do_proceed_with_close(self) -> bool:
+        """
+        Actually proceed with close after idle.
+
+        Returns:
+            False to remove from idle queue
+        """
+        # Re-trigger close request - scan should no longer be active
+        # This will now go through the normal tray/quit flow
+        if self._is_tray_available():
+            # Check close behavior setting
+            close_behavior = self._get_close_behavior()
+            if close_behavior == "minimize":
+                self._do_close_to_tray()
+            elif close_behavior == "quit":
+                self._application.quit()
+            else:
+                # Show the close behavior dialog
+                self._show_close_behavior_dialog()
+        else:
+            # No tray, just quit
+            self._application.quit()
+
+        return False  # Remove from idle queue
 
     def _setup_ui(self):
         """Set up the window UI layout."""
@@ -369,35 +488,45 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Database update button
         self._database_button = Gtk.ToggleButton()
-        self._database_button.set_icon_name(resolve_icon_name("software-update-available-symbolic"))
+        self._database_button.set_icon_name(
+            resolve_icon_name("software-update-available-symbolic")
+        )
         self._database_button.set_tooltip_text("Update Database (Ctrl+2)")
         self._database_button.set_action_name("app.show-update")
         nav_box.append(self._database_button)
 
         # Logs button
         self._logs_button = Gtk.ToggleButton()
-        self._logs_button.set_icon_name(resolve_icon_name("document-open-recent-symbolic"))
+        self._logs_button.set_icon_name(
+            resolve_icon_name("document-open-recent-symbolic")
+        )
         self._logs_button.set_tooltip_text("View Logs (Ctrl+3)")
         self._logs_button.set_action_name("app.show-logs")
         nav_box.append(self._logs_button)
 
         # Components button
         self._components_button = Gtk.ToggleButton()
-        self._components_button.set_icon_name(resolve_icon_name("applications-system-symbolic"))
+        self._components_button.set_icon_name(
+            resolve_icon_name("applications-system-symbolic")
+        )
         self._components_button.set_tooltip_text("ClamAV Components (Ctrl+4)")
         self._components_button.set_action_name("app.show-components")
         nav_box.append(self._components_button)
 
         # Quarantine button
         self._quarantine_button = Gtk.ToggleButton()
-        self._quarantine_button.set_icon_name(resolve_icon_name("security-medium-symbolic"))
+        self._quarantine_button.set_icon_name(
+            resolve_icon_name("security-medium-symbolic")
+        )
         self._quarantine_button.set_tooltip_text("Quarantine (Ctrl+5)")
         self._quarantine_button.set_action_name("app.show-quarantine")
         nav_box.append(self._quarantine_button)
 
         # Statistics button
         self._statistics_button = Gtk.ToggleButton()
-        self._statistics_button.set_icon_name(resolve_icon_name("applications-science-symbolic"))
+        self._statistics_button.set_icon_name(
+            resolve_icon_name("applications-science-symbolic")
+        )
         self._statistics_button.set_tooltip_text("Statistics Dashboard (Ctrl+6)")
         self._statistics_button.set_action_name("app.show-statistics")
         nav_box.append(self._statistics_button)

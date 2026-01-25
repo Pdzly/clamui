@@ -184,6 +184,56 @@ class TestCloseBehaviorDialogCallback:
         _clear_src_modules()
 
 
+class TestCloseBehaviorDialogDefaultState:
+    """Test dialog default state - quit option selected, confirm enabled."""
+
+    def test_quit_option_selected_by_default(self, mock_gi_modules):
+        """Test that quit option is pre-selected when dialog opens."""
+        callback = MagicMock()
+
+        from src.ui.close_behavior_dialog import CloseBehaviorDialog
+
+        dialog = CloseBehaviorDialog(callback=callback)
+
+        # Verify quit checkbox was set to active (True) during init
+        dialog._quit_check.set_active.assert_called_with(True)
+        _clear_src_modules()
+
+    def test_confirm_button_enabled_by_default(self, mock_gi_modules):
+        """Test that confirm button is enabled when dialog opens (quit is default)."""
+        callback = MagicMock()
+
+        from src.ui.close_behavior_dialog import CloseBehaviorDialog
+
+        dialog = CloseBehaviorDialog(callback=callback)
+
+        # Verify confirm button was enabled (True) during init
+        # The last call should be set_sensitive(True)
+        dialog._confirm_button.set_sensitive.assert_called_with(True)
+        _clear_src_modules()
+
+    def test_default_confirm_results_in_quit(self, mock_gi_modules):
+        """Test that confirming without changing selection results in quit action."""
+        callback = MagicMock()
+
+        from src.ui.close_behavior_dialog import CloseBehaviorDialog
+
+        dialog = CloseBehaviorDialog(callback=callback)
+
+        # Configure mocks to return the default state (quit selected)
+        dialog._minimize_check = MagicMock()
+        dialog._minimize_check.get_active.return_value = False
+        dialog._quit_check = MagicMock()
+        dialog._quit_check.get_active.return_value = True  # Default selection
+
+        # Simulate immediate confirm click (user accepts default)
+        dialog._on_confirm_clicked(None)
+
+        # Should result in quit choice
+        assert dialog._choice == "quit"
+        _clear_src_modules()
+
+
 class TestCloseBehaviorDialogUI:
     """Test dialog UI elements."""
 

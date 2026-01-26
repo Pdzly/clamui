@@ -286,6 +286,12 @@ class NotificationManager:
         Returns:
             True if notification was sent successfully, False otherwise
         """
+        if self._app is None:
+            logger.debug(
+                "Cannot send notification '%s': no app reference", notification_id
+            )
+            return False
+
         try:
             notification = Gio.Notification.new(title)
             notification.set_body(body)

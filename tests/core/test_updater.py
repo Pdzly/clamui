@@ -232,7 +232,9 @@ class TestFreshclamUpdaterCheckAvailable:
     def test_returns_true_and_version_when_installed(self, updater_module):
         """Test returns (True, version) when freshclam is installed."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             updater = FreshclamUpdater(log_manager=MagicMock())
             is_available, version = updater.check_available()
             assert is_available is True
@@ -263,9 +265,15 @@ class TestFreshclamUpdaterBuildCommand:
         """Test command includes pkexec when available (non-Flatpak)."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         with patch("src.core.updater.is_flatpak", return_value=False):
-            with patch("src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"):
-                with patch("src.core.updater.get_pkexec_path", return_value="/usr/bin/pkexec"):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+            with patch(
+                "src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"
+            ):
+                with patch(
+                    "src.core.updater.get_pkexec_path", return_value="/usr/bin/pkexec"
+                ):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         updater = FreshclamUpdater(log_manager=MagicMock())
                         cmd = updater._build_command()
                         assert cmd[0] == "/usr/bin/pkexec"
@@ -276,9 +284,13 @@ class TestFreshclamUpdaterBuildCommand:
         """Test command uses freshclam directly when pkexec not available (non-Flatpak)."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         with patch("src.core.updater.is_flatpak", return_value=False):
-            with patch("src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"):
+            with patch(
+                "src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"
+            ):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         updater = FreshclamUpdater(log_manager=MagicMock())
                         cmd = updater._build_command()
                         assert cmd[0] == "/usr/bin/freshclam"
@@ -309,7 +321,9 @@ class TestFreshclamUpdaterBuildCommand:
         # Create the config file since the code checks if it exists
         config_path.write_text("# test config")
         with patch("src.core.updater.is_flatpak", return_value=True):
-            with patch("src.core.updater.get_freshclam_path", return_value="/app/bin/freshclam"):
+            with patch(
+                "src.core.updater.get_freshclam_path", return_value="/app/bin/freshclam"
+            ):
                 with patch("src.core.updater.ensure_clamav_database_dir"):
                     with patch(
                         "src.core.updater.ensure_freshclam_config",
@@ -332,9 +346,13 @@ class TestFreshclamUpdaterBuildCommand:
         """Test command with force flag does not include --no-dns (removed in new implementation)."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         with patch("src.core.updater.is_flatpak", return_value=False):
-            with patch("src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"):
+            with patch(
+                "src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"
+            ):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         updater = FreshclamUpdater(log_manager=MagicMock())
                         cmd = updater._build_command(force=True)
                         assert cmd[0] == "/usr/bin/freshclam"
@@ -347,9 +365,13 @@ class TestFreshclamUpdaterBuildCommand:
         """Test command does not include --no-dns flag when force=False (default)."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         with patch("src.core.updater.is_flatpak", return_value=False):
-            with patch("src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"):
+            with patch(
+                "src.core.updater.get_freshclam_path", return_value="/usr/bin/freshclam"
+            ):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         updater = FreshclamUpdater(log_manager=MagicMock())
                         cmd = updater._build_command(force=False)
                         assert cmd[0] == "/usr/bin/freshclam"
@@ -442,7 +464,9 @@ class TestFreshclamUpdaterExtractErrorMessage:
         """Test 'not authorized' in output returns auth message."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         updater = FreshclamUpdater(log_manager=MagicMock())
-        msg = updater._extract_error_message("", "not authorized to perform this action", 1)
+        msg = updater._extract_error_message(
+            "", "not authorized to perform this action", 1
+        )
         assert "Authorization failed" in msg
 
     def test_locked_in_output(self, updater_module):
@@ -527,7 +551,9 @@ class TestFreshclamUpdaterExtractErrorMessage:
         updater = FreshclamUpdater(log_manager=MagicMock())
 
         # Test "mirror down" pattern
-        msg = updater._extract_error_message("mirror database.cvd.clamav.net is down", "", 1)
+        msg = updater._extract_error_message(
+            "mirror database.cvd.clamav.net is down", "", 1
+        )
         assert "mirror" in msg.lower() and "unavailable" in msg.lower()
 
         # Test "mirror unavailable" pattern
@@ -549,9 +575,9 @@ class TestFreshclamUpdaterExtractErrorMessage:
 
         for pattern in patterns:
             msg = updater._extract_error_message(pattern, "", 1)
-            assert "certificate" in msg.lower() or "SSL/TLS" in msg, (
-                f"Failed for pattern: {pattern}"
-            )
+            assert (
+                "certificate" in msg.lower() or "SSL/TLS" in msg
+            ), f"Failed for pattern: {pattern}"
 
     def test_timeout_error_detected(self, updater_module):
         """Test timeout error is detected."""
@@ -580,14 +606,16 @@ class TestFreshclamUpdaterUpdateSync:
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
-        mock_stdout = (
-            "daily.cvd updated (version: 27150, sigs: 2050000, f-level: 90, builder: virusdb)"
-        )
+        mock_stdout = "daily.cvd updated (version: 27150, sigs: 2050000, f-level: 90, builder: virusdb)"
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_process = MagicMock()
                             mock_process.communicate.return_value = (mock_stdout, "")
@@ -610,10 +638,14 @@ class TestFreshclamUpdaterUpdateSync:
         mock_log_manager = MagicMock()
         mock_stdout = "daily.cvd database is up-to-date (version: 27150)"
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_process = MagicMock()
                             mock_process.communicate.return_value = (mock_stdout, "")
@@ -634,10 +666,14 @@ class TestFreshclamUpdaterUpdateSync:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_process = MagicMock()
                             mock_process.communicate.return_value = (
@@ -669,7 +705,9 @@ class TestFreshclamUpdaterUpdateSync:
             result = updater.update_sync()
 
             assert result.status == UpdateStatus.ERROR
-            assert "freshclam" in result.stderr.lower() or "not" in result.stderr.lower()
+            assert (
+                "freshclam" in result.stderr.lower() or "not" in result.stderr.lower()
+            )
 
     def test_file_not_found_error(self, updater_module):
         """Test handling FileNotFoundError."""
@@ -677,12 +715,18 @@ class TestFreshclamUpdaterUpdateSync:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
-                            mock_popen.side_effect = FileNotFoundError("freshclam not found")
+                            mock_popen.side_effect = FileNotFoundError(
+                                "freshclam not found"
+                            )
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
                             result = updater.update_sync()
@@ -696,10 +740,14 @@ class TestFreshclamUpdaterUpdateSync:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_popen.side_effect = PermissionError("Access denied")
 
@@ -715,10 +763,14 @@ class TestFreshclamUpdaterUpdateSync:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_popen.side_effect = RuntimeError("Unexpected error")
 
@@ -734,10 +786,14 @@ class TestFreshclamUpdaterUpdateSync:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_process = MagicMock()
 
@@ -752,7 +808,9 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_process.returncode = 0
                             mock_process.kill = MagicMock()
                             mock_process.wait = MagicMock()
-                            mock_process.poll = MagicMock(return_value=0)  # Process already done
+                            mock_process.poll = MagicMock(
+                                return_value=0
+                            )  # Process already done
                             mock_popen.return_value = mock_process
 
                             result = updater.update_sync()
@@ -814,7 +872,9 @@ class TestFreshclamUpdaterCancel:
         mock_process.kill = MagicMock()
         mock_process.wait = MagicMock(
             side_effect=[
-                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
+                subprocess.TimeoutExpired(
+                    cmd="test", timeout=5
+                ),  # First wait times out
                 None,  # Second wait (after kill) succeeds
             ]
         )
@@ -835,8 +895,12 @@ class TestFreshclamUpdaterCancel:
         mock_process.kill = MagicMock()
         mock_process.wait = MagicMock(
             side_effect=[
-                subprocess.TimeoutExpired(cmd="test", timeout=5),  # First wait times out
-                subprocess.TimeoutExpired(cmd="test", timeout=2),  # Second wait also times out
+                subprocess.TimeoutExpired(
+                    cmd="test", timeout=5
+                ),  # First wait times out
+                subprocess.TimeoutExpired(
+                    cmd="test", timeout=2
+                ),  # Second wait also times out
             ]
         )
         updater._current_process = mock_process
@@ -853,7 +917,9 @@ class TestFreshclamUpdaterCancel:
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         updater = FreshclamUpdater(log_manager=MagicMock())
         mock_process = MagicMock()
-        mock_process.terminate = MagicMock(side_effect=ProcessLookupError("No such process"))
+        mock_process.terminate = MagicMock(
+            side_effect=ProcessLookupError("No such process")
+        )
         mock_process.kill = MagicMock()
         mock_process.wait = MagicMock()
         updater._current_process = mock_process
@@ -893,14 +959,20 @@ class TestFreshclamUpdaterCommunicateTimeout:
         UpdateStatus = updater_module["UpdateStatus"]
         mock_log_manager = MagicMock()
 
-        with patch("src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")):
+        with patch(
+            "src.core.updater.check_freshclam_installed", return_value=(True, "1.0.0")
+        ):
             with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
                 with patch("src.core.updater.get_pkexec_path", return_value=None):
-                    with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
+                    with patch(
+                        "src.core.updater.wrap_host_command", side_effect=lambda x: x
+                    ):
                         with patch("subprocess.Popen") as mock_popen:
                             mock_process = MagicMock()
                             # Simulate timeout on communicate
-                            timeout_exc = subprocess.TimeoutExpired(cmd="freshclam", timeout=600)
+                            timeout_exc = subprocess.TimeoutExpired(
+                                cmd="freshclam", timeout=600
+                            )
                             timeout_exc.stdout = "partial output"
                             timeout_exc.stderr = ""
                             mock_process.communicate = MagicMock(
@@ -944,7 +1016,9 @@ class TestFreshclamUpdaterUpdateAsync:
                 "src.core.updater.check_freshclam_installed",
                 return_value=(True, "1.0.0"),
             ):
-                with patch("src.core.updater.get_freshclam_path", return_value="freshclam"):
+                with patch(
+                    "src.core.updater.get_freshclam_path", return_value="freshclam"
+                ):
                     with patch("src.core.updater.get_pkexec_path", return_value=None):
                         with patch(
                             "src.core.updater.wrap_host_command",
@@ -1126,7 +1200,7 @@ class TestFreshclamUpdaterBackupLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, files = updater._backup_local_databases()
@@ -1152,7 +1226,7 @@ class TestFreshclamUpdaterBackupLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(non_existent),
+                return_value=non_existent,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, files = updater._backup_local_databases()
@@ -1173,7 +1247,7 @@ class TestFreshclamUpdaterBackupLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, files = updater._backup_local_databases()
@@ -1194,7 +1268,7 @@ class TestFreshclamUpdaterBackupLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 with patch("shutil.copy2", side_effect=OSError("Permission denied")):
@@ -1215,7 +1289,7 @@ class TestFreshclamUpdaterBackupLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(flatpak_db_dir),
+                return_value=flatpak_db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, _, files = updater._backup_local_databases()
@@ -1249,7 +1323,7 @@ class TestFreshclamUpdaterRestoreDatabasesFromBackup:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 updater._force_update_backup_dir = backup_dir
@@ -1276,7 +1350,9 @@ class TestFreshclamUpdaterRestoreDatabasesFromBackup:
             assert success is False
             assert "no backup" in error.lower()
 
-    def test_restore_databases_from_backup_missing_backup_dir(self, updater_module, tmp_path):
+    def test_restore_databases_from_backup_missing_backup_dir(
+        self, updater_module, tmp_path
+    ):
         """Test restore fails when backup directory was deleted."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         mock_log_manager = MagicMock()
@@ -1293,7 +1369,9 @@ class TestFreshclamUpdaterRestoreDatabasesFromBackup:
             assert success is False
             assert "no backup" in error.lower()
 
-    def test_restore_databases_from_backup_permission_error(self, updater_module, tmp_path):
+    def test_restore_databases_from_backup_permission_error(
+        self, updater_module, tmp_path
+    ):
         """Test restore fails on permission error."""
         FreshclamUpdater = updater_module["FreshclamUpdater"]
         mock_log_manager = MagicMock()
@@ -1308,7 +1386,7 @@ class TestFreshclamUpdaterRestoreDatabasesFromBackup:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 updater._force_update_backup_dir = backup_dir
@@ -1333,7 +1411,7 @@ class TestFreshclamUpdaterRestoreDatabasesFromBackup:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(non_existent_db),
+                return_value=non_existent_db,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 updater._force_update_backup_dir = backup_dir
@@ -1414,7 +1492,7 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, count = updater._delete_local_databases()
@@ -1438,7 +1516,7 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(non_existent),
+                return_value=non_existent,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, count = updater._delete_local_databases()
@@ -1471,7 +1549,7 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 with patch.object(Path, "unlink", mock_unlink):
@@ -1494,10 +1572,12 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
-                with patch.object(Path, "unlink", side_effect=OSError("Permission denied")):
+                with patch.object(
+                    Path, "unlink", side_effect=OSError("Permission denied")
+                ):
                     success, error, count = updater._delete_local_databases()
 
         assert success is False
@@ -1516,7 +1596,7 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(flatpak_db_dir),
+                return_value=flatpak_db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, count = updater._delete_local_databases()
@@ -1538,7 +1618,7 @@ class TestFreshclamUpdaterDeleteLocalDatabases:
         with patch("src.core.updater.is_flatpak", return_value=True):
             with patch(
                 "src.core.updater.get_clamav_database_dir",
-                return_value=str(db_dir),
+                return_value=db_dir,
             ):
                 updater = FreshclamUpdater(log_manager=mock_log_manager)
                 success, error, count = updater._delete_local_databases()

@@ -244,7 +244,8 @@ class PaginatedListController:
 
         # Restore scroll position after layout
         if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+            # Explicitly return False to remove callback after execution
+            GLib.idle_add(lambda: (vadj.set_value(scroll_pos), False)[1])
 
     def show_all(self):
         """
@@ -274,7 +275,8 @@ class PaginatedListController:
 
         # Restore scroll position after layout
         if scroll_pos is not None:
-            GLib.idle_add(lambda: vadj.set_value(scroll_pos))
+            # Explicitly return False to remove callback after execution
+            GLib.idle_add(lambda: (vadj.set_value(scroll_pos), False)[1])
 
     def set_entries(self, entries: list, entries_label: str = "entries"):
         """

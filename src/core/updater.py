@@ -158,10 +158,10 @@ class FreshclamUpdater:
                     result = UpdateResult(
                         status=UpdateStatus.ERROR,
                         stdout="",
-                        stderr=error,
+                        stderr=error or "",
                         exit_code=-1,
                         databases_updated=0,
-                        error_message=error,
+                        error_message=error or "Backup failed",
                     )
                     duration = time.monotonic() - start_time
                     self._save_update_log(result, duration)
@@ -176,16 +176,18 @@ class FreshclamUpdater:
                     result = UpdateResult(
                         status=UpdateStatus.ERROR,
                         stdout="",
-                        stderr=error,
+                        stderr=error or "",
                         exit_code=-1,
                         databases_updated=0,
-                        error_message=error,
+                        error_message=error or "Delete failed",
                     )
                     duration = time.monotonic() - start_time
                     self._save_update_log(result, duration)
                     return result
 
-                logger.info("Deleted %d database file(s) before force update", deleted_count)
+                logger.info(
+                    "Deleted %d database file(s) before force update", deleted_count
+                )
 
         # Build freshclam command
         cmd = self._build_command(force=force)
@@ -208,11 +210,28 @@ class FreshclamUpdater:
                 timed_out = True
                 self._current_process.kill()
                 # Capture partial output from exception
-                partial_stdout = e.stdout or ""
-                partial_stderr = e.stderr or ""
+                # Note: TimeoutExpired.stdout/stderr are always bytes even with text=True
+                # Must decode before concatenating with string output from communicate()
+                # Handle both bytes (real) and str (test mocks) for robustness
+                if e.stdout:
+                    partial_stdout = (
+                        e.stdout
+                        if isinstance(e.stdout, str)
+                        else e.stdout.decode("utf-8", errors="replace")
+                    )
+                else:
+                    partial_stdout = ""
+                if e.stderr:
+                    partial_stderr = (
+                        e.stderr
+                        if isinstance(e.stderr, str)
+                        else e.stderr.decode("utf-8", errors="replace")
+                    )
+                else:
+                    partial_stderr = ""
                 try:
-                    remaining_stdout, remaining_stderr = self._current_process.communicate(
-                        timeout=_KILL_WAIT_TIMEOUT
+                    remaining_stdout, remaining_stderr = (
+                        self._current_process.communicate(timeout=_KILL_WAIT_TIMEOUT)
                     )
                     stdout = partial_stdout + (remaining_stdout or "")
                     stderr = partial_stderr + (remaining_stderr or "")
@@ -325,7 +344,9 @@ class FreshclamUpdater:
             self._cleanup_backup()
             return result
 
-    def update_async(self, callback: Callable[[UpdateResult], None], force: bool = False) -> None:
+    def update_async(
+        self, callback: Callable[[UpdateResult], None], force: bool = False
+    ) -> None:
         """
         Execute an asynchronous database update.
 
@@ -508,7 +529,9 @@ class FreshclamUpdater:
             error_message=error_message,
         )
 
-    def _extract_error_message(self, stdout: str, stderr: str, exit_code: int = 1) -> str:
+    def _extract_error_message(
+        self, stdout: str, stderr: str, exit_code: int = 1
+    ) -> str:
         """
         Extract a meaningful error message from freshclam output.
 
@@ -530,7 +553,9 @@ class FreshclamUpdater:
         if exit_code == 126:
             return "Authentication cancelled. Database update requires administrator privileges."
         if exit_code == 127 and "pkexec" in output_lower:
-            return "Authorization failed. You are not authorized to update the database."
+            return (
+                "Authorization failed. You are not authorized to update the database."
+            )
 
         # Rate limiting errors
         rate_limit_patterns = [
@@ -550,14 +575,19 @@ class FreshclamUpdater:
             return "Update blocked by CDN. This may be due to rate limiting. Please wait and try again later."
 
         # Mirror unavailable
-        if "mirror" in output_lower and ("down" in output_lower or "unavailable" in output_lower):
+        if "mirror" in output_lower and (
+            "down" in output_lower or "unavailable" in output_lower
+        ):
             return "ClamAV mirror is currently unavailable. Please try again later."
 
         # Certificate/SSL errors
         if any(
-            p in output_lower for p in ["certificate", "ssl error", "tls error", "verify failed"]
+            p in output_lower
+            for p in ["certificate", "ssl error", "tls error", "verify failed"]
         ):
-            return "SSL/TLS certificate error. The mirror may have configuration issues."
+            return (
+                "SSL/TLS certificate error. The mirror may have configuration issues."
+            )
 
         # Timeout errors
         if "timeout" in output_lower or "timed out" in output_lower:
@@ -605,7 +635,9 @@ class FreshclamUpdater:
         elif result.status == UpdateStatus.CANCELLED:
             summary = "Database update cancelled"
         else:
-            summary = f"Database update failed: {result.error_message or 'Unknown error'}"
+            summary = (
+                f"Database update failed: {result.error_message or 'Unknown error'}"
+            )
 
         # Build details combining stdout and stderr
         details_parts = []
@@ -636,7 +668,9 @@ class FreshclamUpdater:
         """
         # Determine database directory
         if is_flatpak():
-            db_dir = Path(get_clamav_database_dir())
+            db_dir = get_clamav_database_dir()
+            if db_dir is None:
+                return False, "Database directory not configured", []
         else:
             db_dir = Path("/var/lib/clamav")
 
@@ -683,7 +717,9 @@ class FreshclamUpdater:
 
         # Determine database directory
         if is_flatpak():
-            db_dir = Path(get_clamav_database_dir())
+            db_dir = get_clamav_database_dir()
+            if db_dir is None:
+                return False, "Database directory not configured"
         else:
             db_dir = Path("/var/lib/clamav")
 
@@ -720,7 +756,9 @@ class FreshclamUpdater:
         """
         # Determine database directory
         if is_flatpak():
-            db_dir = Path(get_clamav_database_dir())
+            db_dir = get_clamav_database_dir()
+            if db_dir is None:
+                return False, "Database directory not configured", 0
         else:
             db_dir = Path("/var/lib/clamav")
 

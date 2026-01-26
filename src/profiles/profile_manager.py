@@ -237,14 +237,21 @@ class ProfileManager:
 
         modified = False
         with self._lock:
-            for profile in self._profiles.values():
+            for profile_id, profile in self._profiles.items():
                 if profile.is_default and profile.name == "Quick Scan":
                     # Only migrate if still using the old hardcoded path
                     if profile.targets == ["~/Downloads"]:
                         xdg_download = get_xdg_user_dir("DOWNLOAD")
                         if xdg_download:
-                            profile.targets = [xdg_download]
-                            profile.updated_at = self._get_timestamp()
+                            # Use immutable update pattern - create new profile
+                            from dataclasses import replace
+
+                            updated_profile = replace(
+                                profile,
+                                targets=[xdg_download],
+                                updated_at=self._get_timestamp(),
+                            )
+                            self._profiles[profile_id] = updated_profile
                             modified = True
                             logger.info(
                                 "Migrated Quick Scan target to XDG path: %s",
@@ -403,7 +410,9 @@ class ProfileManager:
             raise ValueError("Profile name cannot be empty")
 
         if len(stripped_name) > MAX_PROFILE_NAME_LENGTH:
-            raise ValueError(f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters")
+            raise ValueError(
+                f"Profile name cannot exceed {MAX_PROFILE_NAME_LENGTH} characters"
+            )
 
         # Check for duplicate name
         if self.name_exists(stripped_name, exclude_id):
@@ -485,7 +494,9 @@ class ProfileManager:
 
         return warnings
 
-    def _validate_exclusions(self, exclusions: dict[str, Any], targets: list[str]) -> list[str]:
+    def _validate_exclusions(
+        self, exclusions: dict[str, Any], targets: list[str]
+    ) -> list[str]:
         """
         Validate exclusion settings.
 
@@ -602,12 +613,16 @@ class ProfileManager:
                         break
 
                 # Check if target is the same as or is a child of exclusion
-                if not (target_path == excl_path or self._is_subpath(target_path, excl_path)):
+                if not (
+                    target_path == excl_path or self._is_subpath(target_path, excl_path)
+                ):
                     all_excluded = False
                     break
 
             if all_excluded and len(targets) > 0:
-                warnings.append(f"Exclusion '{exclusion}' would exclude all scan targets")
+                warnings.append(
+                    f"Exclusion '{exclusion}' would exclude all scan targets"
+                )
 
     def _is_subpath(self, path: Path, parent: Path) -> bool:
         """
@@ -768,7 +783,9 @@ class ProfileManager:
 
         # Validate updated fields (raises ValueError if invalid)
         # Pass profile_id to exclude_id so name uniqueness check excludes this profile
-        self._validate_profile(new_name, new_targets, new_exclusions, exclude_id=profile_id)
+        self._validate_profile(
+            new_name, new_targets, new_exclusions, exclude_id=profile_id
+        )
 
         with self._lock:
             profile = self._profiles.get(profile_id)
@@ -976,7 +993,9 @@ class ProfileManager:
         required_fields = ["name"]
         for field in required_fields:
             if field not in profile_data:
-                raise ValueError(f"Invalid profile data: missing required field '{field}'")
+                raise ValueError(
+                    f"Invalid profile data: missing required field '{field}'"
+                )
 
         # Extract profile data with defaults
         name = str(profile_data.get("name", ""))

@@ -79,7 +79,7 @@ class ScheduleConfig:
     enabled: bool = False
     frequency: ScheduleFrequency = ScheduleFrequency.DAILY
     time: str = "02:00"
-    targets: list[str] = None
+    targets: list[str] | None = None
     skip_on_battery: bool = True
     auto_quarantine: bool = False
     day_of_week: int = 0  # Monday
@@ -310,7 +310,9 @@ class Scheduler:
         """
         try:
             result = subprocess.run(
-                wrap_host_command(["systemctl", "--user", "is-active", f"{self.TIMER_NAME}.timer"]),
+                wrap_host_command(
+                    ["systemctl", "--user", "is-active", f"{self.TIMER_NAME}.timer"]
+                ),
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -488,7 +490,9 @@ class Scheduler:
         paths = []
 
         # User installation location (respects XDG_DATA_HOME)
-        xdg_data_home = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+        xdg_data_home = os.environ.get(
+            "XDG_DATA_HOME", os.path.expanduser("~/.local/share")
+        )
         user_venv = Path(xdg_data_home) / "clamui" / "venv"
         paths.append(user_venv)
 
@@ -523,7 +527,9 @@ class Scheduler:
                 logger.debug("Path existence check failed for %s: %s", path, e)
                 return False
             except Exception as e:
-                logger.debug("Unexpected error checking path existence for %s: %s", path, e)
+                logger.debug(
+                    "Unexpected error checking path existence for %s: %s", path, e
+                )
                 return False
         return path.exists()
 
@@ -668,7 +674,9 @@ class Scheduler:
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate OnCalendar specification
-            on_calendar = self._generate_oncalendar(frequency, time, day_of_week, day_of_month)
+            on_calendar = self._generate_oncalendar(
+                frequency, time, day_of_week, day_of_month
+            )
 
             # Create service file
             service_content = self._generate_service_file(
@@ -801,7 +809,9 @@ WantedBy=timers.target
                 return (False, "Could not find clamui-scheduled-scan command")
 
             # Generate cron time specification
-            cron_time = self._generate_crontab_entry(frequency, time, day_of_week, day_of_month)
+            cron_time = self._generate_crontab_entry(
+                frequency, time, day_of_week, day_of_month
+            )
 
             # Build command
             # Use shlex.quote() to prevent command injection via malicious paths

@@ -3,7 +3,7 @@ Version: VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, clamav, python3-requests (>= 2.31.0), python3-urllib3 (>= 2.0.0), python3-keyring (>= 23.0.0), python3-matplotlib (>= 3.5.0), python3-psutil (>= 5.9.0)
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, clamav, python3-requests, python3-urllib3, python3-keyring, python3-matplotlib, python3-psutil
 Maintainer: ClamUI Contributors <clamui@rooki.xyz>
 Homepage: https://github.com/linx-systems/clamui
 Description: Modern graphical interface for ClamAV antivirus scanner

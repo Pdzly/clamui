@@ -12,3 +12,6 @@ jobs:
 
   build-flatpak:
     uses: ./.github/workflows/build-flatpak.yml
+
+  build-appimage:
+    uses: ./.github/workflows/build-appimage.yml

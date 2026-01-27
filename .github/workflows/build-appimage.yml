@@ -1,0 +1,40 @@
+name: Build AppImage
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build-appimage:
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 python3-pip python3-gi python3-gi-cairo \
+            gir1.2-gtk-4.0 gir1.2-adw-1 \
+            libgtk-4-dev libadwaita-1-dev \
+            libfuse2 wget rsync
+
+      - name: Build AppImage
+        run: ./appimage/build-appimage.sh
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-package
+          path: ClamUI-*.AppImage
+          retention-days: 7

@@ -244,7 +244,7 @@ ClamUI requires the following components to be installed on your system:
 </tr>
 <tr>
 <td><strong>ClamAV</strong></td>
-<td>The <code>clamscan</code> command-line tool must be installed</td>
+<td>The <code>clamscan</code> command-line tool (bundled in Flatpak; install separately for native packages)</td>
 </tr>
 <tr>
 <td><strong>GTK4 + libadwaita</strong></td>

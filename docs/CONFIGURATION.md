@@ -143,8 +143,10 @@ All XDG paths are relative to this sandbox directory:
 **Important Notes for Flatpak:**
 - XDG environment variables still work but are interpreted within the sandbox
 - The Flatpak version can access the host filesystem through permissions
-- ClamAV binaries (`clamscan`, `freshclam`, etc.) must be installed on the **host system**, not inside the Flatpak
-- ClamUI uses `flatpak-spawn --host` to execute ClamAV commands on the host
+- ClamAV is **bundled inside the Flatpak sandbox** — no host installation required
+- The bundled ClamAV is only available to ClamUI and is not installed system-wide
+- Virus definitions are stored within the Flatpak data directory
+- `flatpak-spawn --host` is used only for systemctl commands (scheduled scan timers)
 
 **Accessing Flatpak Files:**
 To access ClamUI configuration or logs when using Flatpak:

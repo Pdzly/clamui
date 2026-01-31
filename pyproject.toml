@@ -35,6 +35,8 @@ dependencies = [
     "requests>=2.31.0",
     "urllib3>=2.6.3",  # CVE fix: decompression-bomb bypass on redirects
     "keyring>=25.0.0",
+    "Pillow>=10.0.0",  # Tray icon generation (composite status badges)
+    "cairosvg>=2.7.0",  # SVG to PNG conversion for tray icons
 ]
 
 [project.optional-dependencies]

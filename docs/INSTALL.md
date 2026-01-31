@@ -10,7 +10,8 @@ This document provides comprehensive installation instructions for ClamUI on Lin
 4. [File Manager Context Menu](#file-manager-context-menu)
 5. [System Tray Integration](#system-tray-integration)
 6. [Verification](#verification)
-7. [Uninstallation](#uninstallation)
+7. [Icon Troubleshooting](#icon-troubleshooting)
+8. [Uninstallation](#uninstallation)
 
 ---
 
@@ -57,26 +58,11 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 flatpak install flathub io.github.linx_systems.ClamUI
 ```
 
-### Install Host ClamAV (Required)
+> **Note:** The Flatpak version bundles ClamAV internally — no separate ClamAV installation is required. This bundled ClamAV is only available within the Flatpak sandbox and is not installed system-wide.
 
-ClamUI requires ClamAV to be installed on your host system for scanning functionality:
+### Update Virus Definitions
 
-```bash
-# Ubuntu/Debian
-sudo apt install clamav
-
-# Fedora
-sudo dnf install clamav clamav-update
-
-# Arch Linux
-sudo pacman -S clamav
-```
-
-Update the virus definitions:
-
-```bash
-sudo freshclam
-```
+After installation, launch ClamUI and run a database update from the application to download the latest virus definitions.
 
 ### Run ClamUI
 
@@ -86,7 +72,7 @@ flatpak run io.github.linx_systems.ClamUI
 
 Or find "ClamUI" in your application menu.
 
-> **Troubleshooting**: If you encounter issues with Flatpak installation or ClamAV not being detected, see [Flatpak-Specific Issues](./TROUBLESHOOTING.md#flatpak-specific-issues) and [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
+> **Troubleshooting**: If you encounter issues with the Flatpak installation, see [Flatpak-Specific Issues](./TROUBLESHOOTING.md#flatpak-specific-issues) in the troubleshooting guide.
 
 ### Flatpak Permissions
 
@@ -95,7 +81,7 @@ ClamUI requests the following permissions:
 | Permission                            | Purpose                                                       |
 | ------------------------------------- | ------------------------------------------------------------- |
 | `--filesystem=host`                   | Full filesystem access for scanning and quarantine operations |
-| `--talk-name=org.freedesktop.Flatpak` | Execute host ClamAV binaries via `flatpak-spawn`              |
+| `--talk-name=org.freedesktop.Flatpak` | Execute host systemctl for scheduled scan timers              |
 | `--socket=session-bus`                | Desktop notifications for scan completion                     |
 | `--socket=wayland`                    | Native Wayland display support                                |
 | `--socket=fallback-x11`               | X11 compatibility                                             |
@@ -126,11 +112,27 @@ For Debian, Ubuntu, and derivative distributions, ClamUI is available as a `.deb
 Install the required system dependencies:
 
 ```bash
-# GTK4 and Adwaita runtime libraries
+# GTK4, Adwaita, and Python bindings
 sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
+
+# Build dependencies (required for pycairo/PyGObject compilation)
+sudo apt install python3-dev libcairo2-dev libgirepository-2.0-dev pkg-config
+
+# Build dependencies for Pillow (tray icon support)
+sudo apt install libjpeg-dev zlib1g-dev
 
 # ClamAV antivirus
 sudo apt install clamav
+```
+
+> **Note:** The build dependencies (`python3-dev`, `libcairo2-dev`, `libgirepository-2.0-dev`, `pkg-config`, `libjpeg-dev`, `zlib1g-dev`) are required when running from source with `uv run clamui`. The pre-built `.deb` package includes compiled binaries and may not require all build dependencies. On older Ubuntu versions (22.04), use `libgirepository1.0-dev` instead.
+
+**Quick Start (from source):** The `local-run.sh` script in the repository root automatically installs all dependencies and runs ClamUI:
+
+```bash
+git clone https://github.com/linx-systems/clamui.git
+cd clamui
+./local-run.sh
 ```
 
 ### Download and Install
@@ -344,6 +346,65 @@ freshclam --version
 Launch ClamUI and perform a test scan on a small directory to verify everything is working.
 
 > **Troubleshooting**: If ClamAV is not detected or scanning fails, see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
+
+---
+
+## Icon Troubleshooting
+
+If the ClamUI icon doesn't appear in your application menu or system tray after installation, try these solutions.
+
+### Desktop Icon Not Appearing (Debian Package)
+
+After installing the `.deb` package, the desktop icon may not appear immediately in some desktop environments. This is because running sessions cache icon databases.
+
+**Solutions (try in order):**
+
+1. **Wait a moment** - Some desktop environments refresh automatically within 30-60 seconds
+
+2. **Force refresh the desktop database:**
+   ```bash
+   sudo update-desktop-database /usr/share/applications
+   sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor
+   xdg-desktop-menu forceupdate --mode system
+   ```
+
+3. **Log out and log back in** - This refreshes all desktop environment caches
+
+4. **Reboot** - As a last resort, this ensures all caches are rebuilt
+
+### Tray Icon Not Appearing (Running from Source)
+
+When running ClamUI from source with `uv run clamui`, the tray icon requires additional Python dependencies:
+
+```bash
+# Verify Pillow is available
+uv run python -c "from PIL import Image; print('Pillow OK')"
+
+# Verify cairosvg is available (for SVG icon support)
+uv run python -c "import cairosvg; print('cairosvg OK')"
+```
+
+If either import fails, ensure the build dependencies are installed:
+
+```bash
+# Ubuntu/Debian
+sudo apt install libjpeg-dev zlib1g-dev
+
+# Then reinstall Python dependencies
+uv sync
+```
+
+### KDE Plasma Specific
+
+KDE Plasma uses its own icon cache system. If icons don't appear:
+
+```bash
+# Rebuild KDE cache (Plasma 5)
+kbuildsycoca5 --noincremental
+
+# Rebuild KDE cache (Plasma 6)
+kbuildsycoca6 --noincremental
+```
 
 ---
 

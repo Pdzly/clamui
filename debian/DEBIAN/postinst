@@ -27,6 +27,20 @@ case "$1" in
         if command -v gtk-update-icon-cache > /dev/null 2>&1; then
             gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
         fi
+
+        # Force desktop menu refresh for running sessions
+        # This helps icons appear without requiring logout/login
+        if command -v xdg-desktop-menu > /dev/null 2>&1; then
+            xdg-desktop-menu forceupdate --mode system 2>/dev/null || true
+        fi
+
+        # KDE Plasma cache rebuild (if applicable)
+        if command -v kbuildsycoca5 > /dev/null 2>&1; then
+            kbuildsycoca5 --noincremental 2>/dev/null || true
+        fi
+        if command -v kbuildsycoca6 > /dev/null 2>&1; then
+            kbuildsycoca6 --noincremental 2>/dev/null || true
+        fi
         ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

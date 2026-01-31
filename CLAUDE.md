@@ -172,6 +172,9 @@ The subprocess uses pure GIO D-Bus (GTK-agnostic) to implement the SNI protocol,
 sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 \
     libgirepository-2.0-dev libcairo2-dev pkg-config python3-dev clamav
 
+# Build dependencies for Pillow (tray icon support)
+sudo apt install libjpeg-dev zlib1g-dev
+
 # Install Python dependencies with uv
 uv sync --dev
 
@@ -824,6 +827,13 @@ Key runtime dependencies:
 
 - `PyGObject` - GTK4/Adwaita bindings (provided by system/runtime)
 - `keyring>=25.0.0` - Secure credential storage
+- `Pillow>=10.0.0` - Tray icon generation (composite status badges)
+- `cairosvg>=2.7.0` - SVG to PNG conversion for tray icons
+
+**Build dependencies for Pillow (Ubuntu/Debian):**
+```bash
+sudo apt install libjpeg-dev zlib1g-dev
+```
 
 ## Flatpak Development
 

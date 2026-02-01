@@ -394,6 +394,21 @@ sudo apt install libjpeg-dev zlib1g-dev
 uv sync
 ```
 
+### Cinnamon Specific
+
+Cinnamon caches menu icons separately and may not respond to standard refresh commands. If the icon shows as a default/generic icon:
+
+```bash
+# Force Cinnamon to reload its theme (includes icons)
+dbus-send --session --dest=org.Cinnamon --type=method_call \
+    /org/Cinnamon org.Cinnamon.ReloadTheme
+
+# Alternative: restart Cinnamon (will briefly flash the screen)
+cinnamon --replace &
+```
+
+If the icon still doesn't appear, logging out and back in is the most reliable solution for Cinnamon.
+
 ### KDE Plasma Specific
 
 KDE Plasma uses its own icon cache system. If icons don't appear:

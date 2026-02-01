@@ -41,6 +41,20 @@ case "$1" in
         if command -v kbuildsycoca6 > /dev/null 2>&1; then
             kbuildsycoca6 --noincremental 2>/dev/null || true
         fi
+
+        # Cinnamon desktop: reload theme to refresh menu icons
+        # Cinnamon caches icons separately from GTK and needs explicit reload
+        if command -v dbus-send > /dev/null 2>&1; then
+            # Signal Cinnamon to reload its theme (includes icon refresh)
+            dbus-send --session --dest=org.Cinnamon --type=method_call \
+                /org/Cinnamon org.Cinnamon.ReloadTheme 2>/dev/null || true
+        fi
+
+        # Touch the desktop file to trigger file monitor refresh
+        # Some DEs watch for mtime changes on desktop files
+        if [ -f /usr/share/applications/io.github.linx_systems.ClamUI.desktop ]; then
+            touch /usr/share/applications/io.github.linx_systems.ClamUI.desktop 2>/dev/null || true
+        fi
         ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

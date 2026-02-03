@@ -287,6 +287,25 @@ class ScanView(Gtk.Box):
             .threat-action-btn.excluded {
                 opacity: 0.6;
             }
+
+            /* Status banner background styling */
+            .success .banner {
+                background-color: alpha(@success_bg_color, 0.3);
+                border-radius: 6px;
+                padding: 12px;
+            }
+
+            .warning .banner {
+                background-color: alpha(@warning_bg_color, 0.3);
+                border-radius: 6px;
+                padding: 12px;
+            }
+
+            .error .banner {
+                background-color: alpha(@error_bg_color, 0.3);
+                border-radius: 6px;
+                padding: 12px;
+            }
         """
         if _HAS_CSS_LOAD_STRING:
             css_provider.load_from_string(css_string)

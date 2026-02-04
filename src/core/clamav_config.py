@@ -428,6 +428,11 @@ CONFIG_OPTION_TYPES = {
     "DatabaseMirror": {"type": "string"},
     "DatabaseOwner": {"type": "string"},
     "User": {"type": "string"},
+    # URL options (multi-value, supports http(s)/ftp(s)/file URLs)
+    "DatabaseCustomURL": {"type": "url"},  # Third-party signature databases
+    "PrivateMirror": {"type": "url"},  # Private mirror URLs
+    # Additional boolean options
+    "ScriptedUpdates": {"type": "boolean"},  # Enable/disable scripted updates
 }
 
 
@@ -495,6 +500,19 @@ def validate_option(key: str, value: str) -> tuple[bool, str | None]:
     elif option_type == "string":
         if not value:
             return (False, f"{key}: string value cannot be empty")
+        return (True, None)
+
+    elif option_type == "url":
+        # URL validation for DatabaseCustomURL, PrivateMirror, etc.
+        if not value:
+            return (True, None)  # Empty is valid (allows clearing)
+        # Valid schemes for freshclam
+        valid_schemes = ("http://", "https://", "ftp://", "ftps://", "file://")
+        if not any(value.lower().startswith(scheme) for scheme in valid_schemes):
+            return (
+                False,
+                f"{key}: URL must start with http(s)://, ftp(s)://, or file://",
+            )
         return (True, None)
 
     return (True, None)

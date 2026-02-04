@@ -356,9 +356,15 @@ class SavePage(PreferencesPageMixin):
 
             # Save freshclam.conf
             if freshclam_updates and self._window._freshclam_config:
-                # Apply updates to config using set_value
+                # Apply updates to config using set_value (or add_value for lists)
                 for key, value in freshclam_updates.items():
-                    self._window._freshclam_config.set_value(key, value)
+                    if isinstance(value, list):
+                        # Multi-value option: clear existing and add each value
+                        self._window._freshclam_config.values.pop(key, None)
+                        for v in value:
+                            self._window._freshclam_config.add_value(key, v)
+                    else:
+                        self._window._freshclam_config.set_value(key, value)
 
                 success, error = write_config_with_elevation(self._window._freshclam_config)
                 if not success:
@@ -366,12 +372,24 @@ class SavePage(PreferencesPageMixin):
 
             # Save clamd.conf (includes both scanner settings and On-Access settings)
             if (clamd_updates or onaccess_updates) and self._window._clamd_config:
-                # Apply scanner updates to config using set_value
+                # Apply scanner updates to config using set_value (or add_value for lists)
                 for key, value in clamd_updates.items():
-                    self._window._clamd_config.set_value(key, value)
-                # Apply On-Access updates to config using set_value
+                    if isinstance(value, list):
+                        # Multi-value option: clear existing and add each value
+                        self._window._clamd_config.values.pop(key, None)
+                        for v in value:
+                            self._window._clamd_config.add_value(key, v)
+                    else:
+                        self._window._clamd_config.set_value(key, value)
+                # Apply On-Access updates to config using set_value (or add_value for lists)
                 for key, value in onaccess_updates.items():
-                    self._window._clamd_config.set_value(key, value)
+                    if isinstance(value, list):
+                        # Multi-value option: clear existing and add each value
+                        self._window._clamd_config.values.pop(key, None)
+                        for v in value:
+                            self._window._clamd_config.add_value(key, v)
+                    else:
+                        self._window._clamd_config.set_value(key, value)
                 success, error = write_config_with_elevation(self._window._clamd_config)
                 if not success:
                     raise Exception(f"Failed to save clamd.conf: {error}")

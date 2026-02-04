@@ -10,8 +10,9 @@ This document provides comprehensive installation instructions for ClamUI on Lin
 4. [File Manager Context Menu](#file-manager-context-menu)
 5. [System Tray Integration](#system-tray-integration)
 6. [Verification](#verification)
-7. [Icon Troubleshooting](#icon-troubleshooting)
-8. [Uninstallation](#uninstallation)
+7. [Verifying Package Signatures](#verifying-package-signatures)
+8. [Icon Troubleshooting](#icon-troubleshooting)
+9. [Uninstallation](#uninstallation)
 
 ---
 
@@ -346,6 +347,36 @@ freshclam --version
 Launch ClamUI and perform a test scan on a small directory to verify everything is working.
 
 > **Troubleshooting**: If ClamAV is not detected or scanning fails, see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
+
+---
+
+## Verifying Package Signatures
+
+ClamUI releases are signed to verify their authenticity. This section provides quick verification commands - for full details, see [SIGNING.md](./SIGNING.md).
+
+### AppImage
+
+```bash
+# Display signature info
+./ClamUI-*.AppImage --appimage-signature
+```
+
+### Debian Package
+
+```bash
+# Import ClamUI's public key
+curl -fsSL https://raw.githubusercontent.com/linx-systems/clamui/master/signing-key.asc | gpg --import
+
+# Verify the package
+dpkg-sig --verify clamui_*.deb
+# Expected output: GOODSIG _gpgbuilder ...
+```
+
+> **Security Note:** Before importing keys, verify you're downloading from the official repository. You can also download `signing-key.asc` directly from [the repository](https://github.com/linx-systems/clamui/blob/master/signing-key.asc) and import it manually with `gpg --import signing-key.asc`.
+
+### Flatpak (via Flathub)
+
+Flathub signatures are verified automatically during installation.
 
 ---
 

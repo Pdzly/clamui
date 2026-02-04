@@ -135,6 +135,7 @@ For detailed technical documentation on specific architectural patterns, see the
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)                                   | Development environment setup                       |
 | [`docs/INSTALL.md`](docs/INSTALL.md)                                           | Installation guide                                  |
 | [`docs/SCAN_BACKENDS.md`](docs/SCAN_BACKENDS.md)                               | Scan backend options and performance                |
+| [`docs/SIGNING.md`](docs/SIGNING.md)                                           | Package signing and verification                    |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)                           | Common issues and solutions                         |
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)                                     | End-user documentation                              |
 

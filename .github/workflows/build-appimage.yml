@@ -66,6 +66,36 @@ jobs:
           # Cleanup extracted files
           rm -rf squashfs-root
 
+      # Only import GPG key for tag builds (releases)
+      - name: Import GPG key
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+        id: gpg
+
+      # Sign AppImage on tag builds
+      - name: Sign AppImage
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          # Download appimagetool for signing
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          # Extract the existing AppImage
+          APPIMAGE=$(ls ClamUI-*.AppImage)
+          ./$APPIMAGE --appimage-extract
+
+          # Re-package with signature
+          ./appimagetool-x86_64.AppImage --sign --sign-key ${{ steps.gpg.outputs.fingerprint }} \
+            squashfs-root/ "$APPIMAGE"
+
+          # Cleanup
+          rm -rf squashfs-root appimagetool-x86_64.AppImage
+
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:

@@ -118,13 +118,35 @@ def create_switch_row(icon_name: str | None = None) -> Adw.ActionRow:
 
     # Patch connect to redirect switch-specific signals
     _original_connect = row.connect
+    _switch_handler_ids = set()
 
     def _patched_connect(signal_name, callback, *args):
         if signal_name == "notify::active":
-            return switch.connect("notify::active", lambda s, p: callback(row, p), *args)
+            handler_id = switch.connect("notify::active", lambda s, p: callback(row, p), *args)
+            _switch_handler_ids.add(handler_id)
+            return handler_id
         return _original_connect(signal_name, callback, *args)
 
     row.connect = _patched_connect
+
+    # Patch handler_block/handler_unblock to forward switch-owned handlers
+    _original_handler_block = row.handler_block
+    _original_handler_unblock = row.handler_unblock
+
+    def _patched_handler_block(handler_id):
+        if handler_id in _switch_handler_ids:
+            switch.handler_block(handler_id)
+        else:
+            _original_handler_block(handler_id)
+
+    def _patched_handler_unblock(handler_id):
+        if handler_id in _switch_handler_ids:
+            switch.handler_unblock(handler_id)
+        else:
+            _original_handler_unblock(handler_id)
+
+    row.handler_block = _patched_handler_block
+    row.handler_unblock = _patched_handler_unblock
 
     return row
 

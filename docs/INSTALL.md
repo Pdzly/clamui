@@ -21,7 +21,7 @@ This document provides comprehensive installation instructions for ClamUI on Lin
 The recommended installation method depends on your Linux distribution:
 
 | Distribution               | Recommended Method                           |
-| -------------------------- | -------------------------------------------- |
+|----------------------------|----------------------------------------------|
 | Any (universal)            | [Flatpak](#flatpak-installation)             |
 | Debian, Ubuntu, Linux Mint | [.deb package](#debian-package-installation) |
 | Fedora, Arch, others       | [Flatpak](#flatpak-installation)             |
@@ -59,11 +59,13 @@ flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.f
 flatpak install flathub io.github.linx_systems.ClamUI
 ```
 
-> **Note:** The Flatpak version bundles ClamAV internally — no separate ClamAV installation is required. This bundled ClamAV is only available within the Flatpak sandbox and is not installed system-wide.
+> **Note:** The Flatpak version bundles ClamAV internally — no separate ClamAV installation is required. This bundled
+> ClamAV is only available within the Flatpak sandbox and is not installed system-wide.
 
 ### Update Virus Definitions
 
-After installation, launch ClamUI and run a database update from the application to download the latest virus definitions.
+After installation, launch ClamUI and run a database update from the application to download the latest virus
+definitions.
 
 ### Run ClamUI
 
@@ -73,14 +75,15 @@ flatpak run io.github.linx_systems.ClamUI
 
 Or find "ClamUI" in your application menu.
 
-> **Troubleshooting**: If you encounter issues with the Flatpak installation, see [Flatpak-Specific Issues](./TROUBLESHOOTING.md#flatpak-specific-issues) in the troubleshooting guide.
+> **Troubleshooting**: If you encounter issues with the Flatpak installation,
+> see [Flatpak-Specific Issues](./TROUBLESHOOTING.md#flatpak-specific-issues) in the troubleshooting guide.
 
 ### Flatpak Permissions
 
 ClamUI requests the following permissions:
 
 | Permission                            | Purpose                                                       |
-| ------------------------------------- | ------------------------------------------------------------- |
+|---------------------------------------|---------------------------------------------------------------|
 | `--filesystem=host`                   | Full filesystem access for scanning and quarantine operations |
 | `--talk-name=org.freedesktop.Flatpak` | Execute host systemctl for scheduled scan timers              |
 | `--socket=session-bus`                | Desktop notifications for scan completion                     |
@@ -126,9 +129,13 @@ sudo apt install libjpeg-dev zlib1g-dev
 sudo apt install clamav
 ```
 
-> **Note:** The build dependencies (`python3-dev`, `libcairo2-dev`, `libgirepository-2.0-dev`, `pkg-config`, `libjpeg-dev`, `zlib1g-dev`) are required when running from source with `uv run clamui`. The pre-built `.deb` package includes compiled binaries and may not require all build dependencies. On older Ubuntu versions (22.04), use `libgirepository1.0-dev` instead.
+> **Note:** The build dependencies (`python3-dev`, `libcairo2-dev`, `libgirepository-2.0-dev`, `pkg-config`,
+`libjpeg-dev`, `zlib1g-dev`) are required when running from source with `uv run clamui`. The pre-built `.deb` package
+> includes compiled binaries and may not require all build dependencies. On older Ubuntu versions (22.04), use
+`libgirepository1.0-dev` instead.
 
-**Quick Start (from source):** The `local-run.sh` script in the repository root automatically installs all dependencies and runs ClamUI:
+**Quick Start (from source):** The `local-run.sh` script in the repository root automatically installs all dependencies
+and runs ClamUI:
 
 ```bash
 git clone https://github.com/linx-systems/clamui.git
@@ -138,7 +145,8 @@ cd clamui
 
 ### Download and Install
 
-Download the latest `.deb` package from the [releases page](https://github.com/linx-systems/clamui/releases), then install:
+Download the latest `.deb` package from the [releases page](https://github.com/linx-systems/clamui/releases), then
+install:
 
 ```bash
 # Install the package
@@ -157,7 +165,7 @@ sudo apt install ./clamui_*.deb
 ### What Gets Installed
 
 | Path                                                                       | Description                |
-| -------------------------------------------------------------------------- | -------------------------- |
+|----------------------------------------------------------------------------|----------------------------|
 | `/usr/bin/clamui`                                                          | Launcher script            |
 | `/usr/lib/python3/dist-packages/clamui/`                                   | Python application modules |
 | `/usr/share/applications/io.github.linx_systems.ClamUI.desktop`            | Desktop entry file         |
@@ -171,7 +179,8 @@ clamui
 
 Or find "ClamUI" in your application menu.
 
-> **Troubleshooting**: If you encounter issues with missing dependencies or ClamAV installation, see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
+> **Troubleshooting**: If you encounter issues with missing dependencies or ClamAV installation,
+> see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
 
 ---
 
@@ -182,14 +191,15 @@ ClamUI integrates with file managers to provide a "Scan with ClamUI" right-click
 ### Supported File Managers
 
 | File Manager | Desktop  | Integration Type     |
-| ------------ | -------- | -------------------- |
+|--------------|----------|----------------------|
 | Nautilus     | GNOME    | Desktop entry action |
 | Dolphin      | KDE      | Desktop entry action |
 | Nemo         | Cinnamon | Native Nemo action   |
 
 ### Flatpak Users
 
-If you installed ClamUI via Flatpak, context menu integration is **included automatically**. The Flatpak manifest includes the necessary filesystem permissions to access files for scanning.
+If you installed ClamUI via Flatpak, context menu integration is **included automatically**. The Flatpak manifest
+includes the necessary filesystem permissions to access files for scanning.
 
 ### Native Installation
 
@@ -243,7 +253,7 @@ Nemo uses its own action format for context menu extensions:
 ### Using the Context Menu
 
 | Action                 | Description                                                      |
-| ---------------------- | ---------------------------------------------------------------- |
+|------------------------|------------------------------------------------------------------|
 | **Single file**        | Right-click a file and select "Scan with ClamUI"                 |
 | **Folder**             | Right-click a folder to recursively scan all contents            |
 | **Multiple selection** | Select multiple files/folders, right-click, and scan all at once |
@@ -269,7 +279,9 @@ If the context menu doesn't appear:
    gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
    ```
 
-> **Troubleshooting**: For more detailed troubleshooting of context menu issues, see [File Manager Context Menu Issues](./TROUBLESHOOTING.md#file-manager-context-menu-issues) in the troubleshooting guide.
+> **Troubleshooting**: For more detailed troubleshooting of context menu issues,
+> see [File Manager Context Menu Issues](./TROUBLESHOOTING.md#file-manager-context-menu-issues) in the troubleshooting
+> guide.
 
 ---
 
@@ -280,7 +292,7 @@ ClamUI provides an optional system tray icon for quick access to scanning functi
 ### Features
 
 | Feature              | Description                                                              |
-| -------------------- | ------------------------------------------------------------------------ |
+|----------------------|--------------------------------------------------------------------------|
 | **Status Indicator** | Tray icon shows protection status (protected, warning, scanning, threat) |
 | **Quick Actions**    | Right-click menu for Quick Scan, Full Scan, and Update Definitions       |
 | **Scan Progress**    | Shows scan progress percentage during active scans                       |
@@ -311,9 +323,11 @@ GNOME Shell requires an additional extension for tray icon support:
 
 ### Graceful Degradation
 
-If the AppIndicator library is not installed, ClamUI runs normally without the tray icon feature. The application logs a warning but continues to function with all other features.
+If the AppIndicator library is not installed, ClamUI runs normally without the tray icon feature. The application logs a
+warning but continues to function with all other features.
 
-> **Troubleshooting**: If the system tray icon is not appearing or not working correctly, see [System Tray Icon Issues](./TROUBLESHOOTING.md#system-tray-icon-issues) in the troubleshooting guide.
+> **Troubleshooting**: If the system tray icon is not appearing or not working correctly,
+> see [System Tray Icon Issues](./TROUBLESHOOTING.md#system-tray-icon-issues) in the troubleshooting guide.
 
 ---
 
@@ -346,13 +360,15 @@ freshclam --version
 
 Launch ClamUI and perform a test scan on a small directory to verify everything is working.
 
-> **Troubleshooting**: If ClamAV is not detected or scanning fails, see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
+> **Troubleshooting**: If ClamAV is not detected or scanning fails,
+> see [ClamAV Installation Issues](./TROUBLESHOOTING.md#clamav-installation-issues) in the troubleshooting guide.
 
 ---
 
 ## Verifying Package Signatures
 
-ClamUI releases are signed to verify their authenticity. This section provides quick verification commands - for full details, see [SIGNING.md](./SIGNING.md).
+ClamUI releases are signed to verify their authenticity. This section provides quick verification commands - for full
+details, see [SIGNING.md](./SIGNING.md).
 
 ### AppImage
 
@@ -372,7 +388,10 @@ dpkg-sig --verify clamui_*.deb
 # Expected output: GOODSIG _gpgbuilder ...
 ```
 
-> **Security Note:** Before importing keys, verify you're downloading from the official repository. You can also download `signing-key.asc` directly from [the repository](https://github.com/linx-systems/clamui/blob/master/signing-key.asc) and import it manually with `gpg --import signing-key.asc`.
+> **Security Note:** Before importing keys, verify you're downloading from the official repository. You can also
+> download `signing-key.asc` directly
+> from [the repository](https://github.com/linx-systems/clamui/blob/master/signing-key.asc) and import it manually with
+`gpg --import signing-key.asc`.
 
 ### Flatpak (via Flathub)
 
@@ -386,7 +405,8 @@ If the ClamUI icon doesn't appear in your application menu or system tray after 
 
 ### Desktop Icon Not Appearing (Debian Package)
 
-After installing the `.deb` package, the desktop icon may not appear immediately in some desktop environments. This is because running sessions cache icon databases.
+After installing the `.deb` package, the desktop icon may not appear immediately in some desktop environments. This is
+because running sessions cache icon databases.
 
 **Solutions (try in order):**
 
@@ -427,7 +447,8 @@ uv sync
 
 ### Cinnamon Specific
 
-Cinnamon caches menu icons separately and may not respond to standard refresh commands. If the icon shows as a default/generic icon:
+Cinnamon caches menu icons separately and may not respond to standard refresh commands. If the icon shows as a
+default/generic icon:
 
 ```bash
 # Force Cinnamon to reload its theme (includes icons)

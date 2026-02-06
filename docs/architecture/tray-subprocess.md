@@ -2,17 +2,22 @@
 
 ## Overview
 
-ClamUI uses a subprocess architecture for system tray integration. The main application runs with GTK4 (for modern Adwaita UI), while the system tray indicator runs in a separate subprocess using pure GIO D-Bus (GTK-agnostic).
+ClamUI uses a subprocess architecture for system tray integration. The main application runs with GTK4 (for modern
+Adwaita UI), while the system tray indicator runs in a separate subprocess using pure GIO D-Bus (GTK-agnostic).
 
 This document explains the architecture, IPC protocol, and threading model.
 
 ## Why a Subprocess?
 
-**Reason**: Process isolation keeps the tray service independent from the main application lifecycle. If the tray service crashes, the main application continues running. The subprocess can also be started/stopped independently.
+**Reason**: Process isolation keeps the tray service independent from the main application lifecycle. If the tray
+service crashes, the main application continues running. The subprocess can also be started/stopped independently.
 
-**Technology**: The tray service implements the **StatusNotifierItem (SNI)** D-Bus protocol directly using GIO's D-Bus API. This is GTK-agnostic and works with GTK4. Context menus are exported via the **DBusMenu** protocol using `libdbusmenu-glib`.
+**Technology**: The tray service implements the **StatusNotifierItem (SNI)** D-Bus protocol directly using GIO's D-Bus
+API. This is GTK-agnostic and works with GTK4. Context menus are exported via the **DBusMenu** protocol using
+`libdbusmenu-glib`.
 
-**Solution**: Run the tray indicator in a separate Python subprocess, communicating with the main GTK4 application via JSON messages over stdin/stdout pipes.
+**Solution**: Run the tray indicator in a separate Python subprocess, communicating with the main GTK4 application via
+JSON messages over stdin/stdout pipes.
 
 ## Component Relationships
 
@@ -46,7 +51,7 @@ graph LR
 **Component Descriptions:**
 
 | Component           | GTK Version | Role                                                                                                                                           |
-| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------------|
 | **app.py**          | GTK4        | Main application class (`Adw.Application`). Creates and manages the `TrayManager` instance.                                                    |
 | **tray_manager.py** | GTK4        | Spawns the tray subprocess, sends JSON commands via stdin, receives events via stdout. Thread-safe with `GLib.idle_add()` for callbacks.       |
 | **tray_service.py** | None (GIO)  | Subprocess entry point. Uses GIO D-Bus for SNI protocol, libdbusmenu for context menus, processes commands from stdin, sends events to stdout. |
@@ -54,8 +59,10 @@ graph LR
 
 **Why This Split?**
 
-- **Process Isolation**: Keeps tray service independent from main application lifecycle (crash isolation, independent restart).
-- **Process Boundary**: `tray_manager.py` and `tray_service.py` communicate across a subprocess boundary via JSON over pipes.
+- **Process Isolation**: Keeps tray service independent from main application lifecycle (crash isolation, independent
+  restart).
+- **Process Boundary**: `tray_manager.py` and `tray_service.py` communicate across a subprocess boundary via JSON over
+  pipes.
 - **Icon Generation**: `tray_icons.py` is GTK-agnostic and can be imported by either context.
 
 ## Runtime Architecture
@@ -203,7 +210,8 @@ sequenceDiagram
 
 ## Complete IPC Flow
 
-This diagram shows the full lifecycle of the tray subprocess, including startup handshake, various command types, menu actions, and shutdown:
+This diagram shows the full lifecycle of the tray subprocess, including startup handshake, various command types, menu
+actions, and shutdown:
 
 ```mermaid
 sequenceDiagram
@@ -337,7 +345,7 @@ All messages are single-line JSON objects followed by a newline:
 Sent via **stdin** to the subprocess:
 
 | Action                  | Parameters                                           | Description                                                                                               |
-| ----------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+|-------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
 | `update_status`         | `status: str`                                        | Update icon to reflect protection status<br/>Values: `"protected"`, `"warning"`, `"scanning"`, `"threat"` |
 | `update_progress`       | `percentage: int`                                    | Show scan progress percentage (0-100)<br/>Use 0 to clear                                                  |
 | `update_window_visible` | `visible: bool`                                      | Update Show/Hide Window menu label                                                                        |
@@ -357,7 +365,7 @@ Sent via **stdin** to the subprocess:
 Sent via **stdout** from the subprocess:
 
 | Event         | Parameters                                     | Description                                                                                                                        |
-| ------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+|---------------|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `ready`       | -                                              | Subprocess initialized and ready                                                                                                   |
 | `menu_action` | `action: str`<br/>`profile_id: str` (optional) | User triggered menu action<br/>Actions: `"quick_scan"`, `"full_scan"`, `"update"`, `"quit"`, `"toggle_window"`, `"select_profile"` |
 | `pong`        | -                                              | Response to `ping` command                                                                                                         |
@@ -418,7 +426,7 @@ Sent via **stdout** from the subprocess:
 ## File Locations
 
 | File                     | Description                         | GTK Version |
-| ------------------------ | ----------------------------------- | ----------- |
+|--------------------------|-------------------------------------|-------------|
 | `src/app.py`             | Main application class              | GTK4        |
 | `src/ui/tray_manager.py` | Subprocess manager (main process)   | GTK4        |
 | `src/ui/tray_service.py` | Tray indicator service (subprocess) | None (GIO)  |
@@ -463,10 +471,10 @@ def handle_command(self, command: dict) -> None:
    dpkg -l | grep libdbusmenu
    ```
 2. Check if desktop environment supports StatusNotifierItem (SNI):
-   - KDE Plasma: Built-in support
-   - Cinnamon: Built-in support (xapp-sn-watcher)
-   - XFCE: Requires `xfce4-statusnotifier-plugin`
-   - GNOME: Requires extension (e.g., AppIndicator support)
+    - KDE Plasma: Built-in support
+    - Cinnamon: Built-in support (xapp-sn-watcher)
+    - XFCE: Requires `xfce4-statusnotifier-plugin`
+    - GNOME: Requires extension (e.g., AppIndicator support)
 3. Check subprocess logs in application output with `CLAMUI_DEBUG=1`
 4. Verify D-Bus session bus is running
 

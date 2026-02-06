@@ -109,7 +109,8 @@ uv run clamui-scheduled-scan --help
 
 ## Testing
 
-ClamUI includes a comprehensive test suite with pytest. The project enforces a minimum of **50% code coverage** with a target of **80%+** for comprehensive coverage.
+ClamUI includes a comprehensive test suite with pytest. The project enforces a minimum of **50% code coverage** with a
+target of **80%+** for comprehensive coverage.
 
 ### Test Dependencies
 
@@ -125,13 +126,13 @@ pip install -e ".[dev]"
 
 ### Running Tests
 
-| Command | Description |
-|---------|-------------|
-| `pytest` | Run all tests |
-| `pytest -v` | Run with verbose output |
-| `pytest tests/core/` | Run specific test directory |
-| `pytest tests/core/test_scanner.py` | Run specific test file |
-| `pytest -k "test_scanner"` | Run tests matching pattern |
+| Command                             | Description                 |
+|-------------------------------------|-----------------------------|
+| `pytest`                            | Run all tests               |
+| `pytest -v`                         | Run with verbose output     |
+| `pytest tests/core/`                | Run specific test directory |
+| `pytest tests/core/test_scanner.py` | Run specific test file      |
+| `pytest -k "test_scanner"`          | Run tests matching pattern  |
 
 ### Running Tests with Coverage
 
@@ -149,12 +150,12 @@ pytest --cov=src --cov-report=term-missing --cov-report=html
 
 ### Coverage Targets
 
-| Module | Coverage Target | Description |
-|--------|----------------|-------------|
-| `src/core/` | 80%+ | Critical business logic |
-| `src/profiles/` | 80%+ | Profile management |
-| `src/ui/` | 70%+ | GTK components (some lines untestable) |
-| Overall `src/` | 50% minimum | Enforced by CI |
+| Module          | Coverage Target | Description                            |
+|-----------------|-----------------|----------------------------------------|
+| `src/core/`     | 80%+            | Critical business logic                |
+| `src/profiles/` | 80%+            | Profile management                     |
+| `src/ui/`       | 70%+            | GTK components (some lines untestable) |
+| Overall `src/`  | 50% minimum     | Enforced by CI                         |
 
 ### Test Organization
 
@@ -201,11 +202,11 @@ tests/
 
 Tests are categorized using pytest markers:
 
-| Marker | Description |
-|--------|-------------|
+| Marker                     | Description                                           |
+|----------------------------|-------------------------------------------------------|
 | `@pytest.mark.integration` | Integration tests (may require external dependencies) |
-| `@pytest.mark.ui` | UI tests (require GTK/display environment) |
-| `@pytest.mark.slow` | Slow-running tests |
+| `@pytest.mark.ui`          | UI tests (require GTK/display environment)            |
+| `@pytest.mark.slow`        | Slow-running tests                                    |
 
 Run specific categories:
 
@@ -219,7 +220,8 @@ pytest -m ui
 
 ### Headless/CI Testing
 
-All tests are designed to run in headless CI environments without requiring a display server. GTK-dependent tests skip gracefully when no display is available:
+All tests are designed to run in headless CI environments without requiring a display server. GTK-dependent tests skip
+gracefully when no display is available:
 
 ```bash
 # Run in headless mode (no DISPLAY set)
@@ -268,16 +270,16 @@ ruff format src/ tests/
 
 Ruff is configured in `pyproject.toml` with the following rules:
 
-| Category | Rules |
-|----------|-------|
+| Category | Rules                           |
+|----------|---------------------------------|
 | `E`, `W` | pycodestyle errors and warnings |
-| `F` | Pyflakes |
-| `I` | isort (import sorting) |
-| `B` | flake8-bugbear |
-| `C4` | flake8-comprehensions |
-| `UP` | pyupgrade |
-| `ARG` | flake8-unused-arguments |
-| `SIM` | flake8-simplify |
+| `F`      | Pyflakes                        |
+| `I`      | isort (import sorting)          |
+| `B`      | flake8-bugbear                  |
+| `C4`     | flake8-comprehensions           |
+| `UP`     | pyupgrade                       |
+| `ARG`    | flake8-unused-arguments         |
+| `SIM`    | flake8-simplify                 |
 
 ### Pre-commit Checks
 
@@ -387,14 +389,14 @@ class TestMyFeature:
 
 ### Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Language | Python 3.10+ |
-| UI Framework | GTK4 with PyGObject |
-| UI Styling | libadwaita (GNOME design) |
-| Testing | pytest, pytest-cov |
-| Linting | Ruff |
-| Packaging | Hatch, Flatpak, Debian |
+| Component    | Technology                |
+|--------------|---------------------------|
+| Language     | Python 3.10+              |
+| UI Framework | GTK4 with PyGObject       |
+| UI Styling   | libadwaita (GNOME design) |
+| Testing      | pytest, pytest-cov        |
+| Linting      | Ruff                      |
+| Packaging    | Hatch, Flatpak, Debian    |
 
 ### Key Design Patterns
 
@@ -420,7 +422,8 @@ clamui/
 └── pyproject.toml            # Project configuration
 ```
 
-For a detailed breakdown of all modules, see the [Project Structure](../README.md#project-structure) section in the README.
+For a detailed breakdown of all modules, see the [Project Structure](../README.md#project-structure) section in the
+README.
 
 ---
 
@@ -428,12 +431,12 @@ For a detailed breakdown of all modules, see the [Project Structure](../README.m
 
 ClamUI uses GitHub Actions for CI with the following workflows:
 
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `test.yml` | Push/PR to main | Run tests on Python 3.10, 3.11, 3.12 |
-| `lint.yml` | Push/PR to main | Run Ruff linting and format checks |
-| `build-deb.yml` | Manual/Release | Build Debian packages |
-| `build-flatpak.yml` | Manual/Release | Build Flatpak packages |
+| Workflow            | Trigger         | Purpose                              |
+|---------------------|-----------------|--------------------------------------|
+| `test.yml`          | Push/PR to main | Run tests on Python 3.10, 3.11, 3.12 |
+| `lint.yml`          | Push/PR to main | Run Ruff linting and format checks   |
+| `build-deb.yml`     | Manual/Release  | Build Debian packages                |
+| `build-flatpak.yml` | Manual/Release  | Build Flatpak packages               |
 
 ### CI Environment
 

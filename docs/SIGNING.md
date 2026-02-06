@@ -1,6 +1,7 @@
 # Package Signing
 
-ClamUI releases are signed to verify their authenticity. This document explains how to verify package signatures and how to set up signing for releases.
+ClamUI releases are signed to verify their authenticity. This document explains how to verify package signatures and how
+to set up signing for releases.
 
 ## Verifying Package Signatures
 
@@ -33,11 +34,15 @@ dpkg-sig --verify clamui_*.deb
 # GOODSIG _gpgbuilder <key-fingerprint>
 ```
 
-> **Security Note:** Before importing keys, verify you're downloading from the official repository. You can also download `signing-key.asc` directly from [the repository](https://github.com/linx-systems/clamui/blob/master/signing-key.asc) and import it manually with `gpg --import signing-key.asc`.
+> **Security Note:** Before importing keys, verify you're downloading from the official repository. You can also
+> download `signing-key.asc` directly
+> from [the repository](https://github.com/linx-systems/clamui/blob/master/signing-key.asc) and import it manually with
+`gpg --import signing-key.asc`.
 
 ### Flatpak (via Flathub)
 
-Flatpak packages installed from Flathub are automatically signed by Flathub's infrastructure. Signature verification happens automatically during installation - no manual steps required.
+Flatpak packages installed from Flathub are automatically signed by Flathub's infrastructure. Signature verification
+happens automatically during installation - no manual steps required.
 
 ---
 
@@ -54,6 +59,7 @@ gpg --full-generate-key
 ```
 
 Recommended settings:
+
 - **Key type**: RSA and RSA
 - **Key size**: 4096 bits
 - **Expiration**: 2 years (allows for rotation)
@@ -73,10 +79,10 @@ gpg --armor --export YOUR_KEY_ID > signing-key.asc
 
 Go to repository **Settings → Secrets and variables → Actions** and add:
 
-| Secret Name | Value |
-|-------------|-------|
+| Secret Name       | Value                     |
+|-------------------|---------------------------|
 | `GPG_PRIVATE_KEY` | Contents of `private.key` |
-| `GPG_PASSPHRASE` | Key passphrase |
+| `GPG_PASSPHRASE`  | Key passphrase            |
 
 ### 4. Add Public Key to Repository
 
@@ -104,7 +110,8 @@ git push origin :refs/tags/v0.2.0-test
 
 ## Security Considerations
 
-- **Private key storage**: The GPG private key is stored as an encrypted GitHub secret and is only accessible during workflow runs
+- **Private key storage**: The GPG private key is stored as an encrypted GitHub secret and is only accessible during
+  workflow runs
 - **Passphrase protection**: The passphrase is stored as a separate secret, never exposed in logs
 - **Tag-only signing**: Packages are only signed on tag pushes (releases), not on PR or branch builds
 - **Key rotation**: Consider rotating the signing key every 2 years (matching the recommended expiration)
@@ -114,11 +121,11 @@ git push origin :refs/tags/v0.2.0-test
 
 ## Workflow Behavior
 
-| Event | Signing |
-|-------|---------|
+| Event            | Signing                 |
+|------------------|-------------------------|
 | Push to `master` | No signing (build only) |
-| Pull request | No signing (build only) |
-| Tag push (`v*`) | **Signed** |
-| Manual dispatch | No signing (build only) |
+| Pull request     | No signing (build only) |
+| Tag push (`v*`)  | **Signed**              |
+| Manual dispatch  | No signing (build only) |
 
 This ensures that only official releases are signed, while development builds remain unsigned for faster iteration.

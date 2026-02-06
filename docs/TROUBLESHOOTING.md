@@ -19,7 +19,8 @@ This guide covers common issues and solutions for ClamUI.
 
 **Symptom:** Scans fail or ClamAV commands don't work in the Flatpak version.
 
-**Note:** The ClamUI Flatpak bundles ClamAV internally - you do NOT need to install ClamAV on your host system when using the Flatpak version.
+**Note:** The ClamUI Flatpak bundles ClamAV internally - you do NOT need to install ClamAV on your host system when
+using the Flatpak version.
 
 **Possible causes and solutions:**
 
@@ -57,7 +58,8 @@ flatpak override --user --filesystem=host io.github.linx_systems.ClamUI
 
 **Solution:**
 
-ClamUI automatically manages a Flatpak-specific database directory at `~/.var/app/io.github.linx_systems.ClamUI/data/clamav/`. If updates fail:
+ClamUI automatically manages a Flatpak-specific database directory at
+`~/.var/app/io.github.linx_systems.ClamUI/data/clamav/`. If updates fail:
 
 1. Check the directory exists and is writable
 2. Verify internet connectivity
@@ -229,7 +231,7 @@ ClamUI automatically manages a Flatpak-specific database directory at `~/.var/ap
    ```
 
 2. For GNOME, install a tray extension:
-   - [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/)
+    - [AppIndicator Support](https://extensions.gnome.org/extension/615/appindicator-support/)
 
 3. Restart ClamUI.
 
@@ -337,10 +339,10 @@ If you can't resolve your issue:
 
 1. **Check existing issues**: [GitHub Issues](https://github.com/linx-systems/clamui/issues)
 2. **Report a bug**: Create a new issue with:
-   - ClamUI version
-   - Operating system and version
-   - Installation method (Flatpak, .deb, source)
-   - Steps to reproduce
-   - Error messages or logs
+    - ClamUI version
+    - Operating system and version
+    - Installation method (Flatpak, .deb, source)
+    - Steps to reproduce
+    - Error messages or logs
 
 3. **Community support**: Join discussions on the GitHub repository

@@ -7,54 +7,60 @@ This document provides comprehensive reference documentation for all configurati
 1. [Overview](#overview)
 2. [File Locations](#file-locations)
 3. [Settings Reference](#settings-reference)
-   - [General Settings](#general-settings)
-   - [Notification Settings](#notification-settings)
-   - [Quarantine Settings](#quarantine-settings)
-   - [Scheduled Scan Settings](#scheduled-scan-settings)
-   - [Scan Backend Settings](#scan-backend-settings)
+    - [General Settings](#general-settings)
+    - [Notification Settings](#notification-settings)
+    - [Quarantine Settings](#quarantine-settings)
+    - [Scheduled Scan Settings](#scheduled-scan-settings)
+    - [Scan Backend Settings](#scan-backend-settings)
 4. [Scan Profiles](#scan-profiles)
-   - [Profile Structure](#profile-structure)
-   - [Default Profiles](#default-profiles)
-   - [Exclusion Formats](#exclusion-formats)
+    - [Profile Structure](#profile-structure)
+    - [Default Profiles](#default-profiles)
+    - [Exclusion Formats](#exclusion-formats)
 5. [Configuration Examples](#configuration-examples)
 
 ---
 
 ## Overview
 
-ClamUI stores user preferences in `settings.json`, a JSON-formatted configuration file located in the XDG-compliant configuration directory. All settings can be modified through the application's Preferences dialog or by directly editing the JSON file.
+ClamUI stores user preferences in `settings.json`, a JSON-formatted configuration file located in the XDG-compliant
+configuration directory. All settings can be modified through the application's Preferences dialog or by directly
+editing the JSON file.
 
-**Important:** ClamUI automatically creates default settings on first launch. Manual edits to `settings.json` require application restart to take effect.
+**Important:** ClamUI automatically creates default settings on first launch. Manual edits to `settings.json` require
+application restart to take effect.
 
 ---
 
 ## File Locations
 
-ClamUI follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for file storage, ensuring consistent and predictable file organization across Linux systems.
+ClamUI follows
+the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for
+file storage, ensuring consistent and predictable file organization across Linux systems.
 
 ### XDG Base Directories
 
 ClamUI uses two primary XDG base directories:
 
-| Purpose | Default Location | Environment Variable | Description |
-|---------|------------------|----------------------|-------------|
-| **Configuration** | `~/.config/clamui/` | `XDG_CONFIG_HOME` | User-specific configuration files |
-| **Data Storage** | `~/.local/share/clamui/` | `XDG_DATA_HOME` | User-specific application data |
+| Purpose           | Default Location         | Environment Variable | Description                       |
+|-------------------|--------------------------|----------------------|-----------------------------------|
+| **Configuration** | `~/.config/clamui/`      | `XDG_CONFIG_HOME`    | User-specific configuration files |
+| **Data Storage**  | `~/.local/share/clamui/` | `XDG_DATA_HOME`      | User-specific application data    |
 
 **How XDG Directories Work:**
+
 - If environment variables are set, ClamUI uses those paths
 - If not set, ClamUI falls back to the standard defaults shown above
 - All paths are created automatically on first launch if they don't exist
 
 ### Specific Files and Directories
 
-| File/Directory | Location | Description |
-|----------------|----------|-------------|
-| `settings.json` | `~/.config/clamui/settings.json` | User preferences and application settings |
-| `profiles.json` | `~/.config/clamui/profiles.json` | Scan profile definitions |
-| `quarantine.db` | `~/.local/share/clamui/quarantine.db` | Quarantine metadata database (SQLite) |
-| Quarantine files | `~/.local/share/clamui/quarantine/` | Quarantined file storage directory |
-| Scan logs | `~/.local/share/clamui/logs/` | Historical scan logs (JSON files, one per scan) |
+| File/Directory   | Location                              | Description                                     |
+|------------------|---------------------------------------|-------------------------------------------------|
+| `settings.json`  | `~/.config/clamui/settings.json`      | User preferences and application settings       |
+| `profiles.json`  | `~/.config/clamui/profiles.json`      | Scan profile definitions                        |
+| `quarantine.db`  | `~/.local/share/clamui/quarantine.db` | Quarantine metadata database (SQLite)           |
+| Quarantine files | `~/.local/share/clamui/quarantine/`   | Quarantined file storage directory              |
+| Scan logs        | `~/.local/share/clamui/logs/`         | Historical scan logs (JSON files, one per scan) |
 
 ### Environment Variable Overrides
 
@@ -67,6 +73,7 @@ Controls where configuration files are stored.
 **Default:** `~/.config`
 
 **Example - Custom config location:**
+
 ```bash
 # Set custom config directory
 export XDG_CONFIG_HOME="$HOME/my-config"
@@ -76,6 +83,7 @@ clamui
 ```
 
 **Result:**
+
 - Settings: `~/my-config/clamui/settings.json`
 - Profiles: `~/my-config/clamui/profiles.json`
 
@@ -86,6 +94,7 @@ Controls where application data is stored.
 **Default:** `~/.local/share`
 
 **Example - Custom data location:**
+
 ```bash
 # Set custom data directory
 export XDG_DATA_HOME="$HOME/app-data"
@@ -95,6 +104,7 @@ clamui
 ```
 
 **Result:**
+
 - Quarantine DB: `~/app-data/clamui/quarantine.db`
 - Quarantine files: `~/app-data/clamui/quarantine/`
 - Logs: `~/app-data/clamui/logs/`
@@ -104,18 +114,21 @@ clamui
 To make environment variable changes permanent, add them to your shell profile:
 
 **For Bash** (`~/.bashrc` or `~/.bash_profile`):
+
 ```bash
 export XDG_CONFIG_HOME="$HOME/my-config"
 export XDG_DATA_HOME="$HOME/app-data"
 ```
 
 **For Zsh** (`~/.zshrc`):
+
 ```bash
 export XDG_CONFIG_HOME="$HOME/my-config"
 export XDG_DATA_HOME="$HOME/app-data"
 ```
 
 **For systemd user services** (if launching via desktop file):
+
 ```bash
 # Edit ~/.config/environment.d/xdg.conf
 XDG_CONFIG_HOME=$HOME/my-config
@@ -130,17 +143,18 @@ When running ClamUI as a Flatpak package, file paths are sandboxed for security:
 
 All XDG paths are relative to this sandbox directory:
 
-| File/Directory | Flatpak Location |
-|----------------|------------------|
-| **Config directory** | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/` |
-| `settings.json` | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/settings.json` |
-| `profiles.json` | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/profiles.json` |
-| **Data directory** | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/` |
-| `quarantine.db` | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/quarantine.db` |
-| Quarantine files | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/quarantine/` |
-| Scan logs | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/logs/` |
+| File/Directory       | Flatpak Location                                                       |
+|----------------------|------------------------------------------------------------------------|
+| **Config directory** | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/`              |
+| `settings.json`      | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/settings.json` |
+| `profiles.json`      | `~/.var/app/io.github.linx_systems.ClamUI/config/clamui/profiles.json` |
+| **Data directory**   | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/`                |
+| `quarantine.db`      | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/quarantine.db`   |
+| Quarantine files     | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/quarantine/`     |
+| Scan logs            | `~/.var/app/io.github.linx_systems.ClamUI/data/clamui/logs/`           |
 
 **Important Notes for Flatpak:**
+
 - XDG environment variables still work but are interpreted within the sandbox
 - The Flatpak version can access the host filesystem through permissions
 - ClamAV is **bundled inside the Flatpak sandbox** — no host installation required
@@ -150,6 +164,7 @@ All XDG paths are relative to this sandbox directory:
 
 **Accessing Flatpak Files:**
 To access ClamUI configuration or logs when using Flatpak:
+
 ```bash
 # View settings
 cat ~/.var/app/io.github.linx_systems.ClamUI/config/clamui/settings.json
@@ -211,7 +226,8 @@ tar -xzf clamui-data-backup.tar.gz -C "${XDG_DATA_HOME:-$HOME/.local/share}"
 
 ## Settings Reference
 
-All settings are stored in `~/.config/clamui/settings.json` as a JSON object. Below is the comprehensive reference for each setting.
+All settings are stored in `~/.config/clamui/settings.json` as a JSON object. Below is the comprehensive reference for
+each setting.
 
 ### General Settings
 
@@ -224,9 +240,12 @@ All settings are stored in `~/.config/clamui/settings.json` as a JSON object. Be
 Controls whether ClamUI starts minimized to the system tray on application launch.
 
 **Description:**
-When enabled, ClamUI will launch in the background without showing the main window. This is useful for users who want ClamUI to run automatically at startup without interrupting their workflow. Requires system tray support to be available.
+When enabled, ClamUI will launch in the background without showing the main window. This is useful for users who want
+ClamUI to run automatically at startup without interrupting their workflow. Requires system tray support to be
+available.
 
 **Example:**
+
 ```json
 {
   "start_minimized": true
@@ -244,9 +263,12 @@ When enabled, ClamUI will launch in the background without showing the main wind
 Controls whether closing the main window minimizes to the system tray instead of quitting.
 
 **Description:**
-When enabled, clicking the window close button will hide the window to the system tray instead of exiting the application. The application continues running in the background and can be restored by clicking the tray icon. When disabled, closing the window exits ClamUI completely.
+When enabled, clicking the window close button will hide the window to the system tray instead of exiting the
+application. The application continues running in the background and can be restored by clicking the tray icon. When
+disabled, closing the window exits ClamUI completely.
 
 **Example:**
+
 ```json
 {
   "minimize_to_tray": true
@@ -267,6 +289,7 @@ Controls whether ClamUI displays desktop notifications for scan events.
 
 **Description:**
 When enabled, ClamUI sends desktop notifications for important events such as:
+
 - Scan completion (with threat summary)
 - Virus definition database updates
 - Scheduled scan results
@@ -275,6 +298,7 @@ When enabled, ClamUI sends desktop notifications for important events such as:
 Notifications appear through the system's notification daemon (e.g., GNOME Shell, KDE Plasma notifications).
 
 **Example:**
+
 ```json
 {
   "notifications_enabled": false
@@ -294,11 +318,14 @@ Notifications appear through the system's notification daemon (e.g., GNOME Shell
 Specifies a custom directory for storing quarantined files.
 
 **Description:**
-When set to an empty string (default), ClamUI uses the XDG-compliant location `~/.local/share/clamui/quarantine/`. You can override this with a custom path for centralized quarantine storage or to use a separate partition.
+When set to an empty string (default), ClamUI uses the XDG-compliant location `~/.local/share/clamui/quarantine/`. You
+can override this with a custom path for centralized quarantine storage or to use a separate partition.
 
-The specified directory must be writable by the user running ClamUI. Quarantined files are stored with encrypted names and tracked in a SQLite database.
+The specified directory must be writable by the user running ClamUI. Quarantined files are stored with encrypted names
+and tracked in a SQLite database.
 
 **Example:**
+
 ```json
 {
   "quarantine_directory": "/mnt/secure/quarantine"
@@ -306,6 +333,7 @@ The specified directory must be writable by the user running ClamUI. Quarantined
 ```
 
 **Default Behavior:**
+
 ```json
 {
   "quarantine_directory": ""
@@ -325,9 +353,11 @@ The specified directory must be writable by the user running ClamUI. Quarantined
 Master switch to enable or disable scheduled automatic scans.
 
 **Description:**
-When enabled, ClamUI creates system timer entries (systemd user timers or cron jobs, depending on system availability) to run automatic scans based on the configured schedule. When disabled, all scheduled scans are deactivated.
+When enabled, ClamUI creates system timer entries (systemd user timers or cron jobs, depending on system availability)
+to run automatic scans based on the configured schedule. When disabled, all scheduled scans are deactivated.
 
 **Example:**
+
 ```json
 {
   "scheduled_scans_enabled": true
@@ -345,11 +375,13 @@ When enabled, ClamUI creates system timer entries (systemd user timers or cron j
 Defines how often scheduled scans run.
 
 **Description:**
+
 - **`"daily"`**: Scans run every day at the time specified in `schedule_time`
 - **`"weekly"`**: Scans run once per week on the day specified in `schedule_day_of_week`
 - **`"monthly"`**: Scans run once per month on the day specified in `schedule_day_of_month`
 
 **Example:**
+
 ```json
 {
   "schedule_frequency": "daily"
@@ -368,13 +400,16 @@ Specifies the time of day when scheduled scans execute.
 
 **Description:**
 Uses 24-hour format. For example:
+
 - `"02:00"` = 2:00 AM
 - `"14:30"` = 2:30 PM
 - `"00:00"` = Midnight
 
-The scan will run at this time according to the system's local timezone. For best performance, schedule scans during off-peak hours (e.g., early morning).
+The scan will run at this time according to the system's local timezone. For best performance, schedule scans during
+off-peak hours (e.g., early morning).
 
 **Example:**
+
 ```json
 {
   "schedule_time": "03:30"
@@ -393,13 +428,16 @@ Defines which directories to scan during scheduled scans.
 
 **Description:**
 Each element must be an absolute path to a directory. For example:
+
 - `"/home/username"` - Scan entire home directory
 - `"/home/username/Documents"` - Scan only Documents
 - `"/var/www"` - Scan web server files
 
-If the array is empty, scheduled scans will not run (no targets defined). You can specify multiple directories to scan them all in a single scheduled operation.
+If the array is empty, scheduled scans will not run (no targets defined). You can specify multiple directories to scan
+them all in a single scheduled operation.
 
 **Example:**
+
 ```json
 {
   "schedule_targets": [
@@ -420,11 +458,13 @@ If the array is empty, scheduled scans will not run (no targets defined). You ca
 Controls whether scheduled scans are skipped when the system is running on battery power.
 
 **Description:**
-When enabled, ClamUI checks the system's power status before starting a scheduled scan. If the system is on battery power (not connected to AC), the scan is skipped to preserve battery life. This is especially useful for laptop users.
+When enabled, ClamUI checks the system's power status before starting a scheduled scan. If the system is on battery
+power (not connected to AC), the scan is skipped to preserve battery life. This is especially useful for laptop users.
 
 When disabled, scheduled scans run regardless of power source.
 
 **Example:**
+
 ```json
 {
   "schedule_skip_on_battery": false
@@ -442,13 +482,16 @@ When disabled, scheduled scans run regardless of power source.
 Controls whether infected files discovered during scheduled scans are automatically quarantined.
 
 **Description:**
-When enabled, any threats detected during scheduled scans are automatically moved to quarantine without user interaction. This provides automated threat response for unattended scans.
+When enabled, any threats detected during scheduled scans are automatically moved to quarantine without user
+interaction. This provides automated threat response for unattended scans.
 
-When disabled, infected files are logged but not quarantined. The user must manually review scan results and take action.
+When disabled, infected files are logged but not quarantined. The user must manually review scan results and take
+action.
 
 **⚠️ Caution:** Auto-quarantine can remove files without confirmation. Use with care and ensure you have backups.
 
 **Example:**
+
 ```json
 {
   "schedule_auto_quarantine": true
@@ -467,6 +510,7 @@ Specifies which day of the week to run scans when `schedule_frequency` is `"week
 
 **Description:**
 Day numbering follows ISO 8601:
+
 - `0` = Monday
 - `1` = Tuesday
 - `2` = Wednesday
@@ -478,11 +522,13 @@ Day numbering follows ISO 8601:
 This setting only applies when `schedule_frequency` is set to `"weekly"`. It is ignored for daily or monthly schedules.
 
 **Example:**
+
 ```json
 {
   "schedule_day_of_week": 6
 }
 ```
+
 *Scans run every Sunday*
 
 ---
@@ -497,6 +543,7 @@ Specifies which day of the month to run scans when `schedule_frequency` is `"mon
 
 **Description:**
 Valid range is 1-28 to ensure the day exists in all months (February has only 28 days in non-leap years). For example:
+
 - `1` = First day of each month
 - `15` = Fifteenth day of each month
 - `28` = Twenty-eighth day of each month
@@ -504,11 +551,13 @@ Valid range is 1-28 to ensure the day exists in all months (February has only 28
 This setting only applies when `schedule_frequency` is set to `"monthly"`. It is ignored for daily or weekly schedules.
 
 **Example:**
+
 ```json
 {
   "schedule_day_of_month": 15
 }
 ```
+
 *Scans run on the 15th of each month*
 
 ---
@@ -523,17 +572,20 @@ Defines files and directories to exclude from all scans (manual and scheduled).
 
 **Description:**
 Each element can be:
+
 - **Absolute path:** `/home/username/.cache` - Exact directory/file to exclude
 - **Glob pattern:** `*.log` - Exclude all files matching pattern
 - **Path with wildcard:** `/var/log/*.log` - Exclude logs in specific directory
 
 Exclusions apply globally to all scan operations. This is useful for excluding:
+
 - Cache directories
 - Virtual environments
 - Build artifacts
 - Large archive files
 
 **Example:**
+
 ```json
 {
   "exclusion_patterns": [
@@ -558,17 +610,25 @@ Exclusions apply globally to all scan operations. This is useful for excluding:
 Selects which ClamAV scanning engine to use.
 
 **Description:**
-- **`"auto"`** (Recommended): Automatically selects the best available backend. Prefers the clamd daemon if running, otherwise falls back to clamscan. This provides the best balance of performance and compatibility.
 
-- **`"daemon"`**: Forces use of the clamd daemon (`clamdscan` command). The daemon must be running for scans to work. This is the fastest option for repeated scans since the virus database stays loaded in memory. If clamd is not running, scans will fail.
+- **`"auto"`** (Recommended): Automatically selects the best available backend. Prefers the clamd daemon if running,
+  otherwise falls back to clamscan. This provides the best balance of performance and compatibility.
 
-- **`"clamscan"`**: Forces use of the standalone scanner. This loads the virus database for each scan, making it slower than the daemon but requires no background service. Useful for systems where clamd is not configured or for one-off scans.
+- **`"daemon"`**: Forces use of the clamd daemon (`clamdscan` command). The daemon must be running for scans to work.
+  This is the fastest option for repeated scans since the virus database stays loaded in memory. If clamd is not
+  running, scans will fail.
+
+- **`"clamscan"`**: Forces use of the standalone scanner. This loads the virus database for each scan, making it slower
+  than the daemon but requires no background service. Useful for systems where clamd is not configured or for one-off
+  scans.
 
 **Performance Comparison:**
+
 - **daemon**: ~1-5 seconds per scan (database pre-loaded)
 - **clamscan**: ~10-30 seconds per scan (database loaded each time)
 
 **Example:**
+
 ```json
 {
   "scan_backend": "daemon"
@@ -587,16 +647,19 @@ Specifies the path to the clamd Unix domain socket.
 
 **Description:**
 When set to an empty string (default), ClamUI automatically detects the socket location by checking common paths:
+
 - `/var/run/clamav/clamd.ctl`
 - `/var/run/clamd.scan/clamd.sock`
 - `/var/run/clamav/clamd.sock`
 - `/run/clamav/clamd.ctl`
 
-You can override auto-detection by specifying a custom socket path. This is necessary if your distribution uses a non-standard location or if you run multiple clamd instances.
+You can override auto-detection by specifying a custom socket path. This is necessary if your distribution uses a
+non-standard location or if you run multiple clamd instances.
 
 This setting only applies when `scan_backend` is `"daemon"` or `"auto"` (and daemon is selected).
 
 **Example:**
+
 ```json
 {
   "daemon_socket_path": "/custom/path/to/clamd.sock"
@@ -604,6 +667,7 @@ This setting only applies when `scan_backend` is `"daemon"` or `"auto"` (and dae
 ```
 
 **Default Behavior:**
+
 ```json
 {
   "daemon_socket_path": ""
@@ -614,7 +678,8 @@ This setting only applies when `scan_backend` is `"daemon"` or `"auto"` (and dae
 
 ## Scan Profiles
 
-ClamUI uses scan profiles to save and reuse common scanning configurations. Profiles define what to scan, what to exclude, and how to scan it. They are stored in `~/.config/clamui/profiles.json` as a JSON array of profile objects.
+ClamUI uses scan profiles to save and reuse common scanning configurations. Profiles define what to scan, what to
+exclude, and how to scan it. They are stored in `~/.config/clamui/profiles.json` as a JSON array of profile objects.
 
 ### Profile Structure
 
@@ -625,7 +690,8 @@ Each scan profile is a JSON object with the following fields:
 **Type:** String (UUID)
 **Required:** Yes
 
-Unique identifier for the profile, automatically generated when the profile is created. This ID is used internally to reference and manage profiles.
+Unique identifier for the profile, automatically generated when the profile is created. This ID is used internally to
+reference and manage profiles.
 
 **Example:** `"550e8400-e29b-41d4-a716-446655440000"`
 
@@ -637,7 +703,8 @@ Unique identifier for the profile, automatically generated when the profile is c
 **Required:** Yes
 **Length:** 1-50 characters
 
-User-visible name for the profile. Must be unique across all profiles (case-sensitive). Profile names are displayed in the UI for selecting which configuration to use.
+User-visible name for the profile. Must be unique across all profiles (case-sensitive). Profile names are displayed in
+the UI for selecting which configuration to use.
 
 **Example:** `"Quick Scan"`, `"Documents Backup"`, `"Weekly System Check"`
 
@@ -649,6 +716,7 @@ User-visible name for the profile. Must be unique across all profiles (case-sens
 **Required:** Yes
 
 List of directories or files to scan. Each element must be a valid path string. Paths can be:
+
 - **Absolute paths:** `/home/username/Documents`
 - **Home directory notation:** `~/Downloads` (expands to the user's home directory)
 - **Root:** `/` (scans the entire filesystem)
@@ -656,6 +724,7 @@ List of directories or files to scan. Each element must be a valid path string. 
 Empty targets array is allowed but will result in no files being scanned.
 
 **Example:**
+
 ```json
 "targets": [
   "~/Documents",
@@ -678,11 +747,13 @@ Defines files and directories to exclude from the scan. The exclusions object ca
 **Type:** Array of Strings
 
 List of specific paths to exclude. Each path can be:
+
 - **Absolute path:** `/var/cache` - Excludes this exact directory
 - **Home directory notation:** `~/.cache` - Excludes user cache directory
 - **Subdirectories:** All subdirectories within an excluded path are also excluded
 
 **Example:**
+
 ```json
 "exclusions": {
   "paths": [
@@ -699,12 +770,14 @@ List of specific paths to exclude. Each path can be:
 **Type:** Array of Strings
 
 List of glob patterns to match filenames for exclusion. Patterns support standard glob syntax:
+
 - `*.log` - All .log files
 - `*.tmp` - All temporary files
 - `*~` - Backup files (common in text editors)
 - `*.iso` - Disk image files
 
 **Example:**
+
 ```json
 "exclusions": {
   "patterns": [
@@ -766,6 +839,7 @@ Timestamp indicating when the profile was last modified. Automatically updated o
 **Default:** `false`
 
 Indicates whether this is a built-in default profile. Default profiles:
+
 - Cannot be deleted through the UI
 - Are automatically recreated if missing
 - Are marked for special handling in the profile manager
@@ -781,9 +855,11 @@ User-created profiles should always have `is_default: false`.
 **Type:** String
 **Required:** No (defaults to empty string)
 
-Human-readable description explaining the profile's purpose. Displayed in the UI to help users understand what the profile does.
+Human-readable description explaining the profile's purpose. Displayed in the UI to help users understand what the
+profile does.
 
 **Example:**
+
 ```json
 "description": "Fast scan of the Downloads folder for quick threat detection"
 ```
@@ -795,9 +871,11 @@ Human-readable description explaining the profile's purpose. Displayed in the UI
 **Type:** Object (Dictionary)
 **Required:** No (defaults to empty object `{}`)
 
-Additional scan engine options and configuration. Currently supports custom scan parameters that may be added in future versions. Reserved for future expansion.
+Additional scan engine options and configuration. Currently supports custom scan parameters that may be added in future
+versions. Reserved for future expansion.
 
 **Example:**
+
 ```json
 "options": {}
 ```
@@ -813,6 +891,7 @@ ClamUI includes three built-in default profiles that are automatically created o
 **Purpose:** Fast scan of the Downloads folder for quick threat detection
 
 **Configuration:**
+
 ```json
 {
   "name": "Quick Scan",
@@ -824,7 +903,8 @@ ClamUI includes three built-in default profiles that are automatically created o
 }
 ```
 
-**Use Case:** Quickly scan newly downloaded files before opening them. Ideal for daily use when you want to verify new downloads.
+**Use Case:** Quickly scan newly downloaded files before opening them. Ideal for daily use when you want to verify new
+downloads.
 
 ---
 
@@ -833,6 +913,7 @@ ClamUI includes three built-in default profiles that are automatically created o
 **Purpose:** Comprehensive system-wide scan of all accessible directories
 
 **Configuration:**
+
 ```json
 {
   "name": "Full Scan",
@@ -854,7 +935,8 @@ ClamUI includes three built-in default profiles that are automatically created o
 }
 ```
 
-**Use Case:** Thorough system-wide malware check. Excludes system virtual filesystems and temporary directories that don't contain persistent threats. Best run periodically (weekly/monthly) or after system updates.
+**Use Case:** Thorough system-wide malware check. Excludes system virtual filesystems and temporary directories that
+don't contain persistent threats. Best run periodically (weekly/monthly) or after system updates.
 
 ---
 
@@ -863,6 +945,7 @@ ClamUI includes three built-in default profiles that are automatically created o
 **Purpose:** Scan of the user's home directory and personal files
 
 **Configuration:**
+
 ```json
 {
   "name": "Home Folder",
@@ -879,13 +962,15 @@ ClamUI includes three built-in default profiles that are automatically created o
 }
 ```
 
-**Use Case:** Focus on personal documents and files where threats are most likely to impact you. Excludes cache and trash directories. Balances thoroughness with scan time.
+**Use Case:** Focus on personal documents and files where threats are most likely to impact you. Excludes cache and
+trash directories. Balances thoroughness with scan time.
 
 ---
 
 ### Exclusion Formats
 
-Understanding exclusion formats is important for creating effective scan profiles that skip unnecessary files while maintaining security.
+Understanding exclusion formats is important for creating effective scan profiles that skip unnecessary files while
+maintaining security.
 
 #### Path Exclusions (`exclusions.paths`)
 
@@ -895,15 +980,15 @@ Path exclusions work by comparing the full resolved path of each file/directory:
    ```json
    "paths": ["/var/cache"]
    ```
-   - Excludes `/var/cache` and all its contents
-   - Does NOT exclude `/var/cache2` or `/var/cache_old`
+    - Excludes `/var/cache` and all its contents
+    - Does NOT exclude `/var/cache2` or `/var/cache_old`
 
 2. **Home Directory Expansion**
    ```json
    "paths": ["~/.cache"]
    ```
-   - Expands to `/home/username/.cache` at scan time
-   - Automatically adapts to the current user
+    - Expands to `/home/username/.cache` at scan time
+    - Automatically adapts to the current user
 
 3. **Multiple Paths**
    ```json
@@ -913,11 +998,11 @@ Path exclusions work by comparing the full resolved path of each file/directory:
      "/opt/backups"
    ]
    ```
-   - All specified paths and their contents are excluded
+    - All specified paths and their contents are excluded
 
 4. **Subdirectory Behavior**
-   - If you exclude `/home/user/Documents`, all files and subdirectories within are automatically excluded
-   - You don't need to specify both parent and child paths
+    - If you exclude `/home/user/Documents`, all files and subdirectories within are automatically excluded
+    - You don't need to specify both parent and child paths
 
 #### Pattern Exclusions (`exclusions.patterns`)
 
@@ -927,15 +1012,15 @@ Pattern exclusions use glob-style matching on filenames:
    ```json
    "patterns": ["*.log", "*.tmp"]
    ```
-   - Excludes all files ending in `.log` or `.tmp` regardless of location
-   - Example matches: `system.log`, `/var/log/app.log`, `temp.tmp`
+    - Excludes all files ending in `.log` or `.tmp` regardless of location
+    - Example matches: `system.log`, `/var/log/app.log`, `temp.tmp`
 
 2. **Wildcard Patterns**
    ```json
    "patterns": ["*.iso", "*.img"]
    ```
-   - Useful for excluding large disk images or backup files
-   - Applies to filename only, not the full path
+    - Useful for excluding large disk images or backup files
+    - Applies to filename only, not the full path
 
 3. **Multiple Patterns**
    ```json
@@ -947,11 +1032,12 @@ Pattern exclusions use glob-style matching on filenames:
      "*.pyc"
    ]
    ```
-   - Common exclusions for development and system files
+    - Common exclusions for development and system files
 
 #### Best Practices for Exclusions
 
 **✅ DO:**
+
 - Exclude cache directories (`.cache`, `Cache`)
 - Exclude trash/recycle bins (`Trash`, `.local/share/Trash`)
 - Exclude system virtual filesystems (`/proc`, `/sys`, `/dev`)
@@ -959,12 +1045,15 @@ Pattern exclusions use glob-style matching on filenames:
 - Exclude build artifacts (`.pyc`, `.o`, `__pycache__`)
 
 **❌ DON'T:**
+
 - Exclude your entire home directory (defeats the purpose)
 - Exclude download folders (high-risk areas)
 - Exclude document folders without good reason
 - Over-exclude to save time (modern scans are fast)
 
-**⚠️ WARNING:** If an exclusion path would exclude ALL target paths, ClamUI will warn you but still allow the configuration. For example:
+**⚠️ WARNING:** If an exclusion path would exclude ALL target paths, ClamUI will warn you but still allow the
+configuration. For example:
+
 ```json
 {
   "targets": ["~/Documents"],
@@ -973,6 +1062,7 @@ Pattern exclusions use glob-style matching on filenames:
   }
 }
 ```
+
 This profile would scan nothing because `~` (home directory) excludes `~/Documents`.
 
 ---
@@ -1016,6 +1106,7 @@ Here's a complete custom profile for scanning a development workspace:
 ```
 
 This profile:
+
 - Scans two development directories
 - Excludes dependency folders (node_modules, virtual environments)
 - Excludes build output directories
@@ -1026,15 +1117,18 @@ This profile:
 
 ## Configuration Examples
 
-This section provides practical, real-world configuration examples for common deployment scenarios. Each example includes the complete settings.json configuration, deployment instructions, and use case explanations.
+This section provides practical, real-world configuration examples for common deployment scenarios. Each example
+includes the complete settings.json configuration, deployment instructions, and use case explanations.
 
 ### Example 1: Minimal/Silent Operation
 
-**Use Case:** Users who want ClamUI to run quietly without notifications or system tray integration. Ideal for users who manually trigger scans and don't want desktop interruptions.
+**Use Case:** Users who want ClamUI to run quietly without notifications or system tray integration. Ideal for users who
+manually trigger scans and don't want desktop interruptions.
 
 **Scenario:** Developer workstation where scans are run on-demand through the GUI, with minimal UI footprint.
 
 **Configuration** (`~/.config/clamui/settings.json`):
+
 ```json
 {
   "notifications_enabled": false,
@@ -1056,6 +1150,7 @@ This section provides practical, real-world configuration examples for common de
 ```
 
 **Key Features:**
+
 - ✅ No desktop notifications
 - ✅ No system tray icon
 - ✅ Normal window behavior (close = quit)
@@ -1063,6 +1158,7 @@ This section provides practical, real-world configuration examples for common de
 - ✅ No scheduled scans
 
 **Deployment:**
+
 ```bash
 # Create config directory if it doesn't exist
 mkdir -p ~/.config/clamui
@@ -1096,11 +1192,14 @@ clamui
 
 ### Example 2: Daily Scheduled Scans with Auto-Quarantine
 
-**Use Case:** Automated daily protection for workstations with important user data. Scans run automatically every night and quarantine threats without user intervention.
+**Use Case:** Automated daily protection for workstations with important user data. Scans run automatically every night
+and quarantine threats without user intervention.
 
-**Scenario:** Office workstation or home PC where the user wants "set-it-and-forget-it" antivirus protection. Scans happen at 3 AM daily, automatically quarantining any threats found.
+**Scenario:** Office workstation or home PC where the user wants "set-it-and-forget-it" antivirus protection. Scans
+happen at 3 AM daily, automatically quarantining any threats found.
 
 **Configuration** (`~/.config/clamui/settings.json`):
+
 ```json
 {
   "notifications_enabled": true,
@@ -1130,6 +1229,7 @@ clamui
 ```
 
 **Key Features:**
+
 - ✅ Daily scans at 3:00 AM
 - ✅ Automatic threat quarantine
 - ✅ Skips scans when on battery power
@@ -1139,6 +1239,7 @@ clamui
 - ✅ Excludes cache and trash directories
 
 **Deployment:**
+
 ```bash
 # Replace 'username' with your actual username
 USERNAME=$(whoami)
@@ -1189,6 +1290,7 @@ crontab -l | grep clamui
 ```
 
 **Important Notes:**
+
 - Replace `/home/username` with your actual home directory path
 - Ensure clamd is running for optimal performance
 - Check quarantine regularly: ClamUI GUI → Quarantine tab
@@ -1198,14 +1300,18 @@ crontab -l | grep clamui
 
 ### Example 3: Using Daemon Backend with Custom Socket
 
-**Use Case:** Systems with non-standard clamd configurations or multiple clamd instances. Useful for custom ClamAV deployments with specific socket locations.
+**Use Case:** Systems with non-standard clamd configurations or multiple clamd instances. Useful for custom ClamAV
+deployments with specific socket locations.
 
-**Scenario:** Server with clamd configured to use a custom socket path (e.g., `/var/run/custom/clamd.sock`). This might occur on systems with:
+**Scenario:** Server with clamd configured to use a custom socket path (e.g., `/var/run/custom/clamd.sock`). This might
+occur on systems with:
+
 - Multiple ClamAV instances
 - Custom security configurations
 - Non-standard distribution setups
 
 **Configuration** (`~/.config/clamui/settings.json`):
+
 ```json
 {
   "notifications_enabled": true,
@@ -1227,12 +1333,14 @@ crontab -l | grep clamui
 ```
 
 **Key Features:**
+
 - ✅ Forces daemon backend (no fallback to clamscan)
 - ✅ Uses custom socket path
 - ✅ Desktop notifications enabled
 - ✅ Standard window behavior
 
 **Deployment:**
+
 ```bash
 # First, verify your clamd socket path
 # Common locations to check:
@@ -1276,6 +1384,7 @@ clamui
 ```
 
 **Troubleshooting:**
+
 ```bash
 # If scans fail, verify socket permissions
 ls -la /custom/path/to/clamd.sock
@@ -1295,9 +1404,11 @@ ls -lh ~/.local/share/clamui/logs/
 
 ### Example 4: Enterprise Deployment (Pre-configured)
 
-**Use Case:** Centralized deployment of ClamUI across multiple workstations with standardized settings. Ideal for IT administrators managing multiple systems.
+**Use Case:** Centralized deployment of ClamUI across multiple workstations with standardized settings. Ideal for IT
+administrators managing multiple systems.
 
 **Scenario:** Corporate environment with 50+ Linux workstations. Requirements:
+
 - Weekly full scans on Sunday nights at 2 AM
 - Centralized quarantine directory on shared storage
 - Automatic threat quarantine
@@ -1305,6 +1416,7 @@ ls -lh ~/.local/share/clamui/logs/
 - Consistent exclusions across all workstations
 
 **Configuration** (`~/.config/clamui/settings.json`):
+
 ```json
 {
   "notifications_enabled": true,
@@ -1336,6 +1448,7 @@ ls -lh ~/.local/share/clamui/logs/
 ```
 
 **Key Features:**
+
 - ✅ Weekly scans every Sunday at 2 AM
 - ✅ Centralized quarantine directory
 - ✅ Automatic threat quarantine
@@ -1441,12 +1554,14 @@ echo ""
 ```
 
 **Make the script executable and run:**
+
 ```bash
 chmod +x deploy-clamui-config.sh
 sudo ./deploy-clamui-config.sh
 ```
 
 **Monitoring and Management:**
+
 ```bash
 # Check scheduled scans on a workstation
 systemctl --user list-timers | grep clamui
@@ -1554,11 +1669,14 @@ du -sh "${QUARANTINE_DIR}"
 
 ### Example 5: Laptop User (Battery-Aware Scanning)
 
-**Use Case:** Laptop users who want scheduled scans that respect battery status and minimize system impact during portable use.
+**Use Case:** Laptop users who want scheduled scans that respect battery status and minimize system impact during
+portable use.
 
-**Scenario:** Developer laptop that's sometimes docked, sometimes mobile. Scans should only run when plugged in and during off-hours.
+**Scenario:** Developer laptop that's sometimes docked, sometimes mobile. Scans should only run when plugged in and
+during off-hours.
 
 **Configuration** (`~/.config/clamui/settings.json`):
+
 ```json
 {
   "notifications_enabled": true,
@@ -1590,6 +1708,7 @@ du -sh "${QUARANTINE_DIR}"
 ```
 
 **Key Features:**
+
 - ✅ Skips scans when on battery power
 - ✅ Scheduled for 2 AM (user likely has laptop docked/plugged in)
 - ✅ No auto-quarantine (manual review for important work files)
@@ -1597,6 +1716,7 @@ du -sh "${QUARANTINE_DIR}"
 - ✅ Auto backend selection (works with or without clamd)
 
 **Deployment:**
+
 ```bash
 USERNAME=$(whoami)
 
@@ -1736,4 +1856,5 @@ ls -ld /opt/clamui/quarantine
 
 ---
 
-**Note:** All paths in this document use standard Unix home directory notation (`~`). Actual paths will be expanded based on the current user's home directory and XDG environment variables.
+**Note:** All paths in this document use standard Unix home directory notation (`~`). Actual paths will be expanded
+based on the current user's home directory and XDG environment variables.

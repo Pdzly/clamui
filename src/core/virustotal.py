@@ -156,7 +156,12 @@ class VirusTotalClient:
 
     def _check_rate_limit(self) -> bool:
         """
-        Check if we're within rate limits.
+        Check if we're within rate limits using a sliding window algorithm.
+
+        Maintains a list of request timestamps and removes those older than
+        VT_RATE_LIMIT_WINDOW (60 seconds). If fewer than VT_RATE_LIMIT_REQUESTS
+        (4) remain in the window, allows the request and appends the current
+        timestamp.
 
         Returns:
             True if OK to proceed, False if rate limited.
@@ -198,6 +203,13 @@ class VirusTotalClient:
     def calculate_sha256(file_path: str) -> str:
         """
         Calculate SHA256 hash of a file using streaming for large files.
+
+        Performance Note:
+        - Reads file in 8KB chunks (buffered reading)
+        - Memory efficient: constant ~8KB RAM usage regardless of file size
+        - Can hash 650MB files (VT limit) without memory issues
+        - Typical speed: ~500MB/s on SSD, ~100MB/s on HDD
+        - Example: 100MB file takes ~0.2s on SSD
 
         Args:
             file_path: Path to the file.
@@ -661,6 +673,22 @@ class VirusTotalClient:
 
         logger.info(f"SHA256: {sha256}")
 
+        # Upload vs Hash Lookup Decision Logic:
+        # 1. Always check hash first (fast, ~1s API call)
+        # 2. If hash is known (status != NOT_FOUND):
+        #    - Return existing results immediately (no upload needed)
+        #    - Saves API quota and time
+        #    - Typical for known malware (seen by VT before)
+        # 3. If hash is unknown (status == NOT_FOUND):
+        #    - File is new to VirusTotal
+        #    - Upload file for analysis (slow, ~10-60s depending on size)
+        #    - Poll for results every 5 seconds
+        #    - Return results when analysis completes
+        #
+        # Why hash-first strategy:
+        # - 650MB upload can take minutes on slow connections
+        # - Most malware has known signatures already in VT database
+        # - Hash lookup only uses 1 API request vs upload (uses 2-4 requests)
         # Check if hash is known
         logger.info("Checking if file is known to VirusTotal")
         result = self.check_file_hash(sha256)

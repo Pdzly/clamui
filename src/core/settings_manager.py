@@ -110,7 +110,8 @@ class SettingsManager:
         corruption during write operations.
 
         Returns:
-            True if saved successfully, False otherwise
+            True if saved successfully, False for ANY exception
+            (including OSError, PermissionError, JSONEncodeError, etc.)
         """
         with self._lock:
             try:
@@ -148,6 +149,18 @@ class SettingsManager:
     def _backup_corrupted_file(self) -> None:
         """
         Create a backup of a corrupted settings file.
+
+        What Triggers Backup:
+        - JSON decode errors during _load_settings() (malformed JSON syntax)
+        - Settings file contains invalid JSON structure (not a dict)
+        - File corruption due to incomplete writes (power loss, disk errors)
+        - Manual editing errors by users (missing commas, unclosed brackets)
+
+        Backup Behavior:
+        - Renames settings.json → settings.json.corrupted
+        - Preserves corrupted file for debugging/recovery
+        - Won't overwrite existing .corrupted backups (keeps first corruption)
+        - Allows app to start with default settings after backup
 
         Renames the corrupted file with a .corrupted suffix
         to preserve it for debugging purposes.

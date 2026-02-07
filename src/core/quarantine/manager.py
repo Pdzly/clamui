@@ -70,10 +70,10 @@ class QuarantineManager:
 
     Periodic Cleanup:
         The manager automatically cleans up orphaned database entries (entries
-        whose files no longer exist on disk) periodically. Cleanup runs:
-        - On first access after CLEANUP_INTERVAL_HOURS has passed since the last cleanup
-        - The cleanup is triggered lazily during normal operations to avoid
-          blocking application startup
+        whose files no longer exist on disk). Cleanup runs lazily during other
+        operations (list_files, quarantine_file, etc.) after CLEANUP_INTERVAL_HOURS
+        has passed since the last cleanup. This avoids blocking application startup
+        and spreads cleanup overhead across normal usage.
 
     Example:
         >>> manager = QuarantineManager()

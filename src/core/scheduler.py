@@ -101,6 +101,11 @@ def _check_systemd_available() -> bool:
     """
     Check if systemd is available and usable for user-level timers.
 
+    In Flatpak environments, assumes systemd is available on the host since
+    'which systemctl' detection fails in the sandbox but actual systemctl
+    commands work via flatpak-spawn --host. If systemd is not actually
+    available, enable/disable operations will fail with a clear error.
+
     Thread-safe via lock.
 
     Returns:

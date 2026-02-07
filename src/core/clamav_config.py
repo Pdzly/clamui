@@ -94,6 +94,24 @@ class ClamAVConfig:
         """
         Set a single value for a configuration key.
 
+        Line Number Preservation Logic:
+        - When line_number=0 (default) AND key already exists:
+          * Retrieves existing line number from self.values[key][0].line_number
+          * Reuses that line number for the new value
+          * Result: write_config() updates existing line IN-PLACE (line 42 stays line 42)
+        - When line_number=0 AND key is new:
+          * Line number remains 0
+          * Result: write_config() APPENDS to end of file
+        - When line_number > 0 (explicit):
+          * Uses provided line number directly
+          * Result: write_config() updates specific line or creates new line
+
+        Why This Matters:
+        - Preserves config file formatting and organization
+        - Keeps related settings grouped together
+        - Prevents "MaxFileSize /9000" from jumping to bottom on every edit
+        - Users see edits where they expect them (no config reorganization)
+
         Replaces any existing values for the key. If line_number is 0 (default)
         and the key already exists, preserves the original line number to ensure
         in-place updates rather than appends.

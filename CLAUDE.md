@@ -77,7 +77,6 @@ clamui/
 │       │   ├── scanner_page.py     # Clamd configuration
 │       │   ├── scheduled_page.py   # Scheduled scan configuration
 │       │   └── virustotal_page.py  # VirusTotal API configuration
-│       ├── preferences_dialog.py   # Legacy preferences dialog
 │       ├── profile_dialogs.py  # Profile create/edit dialogs
 │       ├── scan_results_dialog.py  # Scan results with quarantine actions
 │       ├── virustotal_results_dialog.py # VirusTotal detection details

@@ -116,8 +116,9 @@ class ProfileManager:
 
         Creates any missing default profiles from DEFAULT_PROFILES.
         For Quick Scan, uses xdg-user-dir to get the localized Downloads path.
-        This is called during initialization to ensure built-in profiles
-        are always available.
+        If xdg-user-dir returns None, falls back to the default path from
+        DEFAULT_PROFILES. This is called during initialization to ensure
+        built-in profiles are always available.
         """
         from ..core.flatpak import get_xdg_user_dir
 

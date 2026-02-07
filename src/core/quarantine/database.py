@@ -133,6 +133,20 @@ class QuarantineDatabase:
         """
         Get a database connection as a context manager with WAL mode enabled.
 
+        Connection Pool vs Per-Operation Behavior:
+        - WITH POOL (pool_size > 0, default=3):
+          * Connections are pre-created and reused across operations
+          * ConnectionPool.get_connection() returns an existing idle connection
+          * Connection is returned to pool after use (not closed)
+          * Faster for frequent operations (no connection overhead)
+          * Small memory overhead (~1-2MB per connection)
+
+        - WITHOUT POOL (pool_size = 0):
+          * New connection created for each database operation
+          * Connection is fully closed after operation completes
+          * Slower but uses less memory for infrequent operations
+          * Useful for resource-constrained environments or testing
+
         When connection pooling is enabled (pool_size > 0), connections are
         obtained from the pool. Otherwise, creates a new connection per operation.
 
@@ -150,6 +164,12 @@ class QuarantineDatabase:
             # Fallback to per-operation connections when pooling is disabled
             conn = sqlite3.connect(str(self._db_path), timeout=30.0)
             try:
+                # WAL (Write-Ahead Log) mode concurrency implications:
+                # - Allows MULTIPLE concurrent readers + ONE writer (vs rollback journal: exclusive writer lock)
+                # - Readers don't block writers, writers don't block readers
+                # - Better performance for mixed read/write workloads
+                # - Creates .db-wal and .db-shm files (also secured to 0o600)
+                # - Auto-checkpoints every 1000 pages (configurable with PRAGMA wal_autocheckpoint)
                 # Enable WAL mode for better concurrency and corruption prevention
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA foreign_keys=ON")

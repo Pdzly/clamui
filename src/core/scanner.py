@@ -55,7 +55,11 @@ def glob_to_regex(pattern: str) -> str:
     regex suffixes for ClamAV compatibility. Adds anchors (^ and $) to ensure
     the pattern matches the entire string, not just a substring.
 
-    Note: fnmatch doesn't support '**' recursive wildcards - document as limitation.
+    Edge Cases:
+    - fnmatch doesn't support '**' recursive wildcards (use '*' for single level)
+    - Character classes like [abc] are converted to (a|b|c) regex syntax
+    - Special chars (., +, etc.) are automatically escaped by fnmatch
+    - Anchors (^ and $) prevent substring matching (e.g., "*.tmp" won't match "file.tmp.bak")
 
     Args:
         pattern: Glob pattern (e.g., '*.log', 'node_modules', '/tmp/*')
@@ -187,6 +191,16 @@ class Scanner:
         """
         Check if the configured scan backend is available.
 
+        Auto Backend Fallback Logic:
+        1. Check if clamd daemon is accessible via socket connection
+        2. If daemon available: return success with "Using clamd daemon"
+        3. If daemon unavailable: fall back to checking clamscan binary
+        4. If clamscan available: return success (scans will use clamscan)
+        5. If neither available: return error from clamscan check
+
+        This ensures seamless fallback without user intervention, preferring
+        the faster daemon when available but gracefully using clamscan otherwise.
+
         Returns:
             Tuple of (is_available, version_or_error)
         """
@@ -215,6 +229,12 @@ class Scanner:
 
         WARNING: This will block the calling thread. For UI applications,
         use scan_async() instead.
+
+        Progress Callback Threading Behavior:
+        - progress_callback is called directly from the background thread running scan_sync()
+        - Callback receives ScanProgress updates on the SAME thread (background thread)
+        - For GTK UI updates, wrap callback logic with GLib.idle_add() inside the callback
+        - Callback is invoked for each file scanned and each infection detected
 
         Args:
             path: Path to file or directory to scan
@@ -546,6 +566,19 @@ class Scanner:
         The scan runs in a background thread and the callback is invoked
         on the main GTK thread via GLib.idle_add when complete.
 
+        GLib.idle_add() Pattern for Thread-Safe UI Updates:
+        - scan_sync() runs in a background thread (blocks for entire scan duration)
+        - Direct GTK widget updates from background threads are UNSAFE and will crash
+        - GLib.idle_add() schedules callback on the main GTK event loop thread
+        - This ensures all UI updates happen on the main thread where GTK expects them
+        - The callback is queued and executed during the next GTK main loop iteration
+        - Multiple GLib.idle_add() calls are serialized automatically by GTK
+
+        Why This Matters:
+        - GTK is not thread-safe - only the main thread can update widgets
+        - Without GLib.idle_add(), you'll get race conditions and segfaults
+        - This is the standard pattern for async operations in GTK applications
+
         Args:
             path: Path to file or directory to scan
             callback: Function to call with ScanResult when scan completes
@@ -569,6 +602,18 @@ class Scanner:
     def cancel(self) -> None:
         """
         Cancel the current scan operation with graceful shutdown escalation.
+
+        Cleanup Guarantees:
+        1. Sets _cancel_event to signal ongoing operations to stop
+        2. Sends SIGTERM to the process for graceful termination
+        3. Waits up to 5 seconds for process to exit cleanly
+        4. Escalates to SIGKILL if process doesn't respond
+        5. Ensures process resources are fully released (file handles, memory)
+        6. Resets _current_process to None to prevent double-termination
+        7. Also cancels daemon scanner if it was being used
+
+        Thread Safety: Uses _process_lock to prevent race conditions during
+        cancellation while scan operations are starting or completing.
 
         If a scan is in progress, it will be terminated with SIGTERM first,
         then escalated to SIGKILL if the process doesn't respond within
@@ -612,15 +657,19 @@ class Scanner:
         clamscan = get_clamav_path() or "clamscan"
         cmd = [clamscan]
 
+        # --database: Override default DB location (needed for Flatpak user-writable DB)
         # In Flatpak, specify the database directory (user-writable location)
         db_dir = get_clamav_database_dir()
         if db_dir is not None:
             cmd.extend(["--database", str(db_dir)])
 
+        # -r / --recursive: Scan subdirectories recursively
         # Add recursive flag for directories
         if recursive and Path(path).is_dir():
             cmd.append("-r")
 
+        # -v / --verbose: Output each file as it's scanned (enables progress tracking)
+        # -i / --infected: Show only infected files (cleaner output when no progress needed)
         # Verbose mode for progress tracking (outputs each file being scanned)
         if verbose:
             cmd.append("-v")
@@ -702,6 +751,8 @@ class Scanner:
         for line in stdout.splitlines():
             line = line.strip()
 
+            # Regex pattern: "/path/to/file: ThreatName FOUND"
+            # Uses rsplit to handle colons in file paths (e.g., Windows C:\)
             # Look for infected file lines (format: "/path/to/file: Virus.Name FOUND")
             if line.endswith("FOUND"):
                 # Extract file path and threat name
@@ -737,6 +788,8 @@ class Scanner:
                 if file_path:
                     skipped_files.append(file_path)
 
+            # Regex pattern for statistics: "Scanned files: 123"
+            # Captures numeric value after the label
             # Look for individual summary lines from ClamAV output
             # Format: "Scanned files: 10" or "Scanned directories: 1" or "Infected files: 0"
             elif line.startswith("Scanned files:"):

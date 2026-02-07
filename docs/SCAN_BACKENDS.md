@@ -418,9 +418,13 @@ clamdscan --version
 
 #### Flatpak Users
 
-If you're running ClamUI as a Flatpak, the daemon must be installed on the **host system** (not inside Flatpak). Follow
-the instructions above for your distribution, then ClamUI will automatically detect and use the host system's clamd
-daemon.
+The ClamUI Flatpak bundles ClamAV (clamscan, freshclam) internally. However, if you want to use the **daemon backend** for faster scanning, clamd must be installed on the **host system** because it runs as a system service that cannot be bundled inside the Flatpak sandbox.
+
+**Recommended approach:**
+- Use the bundled ClamAV with `"scan_backend": "clamscan"` (default) - no host installation required
+- Or install clamd on the host system to enable `"scan_backend": "daemon"` for performance
+
+To install clamd on the host, follow the instructions above for your distribution. ClamUI will automatically detect and use the host system's clamd daemon.
 
 ---
 

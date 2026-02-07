@@ -84,6 +84,14 @@ def check_freshclam_installed() -> tuple[bool, str | None]:
             "freshclam is not installed. Please install it with: sudo apt install clamav-freshclam",
         )
 
+    # Flatpak freshclam.conf Generation Logic:
+    # Why: Flatpak bundles freshclam but it requires a config file even for --version
+    # What: ensure_freshclam_config() creates ~/.var/app/io.github.linx_systems.ClamUI/config/clamui/freshclam.conf
+    # Config specifies:
+    #   - DatabaseDirectory: writable location inside Flatpak sandbox
+    #   - DatabaseMirror: database.clamav.net (official mirror)
+    # Why needed: System /etc/clamav/freshclam.conf is not accessible in Flatpak sandbox
+    # Fallback: If config generation fails, freshclam will fail to run (expected behavior)
     # Build command - in Flatpak, bundled freshclam needs config file even for --version
     cmd = ["freshclam", "--version"]
     if is_flatpak():

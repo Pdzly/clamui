@@ -134,6 +134,13 @@ class SecureFileHandler:
         """
         Calculate SHA256 hash of a file for integrity verification.
 
+        Buffered Reading Benefit:
+        - Reads file in 64KB chunks (HASH_BUFFER_SIZE) instead of loading entire file
+        - Memory efficient for large files (e.g., 2GB file uses only 64KB RAM)
+        - Prevents MemoryError on systems with limited RAM
+        - Performance: ~same speed as read-all for small files, much better for large files
+        - Example: Can hash a 10GB file using only 64KB of memory
+
         Uses buffered reading to handle large files efficiently without
         loading the entire file into memory.
 
@@ -589,7 +596,15 @@ class SecureFileHandler:
                 )
 
             try:
-                # Atomic move operation
+                # Atomic move operation using shutil.move():
+                # - Same filesystem: Uses os.rename() - atomic, instant
+                # - Cross-filesystem: Falls back to copy+delete (not atomic but safe)
+                #   * Copies file to destination with temp name
+                #   * Verifies copy succeeded
+                #   * Deletes source only after successful copy
+                #   * If interrupted, source remains intact (no data loss)
+                # Why not os.rename(): Fails across filesystems (e.g., /home to /tmp)
+                # Why not copy+delete manually: shutil.move handles cross-fs automatically
                 shutil.move(str(source), str(destination))
 
                 # Set restrictive permissions on quarantined file

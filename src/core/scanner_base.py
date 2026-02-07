@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Timeout constants (seconds)
 TERMINATE_GRACE_TIMEOUT = 5  # Time to wait after SIGTERM before SIGKILL
 KILL_WAIT_TIMEOUT = 2  # Time to wait after SIGKILL
-STREAM_POLL_TIMEOUT = 0.1  # Time to wait for output in stream mode
+STREAM_POLL_TIMEOUT = 0.1  # select() timeout for checking cancellation between output reads
 
 
 def communicate_with_cancel_check(
@@ -34,6 +34,18 @@ def communicate_with_cancel_check(
 ) -> tuple[str, str, bool]:
     """
     Communicate with process while checking for cancellation.
+
+    Polling Loop Strategy:
+    - Uses process.communicate(timeout=0.5) instead of blocking wait
+    - Checks is_cancelled() before each communicate() attempt
+    - If timeout expires, loop continues to check cancellation again
+    - If cancelled during wait, terminates process and drains remaining output
+    - This provides ~500ms cancellation responsiveness (vs minutes for blocking wait)
+
+    Why Not process.wait():
+    - process.wait() blocks until completion with no timeout mechanism
+    - Long scans would be uninterruptible without SIGTERM from another thread
+    - communicate(timeout) gives us both output collection and cancellation points
 
     Uses a polling loop with timeout to allow periodic cancellation checks.
     This prevents the scan thread from blocking indefinitely on communicate().
@@ -78,6 +90,20 @@ def stream_process_output(
 ) -> tuple[str, str, bool]:
     """
     Stream stdout line-by-line with cancellation support.
+
+    Why select() + os.read() Instead of readline():
+    - readline() blocks until it finds a newline character (could be seconds/minutes)
+    - select() with timeout allows checking cancellation every poll_interval (0.1s default)
+    - os.read() is truly non-blocking after select() returns readable
+    - process.stdout.read() uses TextIOWrapper which loops internally, blocking on pipe
+    - This combination provides real-time progress AND fast cancellation response
+
+    Why os.read() Over process.stdout.read():
+    - process.stdout is a TextIOWrapper (BufferedReader + encoding)
+    - TextIOWrapper.read(n) tries to accumulate exactly n characters
+    - It internally loops on the underlying pipe, blocking until it has n chars
+    - os.read() is a raw syscall that returns immediately with available data
+    - This gives us true non-blocking behavior after select() indicates readability
 
     Uses select/poll for non-blocking reads to maintain cancellation responsiveness.
     Each line from stdout is passed to the on_line callback in real-time.
@@ -190,6 +216,11 @@ def stream_process_output(
                 # Accumulate for final parsing
                 stdout_parts.append(chunk)
 
+                # Incomplete line handling: Buffer partial lines until newline arrives
+                # - incomplete_line holds text from previous read that didn't end with \n
+                # - Prepend it to current chunk to reassemble the full line
+                # - lines[-1] becomes the new incomplete_line (empty string if chunk ended with \n)
+                # - This ensures callbacks always receive complete lines
                 # Process lines for callback
                 data = incomplete_line + chunk
                 lines = data.split("\n")

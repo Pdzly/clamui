@@ -227,8 +227,8 @@ Scan profiles save your scan settings for easy reuse.
 
 | Profile | Targets | Description |
 |---------|---------|-------------|
-| **Quick Scan** | Downloads, Desktop, Documents | Fast scan of common locations |
-| **Full Scan** | Entire home directory | Comprehensive home directory scan |
+| **Quick Scan** | Downloads folder | Fast scan of Downloads folder |
+| **Full Scan** | Root filesystem (/) with exclusions | System-wide scan (excludes /proc, /sys, /dev, etc.) |
 | **Custom** | User-defined | Create your own profiles |
 
 **Creating a custom profile:**
@@ -360,5 +360,3 @@ A: In `~/.local/share/clamui/logs/` for native installs, or `~/.var/app/io.githu
 A: Click "Check for Updates" in the Updates view, or run `freshclam` from the terminal.
 
 ---
-
-*Last updated: February 2026 | ClamUI v0.1.2*

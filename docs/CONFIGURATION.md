@@ -158,6 +158,7 @@ All XDG paths are relative to this sandbox directory:
 - XDG environment variables still work but are interpreted within the sandbox
 - The Flatpak version can access the host filesystem through permissions
 - ClamAV is **bundled inside the Flatpak sandbox** — no host installation required
+- Exception: The daemon scan backend (`"scan_backend": "daemon"`) requires clamd installed on the host system
 - The bundled ClamAV is only available to ClamUI and is not installed system-wide
 - Virus definitions are stored within the Flatpak data directory
 - `flatpak-spawn --host` is used only for systemctl commands (scheduled scan timers)

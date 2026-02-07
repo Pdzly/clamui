@@ -78,6 +78,68 @@ Or find "ClamUI" in your application menu.
 > **Troubleshooting**: If you encounter issues with the Flatpak installation,
 > see [Flatpak-Specific Issues](./TROUBLESHOOTING.md#flatpak-specific-issues) in the troubleshooting guide.
 
+### Building from Source
+
+If you want to build the Flatpak locally instead of installing from Flathub:
+
+#### Prerequisites
+
+Install `flatpak-builder` and the required GNOME SDK/runtime:
+
+```bash
+# Install flatpak-builder
+sudo apt install flatpak-builder    # Ubuntu/Debian
+sudo dnf install flatpak-builder    # Fedora
+sudo pacman -S flatpak-builder      # Arch Linux
+
+# Install the GNOME 49 SDK, runtime, and Rust extension (needed for ClamAV compilation)
+flatpak install flathub org.gnome.Sdk//49 org.gnome.Platform//49 org.freedesktop.Sdk.Extension.rust-stable//24.08
+```
+
+#### Build
+
+Clone the repository and build with `flatpak-builder`:
+
+```bash
+git clone https://github.com/linx-systems/clamui.git
+cd clamui
+flatpak-builder --force-clean build-dir flathub/io.github.linx_systems.ClamUI.yml
+```
+
+> **Note:** The first build downloads and compiles ClamAV with Rust, which may take several minutes.
+
+#### Test Without Installing
+
+Run the built application directly without installing:
+
+```bash
+flatpak-builder --run build-dir flathub/io.github.linx_systems.ClamUI.yml clamui
+```
+
+#### Install Locally
+
+Install the locally-built Flatpak for the current user:
+
+```bash
+flatpak-builder --user --install --force-clean build-dir flathub/io.github.linx_systems.ClamUI.yml
+```
+
+Then run it the same way as the Flathub version:
+
+```bash
+flatpak run io.github.linx_systems.ClamUI
+```
+
+#### Building with Local Changes
+
+A separate manifest is provided for local development builds. It sources ClamUI from your working tree instead of fetching from GitHub:
+
+```bash
+flatpak-builder --force-clean build-dir io.github.linx_systems.ClamUI.local.yml
+```
+
+Use `--run` or `--user --install` the same way as above. This is useful for testing local changes before committing.
+
 ### Flatpak Permissions
 
 ClamUI requests the following permissions:

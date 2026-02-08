@@ -1,7 +1,7 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR ClamUI Contributors
+# The Translation files for ClamUI.
+# Copyright (C) 2026 ClamUI Contributors
 # This file is distributed under the same license as the ClamUI package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Rooki <clamui@rooki.xyz>, 2026.
 #
 #, fuzzy
 msgid ""

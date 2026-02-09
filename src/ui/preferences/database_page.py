@@ -17,7 +17,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
-from ...core.i18n import _
+from ...core.i18n import N_, _
 from ..compat import create_entry_row, create_switch_row
 from ..utils import resolve_icon_name
 from .base import (
@@ -34,6 +34,66 @@ SUGGESTED_SIGNATURE_URLS = [
         "url": "https://urlhaus.abuse.ch/downloads/urlhaus.ndb",
         "name": "URLhaus",
         "description": "Malware URL blocklist (updated every minute)",
+    },
+    {
+        "url": "http://sigs.interserver.net/interserver256.hdb",
+        "name": "InterServer",
+        "description": "Hash-based malware signatures",
+    },
+    {
+        "url": "http://sigs.interserver.net/interservertopline.db",
+        "name": "InterServer",
+        "description": "General malware detection database",
+    },
+    {
+        "url": "http://sigs.interserver.net/shell.ldb",
+        "name": "InterServer",
+        "description": "Web shell and backdoor detection",
+    },
+]
+
+# Third-party database providers with setup information
+THIRD_PARTY_PROVIDERS = [
+    {
+        "name": "URLhaus",
+        "icon": "security-high-symbolic",
+        "description": N_("Free malware URL blocklist by abuse.ch, updated every minute"),
+        "detail": N_("No registration required. Click 'Suggested' above to add."),
+        "url": "https://urlhaus.abuse.ch/api/",
+        "free": True,
+        "registration": False,
+    },
+    {
+        "name": "SecuriteInfo",
+        "icon": "security-high-symbolic",
+        "description": N_("Millions of signatures for zero-day malware, phishing, and spam"),
+        "detail": N_(
+            "Free registration required at securiteinfo.com. URLs contain your personal API key."
+        ),
+        "url": "https://www.securiteinfo.com",
+        "free": True,
+        "registration": True,
+    },
+    {
+        "name": "SaneSecurity",
+        "icon": "security-medium-symbolic",
+        "description": N_("Macro malware, phishing, scam, and spam signatures (hourly updates)"),
+        "detail": N_(
+            "Requires 'fangfrisch' or 'clamav-unofficial-sigs' tool. "
+            "Cannot be added as custom URL directly."
+        ),
+        "url": "https://sanesecurity.com",
+        "free": True,
+        "registration": False,
+    },
+    {
+        "name": "InterServer",
+        "icon": "security-medium-symbolic",
+        "description": N_("Hash-based signatures, web shell detection, and general malware"),
+        "detail": N_("No registration required. Click 'Suggested' above to add."),
+        "url": "http://sigs.interserver.net",
+        "free": True,
+        "registration": False,
     },
 ]
 
@@ -142,6 +202,9 @@ class DatabasePage(PreferencesPageMixin):
 
         # Create custom signature URLs group
         DatabasePage._create_custom_urls_group(page, widgets_dict, temp_instance)
+
+        # Create third-party providers info group
+        DatabasePage._create_providers_info_group(page)
 
         # Create proxy settings group
         DatabasePage._create_proxy_group(page, widgets_dict, temp_instance)
@@ -316,7 +379,9 @@ class DatabasePage(PreferencesPageMixin):
         # Suggested button
         suggested_button = Gtk.Button()
         suggested_button.set_label(_("Suggested"))
-        suggested_button.set_tooltip_text(_("Add free community signature databases (URLhaus)"))
+        suggested_button.set_tooltip_text(
+            _("Add free community signature databases (URLhaus, InterServer)")
+        )
         suggested_button.add_css_class("suggested-action")
         suggested_button.connect("clicked", DatabasePage._on_add_suggested_clicked, widgets_dict)
         button_box.append(suggested_button)
@@ -422,6 +487,75 @@ class DatabasePage(PreferencesPageMixin):
             url = sig["url"]
             if url not in existing:
                 DatabasePage._add_custom_url_row(url, widgets_dict)
+
+    @staticmethod
+    def _create_providers_info_group(page: Adw.PreferencesPage):
+        """
+        Create an informational group about popular third-party database providers.
+
+        Displays provider name, description, registration requirements,
+        and website URL for each provider in THIRD_PARTY_PROVIDERS.
+
+        Args:
+            page: The preferences page to add the group to
+        """
+        group = Adw.PreferencesGroup()
+        group.set_title(_("Popular Signature Providers"))
+        group.set_description(
+            _(
+                "Third-party databases can significantly improve detection rates. "
+                "Providers marked with a key icon require free registration."
+            )
+        )
+
+        for provider in THIRD_PARTY_PROVIDERS:
+            row = Adw.ActionRow()
+            row.set_title(provider["name"])
+
+            # Build subtitle with description and registration note
+            subtitle_parts = [_(provider["description"])]
+            if provider["registration"]:
+                subtitle_parts.append(_("Registration required") + " \u2022 " + provider["url"])
+            else:
+                subtitle_parts.append(provider["url"])
+            row.set_subtitle("\n".join(subtitle_parts))
+
+            # Provider icon
+            icon_name = resolve_icon_name(provider["icon"])
+            row.add_prefix(styled_prefix_icon(icon_name or provider["icon"]))
+
+            # Registration badge suffix
+            if provider["registration"]:
+                key_icon = Gtk.Image.new_from_icon_name(
+                    resolve_icon_name("dialog-password-symbolic") or "dialog-password-symbolic"
+                )
+                key_icon.set_tooltip_text(_("Free registration required"))
+                key_icon.add_css_class("dim-label")
+                key_icon.set_valign(Gtk.Align.CENTER)
+                row.add_suffix(key_icon)
+
+            row.set_activatable(False)
+            group.add(row)
+
+        # Tip row about fangfrisch
+        tip_row = Adw.ActionRow()
+        tip_row.set_title(_("Tip: fangfrisch"))
+        tip_row.set_subtitle(
+            _(
+                "For SaneSecurity and other rsync-based providers, install the "
+                "'fangfrisch' tool which handles downloading and updating "
+                "signatures automatically."
+            )
+        )
+        tip_row.add_prefix(
+            styled_prefix_icon(
+                resolve_icon_name("dialog-information-symbolic") or "dialog-information-symbolic"
+            )
+        )
+        tip_row.set_activatable(False)
+        group.add(tip_row)
+
+        page.add(group)
 
     @staticmethod
     def _create_proxy_group(page: Adw.PreferencesPage, widgets_dict: dict, helper):

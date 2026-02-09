@@ -142,6 +142,7 @@ For detailed technical documentation on specific architectural patterns, see the
 | [`docs/SCAN_BACKENDS.md`](docs/SCAN_BACKENDS.md)                               | Scan backend options and performance                |
 | [`docs/SIGNING.md`](docs/SIGNING.md)                                           | Package signing and verification                    |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)                           | Common issues and solutions                         |
+| [`docs/TRANSLATING.md`](docs/TRANSLATING.md)                                   | Translation contributing guide                      |
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)                                     | End-user documentation                              |
 
 ### System Tray Subprocess Architecture
@@ -295,7 +296,7 @@ label.set_text(_(item))
 
 **After adding/changing translatable strings:**
 
-Run `./scripts/update-pot.sh` to regenerate the POT template.
+Run `./scripts/update-pot.sh` to regenerate the POT template. To add a new language, see [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 
 ### Async Operations (GTK Thread Safety)
 

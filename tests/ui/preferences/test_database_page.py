@@ -610,3 +610,67 @@ class TestSuggestedSignatureUrls:
             assert "name" in sig
             assert "description" in sig
             assert sig["url"].startswith(("http://", "https://"))
+
+    def test_suggested_urls_contains_interserver(self, mock_gi_modules):
+        """SUGGESTED_SIGNATURE_URLS contains InterServer databases."""
+        from src.ui.preferences.database_page import SUGGESTED_SIGNATURE_URLS
+
+        urls = [sig["url"] for sig in SUGGESTED_SIGNATURE_URLS]
+        assert "http://sigs.interserver.net/interserver256.hdb" in urls
+        assert "http://sigs.interserver.net/shell.ldb" in urls
+
+
+class TestThirdPartyProviders:
+    """Tests for THIRD_PARTY_PROVIDERS constant."""
+
+    def test_providers_exists(self, mock_gi_modules):
+        """THIRD_PARTY_PROVIDERS constant exists and is a list."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        assert THIRD_PARTY_PROVIDERS is not None
+        assert isinstance(THIRD_PARTY_PROVIDERS, list)
+        assert len(THIRD_PARTY_PROVIDERS) >= 4
+
+    def test_providers_have_required_fields(self, mock_gi_modules):
+        """Each provider has all required fields."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        required_fields = {"name", "icon", "description", "detail", "url", "free", "registration"}
+        for provider in THIRD_PARTY_PROVIDERS:
+            assert required_fields.issubset(provider.keys()), (
+                f"Provider {provider.get('name', '?')} missing fields: "
+                f"{required_fields - provider.keys()}"
+            )
+
+    def test_providers_include_known_providers(self, mock_gi_modules):
+        """Known providers are included."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        names = [p["name"] for p in THIRD_PARTY_PROVIDERS]
+        assert "URLhaus" in names
+        assert "SecuriteInfo" in names
+        assert "SaneSecurity" in names
+        assert "InterServer" in names
+
+    def test_securiteinfo_requires_registration(self, mock_gi_modules):
+        """SecuriteInfo is marked as requiring registration."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        securiteinfo = [p for p in THIRD_PARTY_PROVIDERS if p["name"] == "SecuriteInfo"]
+        assert len(securiteinfo) == 1
+        assert securiteinfo[0]["registration"] is True
+
+    def test_urlhaus_no_registration(self, mock_gi_modules):
+        """URLhaus is marked as not requiring registration."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        urlhaus = [p for p in THIRD_PARTY_PROVIDERS if p["name"] == "URLhaus"]
+        assert len(urlhaus) == 1
+        assert urlhaus[0]["registration"] is False
+
+    def test_all_providers_are_free(self, mock_gi_modules):
+        """All listed providers have free tiers."""
+        from src.ui.preferences.database_page import THIRD_PARTY_PROVIDERS
+
+        for provider in THIRD_PARTY_PROVIDERS:
+            assert provider["free"] is True, f"{provider['name']} should be free"

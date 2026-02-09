@@ -21,8 +21,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install dependencies
+        run: |
+          pip install ruff
+          sudo apt-get update && sudo apt-get install -y gettext
 
       - name: Check for absolute src.* imports
         run: |
@@ -36,6 +38,9 @@ jobs:
 
       - name: Check POTFILES.in consistency
         run: ./scripts/check-potfiles.sh
+
+      - name: Validate translations
+        run: ./scripts/check-translations.sh
 
       - name: Run Ruff linting
         run: ruff check src/ tests/ --output-format=github

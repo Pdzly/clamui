@@ -1,0 +1,27 @@
+name: Translations
+
+on:
+  push:
+    branches: [master]
+    paths: ['po/**']
+  pull_request:
+    branches: [master]
+    paths: ['po/**']
+
+jobs:
+  validate-translations:
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install gettext
+        run: sudo apt-get update && sudo apt-get install -y gettext
+
+      - name: Validate PO files
+        run: ./scripts/check-translations.sh
+
+      - name: Check POTFILES.in consistency
+        run: ./scripts/check-potfiles.sh

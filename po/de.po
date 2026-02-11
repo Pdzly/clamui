@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: ClamUI 0.1.3\n"
 "Report-Msgid-Bugs-To: https://github.com/linx-systems/clamui/issues\n"
 "POT-Creation-Date: 2026-02-11 20:03+0100\n"
-"PO-Revision-Date: 2026-02-10 12:00+0100\n"
+"PO-Revision-Date: 2026-02-11 12:00+0100\n"
 "Last-Translator: ClamUI Contributors\n"
 "Language-Team: German\n"
 "Language: de\n"
@@ -736,9 +736,8 @@ msgid "Failed to send signal: {error}"
 msgstr "Signal konnte nicht gesendet werden: {error}"
 
 #: src/core/updater.py:274
-#, fuzzy
 msgid "Timeout sending elevated signal to freshclam"
-msgstr "Zeitüberschreitung beim Senden des Signals an freshclam"
+msgstr "Zeitüberschreitung beim Senden des erhöhten Signals an freshclam"
 
 #: src/core/updater.py:283
 msgid "Timeout sending signal to freshclam"
@@ -754,6 +753,8 @@ msgid ""
 "Could not trigger freshclam service update. Try restarting the service: sudo "
 "systemctl restart clamav-freshclam"
 msgstr ""
+"Freshclam-Dienstaktualisierung konnte nicht ausgelöst werden. Versuchen Sie, "
+"den Dienst neu zu starten: sudo systemctl restart clamav-freshclam"
 
 #: src/core/updater.py:420
 msgid "Backup failed"
@@ -769,6 +770,8 @@ msgid ""
 "Another freshclam instance is running (PID {pid}). Stop it first: sudo "
 "systemctl stop clamav-freshclam"
 msgstr ""
+"Eine andere freshclam-Instanz läuft bereits (PID {pid}). Stoppen Sie diese "
+"zuerst: sudo systemctl stop clamav-freshclam"
 
 #: src/core/updater.py:546
 msgid "Update timed out after 10 minutes"
@@ -1680,36 +1683,40 @@ msgstr "'Mit ClamUI scannen'-Menüaktionen installieren oder verwalten"
 
 #: src/ui/preferences/database_page.py:60
 msgid "Free malware URL blocklist by abuse.ch, updated every minute"
-msgstr ""
+msgstr "Kostenlose Malware-URL-Blockliste von abuse.ch, minütlich aktualisiert"
 
 #: src/ui/preferences/database_page.py:61
 #: src/ui/preferences/database_page.py:93
 msgid "No registration required. Click 'Suggested' above to add."
-msgstr ""
+msgstr "Keine Registrierung erforderlich. Klicken Sie oben auf „Vorgeschlagen“, um sie hinzuzufügen."
 
 #: src/ui/preferences/database_page.py:69
 msgid "Millions of signatures for zero-day malware, phishing, and spam"
-msgstr ""
+msgstr "Millionen von Signaturen für Zero-Day-Malware, Phishing und Spam"
 
 #: src/ui/preferences/database_page.py:71
 msgid ""
 "Free registration required at securiteinfo.com. URLs contain your personal "
 "API key."
 msgstr ""
+"Kostenlose Registrierung bei securiteinfo.com erforderlich. URLs enthalten "
+"Ihren persönlichen API-Schlüssel."
 
 #: src/ui/preferences/database_page.py:80
 msgid "Macro malware, phishing, scam, and spam signatures (hourly updates)"
-msgstr ""
+msgstr "Makro-Malware-, Phishing-, Betrugs- und Spam-Signaturen (stündliche Aktualisierungen)"
 
 #: src/ui/preferences/database_page.py:82
 msgid ""
 "Requires 'fangfrisch' or 'clamav-unofficial-sigs' tool. Cannot be added as "
 "custom URL directly."
 msgstr ""
+"Erfordert das Tool „fangfrisch“ oder „clamav-unofficial-sigs“. Kann nicht "
+"direkt als benutzerdefinierte URL hinzugefügt werden."
 
 #: src/ui/preferences/database_page.py:92
 msgid "Hash-based signatures, web shell detection, and general malware"
-msgstr ""
+msgstr "Hash-basierte Signaturen, Web-Shell-Erkennung und allgemeine Malware"
 
 #: src/ui/preferences/database_page.py:184
 msgid "Database Updates"
@@ -1818,9 +1825,8 @@ msgid "Suggested"
 msgstr "Vorgeschlagen"
 
 #: src/ui/preferences/database_page.py:383
-#, fuzzy
 msgid "Add free community signature databases (URLhaus, InterServer)"
-msgstr "Kostenlose Community-Signaturdatenbanken hinzufügen (URLhaus)"
+msgstr "Kostenlose Community-Signaturdatenbanken hinzufügen (URLhaus, InterServer)"
 
 #: src/ui/preferences/database_page.py:438
 msgid "Remove this URL"
@@ -1828,32 +1834,35 @@ msgstr "Diese URL entfernen"
 
 #: src/ui/preferences/database_page.py:503
 msgid "Popular Signature Providers"
-msgstr ""
+msgstr "Beliebte Signaturanbieter"
 
 #: src/ui/preferences/database_page.py:506
 msgid ""
 "Third-party databases can significantly improve detection rates. Providers "
 "marked with a key icon require free registration."
 msgstr ""
+"Drittanbieter-Datenbanken können die Erkennungsraten erheblich verbessern. "
+"Anbieter mit Schlüsselsymbol erfordern eine kostenlose Registrierung."
 
 #: src/ui/preferences/database_page.py:518
 msgid "Registration required"
-msgstr ""
+msgstr "Registrierung erforderlich"
 
 #: src/ui/preferences/database_page.py:532
-#, fuzzy
 msgid "Free registration required"
-msgstr "Profilname ist erforderlich"
+msgstr "Kostenlose Registrierung erforderlich"
 
 #: src/ui/preferences/database_page.py:542
 msgid "Tip: fangfrisch"
-msgstr ""
+msgstr "Tipp: fangfrisch"
 
 #: src/ui/preferences/database_page.py:545
 msgid ""
 "For SaneSecurity and other rsync-based providers, install the 'fangfrisch' "
 "tool which handles downloading and updating signatures automatically."
 msgstr ""
+"Installieren Sie für SaneSecurity und andere rsync-basierte Anbieter das "
+"Tool „fangfrisch“, das Signaturen automatisch herunterlädt und aktualisiert."
 
 #: src/ui/preferences/database_page.py:577
 msgid "Proxy Settings"

@@ -36,6 +36,7 @@ from .flatpak import (
     ensure_freshclam_config,
     format_flatpak_portal_path,
     get_clamav_database_dir,
+    get_clean_env,
     get_freshclam_config_path,
     is_flatpak,
     which_host_command,
@@ -52,7 +53,8 @@ from .result_formatters import format_results_as_csv, format_results_as_text
 
 # Define public API for backwards compatibility
 __all__ = [
-    # Flatpak functions
+    # Flatpak/packaging functions
+    "get_clean_env",
     "is_flatpak",
     "wrap_host_command",
     "which_host_command",

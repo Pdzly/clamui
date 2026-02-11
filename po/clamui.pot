@@ -1,18 +1,18 @@
-# The Translation files for ClamUI.
-# Copyright (C) 2026 ClamUI Contributors
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR ClamUI Contributors
 # This file is distributed under the same license as the ClamUI package.
-# Rooki <clamui@rooki.xyz>, 2026.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: ClamUI 0.1.3\n"
 "Report-Msgid-Bugs-To: https://github.com/linx-systems/clamui/issues\n"
-"POT-Creation-Date: 2026-02-09 17:57+0100\n"
+"POT-Creation-Date: 2026-02-11 20:03+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: Rooki <rooki@rooki.xyz>\n"
-"Language-Team: ClamUI <clamui@rooki.xyz>\n"
-"Language: en\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -274,127 +274,127 @@ msgstr ""
 msgid "Scan completed in {duration:.1f} seconds"
 msgstr ""
 
-#: src/core/clamav_detection.py:42
+#: src/core/clamav_detection.py:43
 msgid ""
 "ClamAV is not installed. Please install it with: sudo apt install clamav"
 msgstr ""
 
-#: src/core/clamav_detection.py:60
+#: src/core/clamav_detection.py:62
 #, python-brace-format
 msgid "ClamAV found but returned error: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:64
+#: src/core/clamav_detection.py:66
 msgid "ClamAV check timed out"
 msgstr ""
 
-#: src/core/clamav_detection.py:66
+#: src/core/clamav_detection.py:68
 msgid "ClamAV executable not found"
 msgstr ""
 
-#: src/core/clamav_detection.py:68
+#: src/core/clamav_detection.py:70
 msgid "Permission denied when accessing ClamAV"
 msgstr ""
 
-#: src/core/clamav_detection.py:70
+#: src/core/clamav_detection.py:72
 #, python-brace-format
 msgid "Error checking ClamAV: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:89
+#: src/core/clamav_detection.py:91
 msgid ""
 "freshclam is not installed. Please install it with: sudo apt install clamav-"
 "freshclam"
 msgstr ""
 
-#: src/core/clamav_detection.py:123
+#: src/core/clamav_detection.py:126
 #, python-brace-format
 msgid "freshclam found but returned error: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:129
+#: src/core/clamav_detection.py:132
 msgid "freshclam check timed out"
 msgstr ""
 
-#: src/core/clamav_detection.py:131 src/core/updater.py:487
+#: src/core/clamav_detection.py:134 src/core/updater.py:592
 msgid "freshclam executable not found"
 msgstr ""
 
-#: src/core/clamav_detection.py:133
+#: src/core/clamav_detection.py:136
 msgid "Permission denied when accessing freshclam"
 msgstr ""
 
-#: src/core/clamav_detection.py:135
+#: src/core/clamav_detection.py:138
 #, python-brace-format
 msgid "Error checking freshclam: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:153 src/core/clamav_detection.py:182
+#: src/core/clamav_detection.py:156 src/core/clamav_detection.py:186
 msgid ""
 "clamdscan is not installed. Please install it with: sudo apt install clamav-"
 "daemon"
 msgstr ""
 
-#: src/core/clamav_detection.py:174
+#: src/core/clamav_detection.py:178
 #, python-brace-format
 msgid "clamdscan returned error: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:178
+#: src/core/clamav_detection.py:182
 msgid "clamdscan check timed out"
 msgstr ""
 
-#: src/core/clamav_detection.py:185
+#: src/core/clamav_detection.py:189
 msgid "Permission denied when accessing clamdscan"
 msgstr ""
 
-#: src/core/clamav_detection.py:187
+#: src/core/clamav_detection.py:191
 #, python-brace-format
 msgid "Error checking clamdscan: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:238
+#: src/core/clamav_detection.py:242
 msgid "Could not find clamd socket. Is clamav-daemon installed?"
 msgstr ""
 
-#: src/core/clamav_detection.py:252
+#: src/core/clamav_detection.py:258
 #, python-brace-format
 msgid "Daemon not responding: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:255
+#: src/core/clamav_detection.py:261
 msgid "Connection to clamd timed out"
 msgstr ""
 
-#: src/core/clamav_detection.py:257
+#: src/core/clamav_detection.py:263
 msgid "clamdscan executable not found"
 msgstr ""
 
-#: src/core/clamav_detection.py:259
+#: src/core/clamav_detection.py:265
 #, python-brace-format
 msgid "Error connecting to clamd: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:302
+#: src/core/clamav_detection.py:308
 msgid "Could not determine Flatpak database directory"
 msgstr ""
 
-#: src/core/clamav_detection.py:309
+#: src/core/clamav_detection.py:315
 #, python-brace-format
 msgid "Database directory does not exist: {path}"
 msgstr ""
 
-#: src/core/clamav_detection.py:317
+#: src/core/clamav_detection.py:323
 #, python-brace-format
 msgid "Permission denied accessing: {path}"
 msgstr ""
 
-#: src/core/clamav_detection.py:319
+#: src/core/clamav_detection.py:325
 #, python-brace-format
 msgid "Error accessing database: {error}"
 msgstr ""
 
-#: src/core/clamav_detection.py:321
+#: src/core/clamav_detection.py:327
 msgid "No virus database files found. Please download the database first."
 msgstr ""
 
@@ -425,7 +425,7 @@ msgid "Unknown file manager: {name}"
 msgstr ""
 
 #: src/core/file_manager_integration.py:299
-#: src/core/file_manager_integration.py:343 src/core/updater.py:502
+#: src/core/file_manager_integration.py:343 src/core/updater.py:607
 #, python-brace-format
 msgid "Permission denied: {error}"
 msgstr ""
@@ -680,135 +680,152 @@ msgstr ""
 msgid "Scan cancelled by user"
 msgstr ""
 
-#: src/core/updater.py:208
+#: src/core/updater.py:213
 #, python-brace-format
 msgid "Freshclam service not running (status: {status})"
 msgstr ""
 
-#: src/core/updater.py:224
+#: src/core/updater.py:229
 msgid "Could not determine freshclam PID"
 msgstr ""
 
-#: src/core/updater.py:226
+#: src/core/updater.py:231
 #, python-brace-format
 msgid "Failed to get freshclam PID: {error}"
 msgstr ""
 
-#: src/core/updater.py:240
+#: src/core/updater.py:245 src/core/updater.py:265
 #, python-brace-format
 msgid "Update signal sent to freshclam service (PID {pid})"
 msgstr ""
 
-#: src/core/updater.py:246
+#: src/core/updater.py:270 src/core/updater.py:280
 #, python-brace-format
 msgid "Failed to send signal: {error}"
 msgstr ""
 
-#: src/core/updater.py:249
+#: src/core/updater.py:274
+msgid "Timeout sending elevated signal to freshclam"
+msgstr ""
+
+#: src/core/updater.py:283
 msgid "Timeout sending signal to freshclam"
 msgstr ""
 
-#: src/core/updater.py:251
+#: src/core/updater.py:285
 #, python-brace-format
 msgid "Error sending signal: {error}"
 msgstr ""
 
-#: src/core/updater.py:343
+#: src/core/updater.py:385
+msgid ""
+"Could not trigger freshclam service update. Try restarting the service: sudo "
+"systemctl restart clamav-freshclam"
+msgstr ""
+
+#: src/core/updater.py:420
 msgid "Backup failed"
 msgstr ""
 
-#: src/core/updater.py:361
+#: src/core/updater.py:438
 msgid "Delete failed"
 msgstr ""
 
-#: src/core/updater.py:441
+#: src/core/updater.py:462
+#, python-brace-format
+msgid ""
+"Another freshclam instance is running (PID {pid}). Stop it first: sudo "
+"systemctl stop clamav-freshclam"
+msgstr ""
+
+#: src/core/updater.py:546
 msgid "Update timed out after 10 minutes"
 msgstr ""
 
-#: src/core/updater.py:458
+#: src/core/updater.py:563
 msgid "Update cancelled by user"
 msgstr ""
 
-#: src/core/updater.py:517
+#: src/core/updater.py:622
 #, python-brace-format
 msgid "Update failed: {error}"
 msgstr ""
 
-#: src/core/updater.py:734
+#: src/core/updater.py:839
 msgid ""
 "Authentication cancelled. Database update requires administrator privileges."
 msgstr ""
 
-#: src/core/updater.py:736
+#: src/core/updater.py:841
 msgid "Authorization failed. You are not authorized to update the database."
 msgstr ""
 
-#: src/core/updater.py:749
+#: src/core/updater.py:854
 msgid "Update rate limited by mirror. Please wait a few minutes and try again."
 msgstr ""
 
-#: src/core/updater.py:754
+#: src/core/updater.py:859
 msgid ""
 "Update blocked by CDN. This may be due to rate limiting. Please wait and try "
 "again later."
 msgstr ""
 
-#: src/core/updater.py:760
+#: src/core/updater.py:865
 msgid "ClamAV mirror is currently unavailable. Please try again later."
 msgstr ""
 
-#: src/core/updater.py:766
+#: src/core/updater.py:871
 msgid "SSL/TLS certificate error. The mirror may have configuration issues."
 msgstr ""
 
-#: src/core/updater.py:770
+#: src/core/updater.py:875
 msgid "Connection timed out. Please check your network connection."
 msgstr ""
 
-#: src/core/updater.py:774
+#: src/core/updater.py:879
 msgid "Authorization failed. Please try again and enter your password."
 msgstr ""
 
-#: src/core/updater.py:778
+#: src/core/updater.py:883
 msgid "Database is locked. Another freshclam instance may be running."
 msgstr ""
 
-#: src/core/updater.py:782
+#: src/core/updater.py:887
 msgid ""
 "Permission denied. You may need elevated privileges to update the database."
 msgstr ""
 
-#: src/core/updater.py:786
+#: src/core/updater.py:891
 msgid "Connection error. Please check your network connection."
 msgstr ""
 
-#: src/core/updater.py:790
+#: src/core/updater.py:895
 msgid "DNS resolution failed. Please check your network settings."
 msgstr ""
 
-#: src/core/updater.py:796
+#: src/core/updater.py:901
 msgid "Update failed with an unknown error. Check the logs for details."
 msgstr ""
 
-#: src/core/updater.py:808
+#: src/core/updater.py:913
 #, python-brace-format
 msgid "Database update completed - {count} database(s) updated"
 msgstr ""
 
-#: src/core/updater.py:812
+#: src/core/updater.py:917
 msgid "Database update completed - Already up to date"
 msgstr ""
 
-#: src/core/updater.py:814
+#: src/core/updater.py:919
 msgid "Database update cancelled"
 msgstr ""
 
-#: src/core/updater.py:816
+#: src/core/updater.py:921
 #, python-brace-format
 msgid "Database update failed: {error}"
 msgstr ""
 
-#: src/core/updater.py:817 src/ui/scan_results_dialog.py:223
+#: src/core/updater.py:922 src/ui/scan_results_dialog.py:223
 #: src/ui/virustotal_results_dialog.py:197
 msgid "Unknown error"
 msgstr ""
@@ -1572,142 +1589,203 @@ msgstr ""
 msgid "Install or manage 'Scan with ClamUI' menu actions"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:124
+#: src/ui/preferences/database_page.py:60
+msgid "Free malware URL blocklist by abuse.ch, updated every minute"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:61
+#: src/ui/preferences/database_page.py:93
+msgid "No registration required. Click 'Suggested' above to add."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:69
+msgid "Millions of signatures for zero-day malware, phishing, and spam"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:71
+msgid ""
+"Free registration required at securiteinfo.com. URLs contain your personal "
+"API key."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:80
+msgid "Macro malware, phishing, scam, and spam signatures (hourly updates)"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:82
+msgid ""
+"Requires 'fangfrisch' or 'clamav-unofficial-sigs' tool. Cannot be added as "
+"custom URL directly."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:92
+msgid "Hash-based signatures, web shell detection, and general malware"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:184
 msgid "Database Updates"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:134
+#: src/ui/preferences/database_page.py:194
 #: src/ui/preferences/scanner_page.py:91
 msgid "Configuration File"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:134
+#: src/ui/preferences/database_page.py:194
 msgid "freshclam.conf location"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:169
+#: src/ui/preferences/database_page.py:232
 msgid "Paths"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:170
+#: src/ui/preferences/database_page.py:233
 msgid "Configure database and log file locations"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:175
+#: src/ui/preferences/database_page.py:238
 msgid "Database Directory"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:185
+#: src/ui/preferences/database_page.py:248
 msgid "Update Log File"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:195
+#: src/ui/preferences/database_page.py:258
 msgid "Notify ClamD Config"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:205
+#: src/ui/preferences/database_page.py:268
 #: src/ui/preferences/scanner_page.py:548
 msgid "Verbose Logging"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:206
+#: src/ui/preferences/database_page.py:269
 msgid "Enable detailed logging for database updates"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:212
+#: src/ui/preferences/database_page.py:275
 #: src/ui/preferences/scanner_page.py:555
 msgid "Syslog Logging"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:213
+#: src/ui/preferences/database_page.py:276
 #: src/ui/preferences/scanner_page.py:556
 msgid "Send log messages to system log"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:234
+#: src/ui/preferences/database_page.py:297
 msgid "Update Behavior"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:235
+#: src/ui/preferences/database_page.py:298
 msgid "Configure how often and where to check for updates"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:243
+#: src/ui/preferences/database_page.py:306
 msgid "Checks Per Day"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:244
+#: src/ui/preferences/database_page.py:307
 msgid "Number of update checks per day (0 to disable)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:255
+#: src/ui/preferences/database_page.py:318
 msgid "Database Mirror"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:283
+#: src/ui/preferences/database_page.py:346
 msgid "Custom Signature Databases"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:286
+#: src/ui/preferences/database_page.py:349
 msgid ""
 "Third-party signature URLs (e.g., SecuriteInfo). Paste URLs or config lines "
 "- 'DatabaseCustomURL' prefix auto-stripped."
 msgstr ""
 
-#: src/ui/preferences/database_page.py:298
+#: src/ui/preferences/database_page.py:361
 msgid "Add URL(s)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:299
+#: src/ui/preferences/database_page.py:362
 msgid "Paste URL or multi-line config block"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:309
+#: src/ui/preferences/database_page.py:372
 #: src/ui/preferences/exclusions_page.py:134 src/ui/profile_dialogs.py:706
 msgid "Add"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:310
+#: src/ui/preferences/database_page.py:373
 msgid "Add custom signature URL(s)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:318
+#: src/ui/preferences/database_page.py:381
 msgid "Suggested"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:319
-msgid "Add free community signature databases (URLhaus)"
+#: src/ui/preferences/database_page.py:383
+msgid "Add free community signature databases (URLhaus, InterServer)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:373
+#: src/ui/preferences/database_page.py:438
 msgid "Remove this URL"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:443
+#: src/ui/preferences/database_page.py:503
+msgid "Popular Signature Providers"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:506
+msgid ""
+"Third-party databases can significantly improve detection rates. Providers "
+"marked with a key icon require free registration."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:518
+msgid "Registration required"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:532
+msgid "Free registration required"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:542
+msgid "Tip: fangfrisch"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:545
+msgid ""
+"For SaneSecurity and other rsync-based providers, install the 'fangfrisch' "
+"tool which handles downloading and updating signatures automatically."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:577
 msgid "Proxy Settings"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:444
+#: src/ui/preferences/database_page.py:578
 msgid "Configure HTTP proxy for database downloads (optional)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:449
+#: src/ui/preferences/database_page.py:583
 msgid "Proxy Server"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:462
+#: src/ui/preferences/database_page.py:596
 msgid "Proxy Port"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:463
+#: src/ui/preferences/database_page.py:597
 msgid "Proxy server port number (0 to disable)"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:474
+#: src/ui/preferences/database_page.py:608
 msgid "Proxy Username"
 msgstr ""
 
-#: src/ui/preferences/database_page.py:486
+#: src/ui/preferences/database_page.py:620
 msgid "Proxy Password"
 msgstr ""
 

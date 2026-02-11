@@ -37,6 +37,7 @@ from .utils import (
     check_clamav_installed,
     check_clamd_connection,
     get_clamav_path,
+    get_clean_env,
     validate_path,
     wrap_host_command,
 )
@@ -303,7 +304,11 @@ class Scanner:
         try:
             with self._process_lock:
                 self._current_process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=get_clean_env(),
                 )
 
             progress_files_scanned = 0

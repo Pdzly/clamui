@@ -597,7 +597,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.return_value = mock_process
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.SUCCESS
                             assert result.databases_updated == 1
@@ -623,7 +628,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.return_value = mock_process
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.UP_TO_DATE
                             assert result.databases_updated == 0
@@ -650,7 +660,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.return_value = mock_process
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.ERROR
                             assert result.has_error is True
@@ -685,7 +700,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.side_effect = FileNotFoundError("freshclam not found")
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.ERROR
                             assert "not found" in result.error_message.lower()
@@ -704,7 +724,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.side_effect = PermissionError("Access denied")
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.ERROR
                             assert "Permission denied" in result.error_message
@@ -723,7 +748,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_popen.side_effect = RuntimeError("Unexpected error")
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.ERROR
                             assert "Update failed" in result.error_message
@@ -755,7 +785,12 @@ class TestFreshclamUpdaterUpdateSync:
                             mock_process.poll = MagicMock(return_value=0)  # Process already done
                             mock_popen.return_value = mock_process
 
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             assert result.status == UpdateStatus.CANCELLED
 
@@ -915,7 +950,12 @@ class TestFreshclamUpdaterCommunicateTimeout:
                             mock_popen.return_value = mock_process
 
                             updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            result = updater.update_sync(prefer_service=False)
+                            with patch.object(
+                                updater,
+                                "_check_freshclam_running",
+                                return_value=(False, None),
+                            ):
+                                result = updater.update_sync(prefer_service=False)
 
                             # Should have called kill after timeout
                             mock_process.kill.assert_called()
@@ -962,12 +1002,17 @@ class TestFreshclamUpdaterUpdateAsync:
                                 mock_popen.return_value = mock_process
 
                                 updater = FreshclamUpdater(log_manager=mock_log_manager)
-                                updater.update_async(mock_callback, prefer_service=False)
+                                with patch.object(
+                                    updater,
+                                    "_check_freshclam_running",
+                                    return_value=(False, None),
+                                ):
+                                    updater.update_async(mock_callback, prefer_service=False)
 
-                                # Wait for thread to complete
-                                import time
+                                    # Wait for thread to complete
+                                    import time
 
-                                time.sleep(0.2)
+                                    time.sleep(0.2)
 
                                 # Verify callback was called via GLib.idle_add
                                 mock_callback.assert_called_once()
@@ -1909,7 +1954,12 @@ class TestUpdateSyncPreferService:
                                 "check_freshclam_service",
                                 return_value=(FreshclamServiceStatus.NOT_FOUND, None),
                             ):
-                                result = updater.update_sync(force=False, prefer_service=True)
+                                with patch.object(
+                                    updater,
+                                    "_check_freshclam_running",
+                                    return_value=(False, None),
+                                ):
+                                    result = updater.update_sync(force=False, prefer_service=True)
 
         assert result.status == UpdateStatus.SUCCESS
         assert result.update_method == UpdateMethod.MANUAL
@@ -1944,7 +1994,12 @@ class TestUpdateSyncPreferService:
                                 "check_freshclam_service",
                                 return_value=(FreshclamServiceStatus.RUNNING, "12345"),
                             ) as mock_check:
-                                result = updater.update_sync(force=True, prefer_service=True)
+                                with patch.object(
+                                    updater,
+                                    "_check_freshclam_running",
+                                    return_value=(False, None),
+                                ):
+                                    result = updater.update_sync(force=True, prefer_service=True)
 
         # check_freshclam_service should NOT be called for force updates
         mock_check.assert_not_called()
@@ -1977,52 +2032,52 @@ class TestUpdateSyncPreferService:
                                 updater,
                                 "check_freshclam_service",
                             ) as mock_check:
-                                result = updater.update_sync(force=False, prefer_service=False)
+                                with patch.object(
+                                    updater,
+                                    "_check_freshclam_running",
+                                    return_value=(False, None),
+                                ):
+                                    result = updater.update_sync(force=False, prefer_service=False)
 
         # check_freshclam_service should NOT be called when prefer_service=False
         mock_check.assert_not_called()
         assert result.update_method == UpdateMethod.MANUAL
 
-    def test_falls_back_when_service_trigger_fails(self, updater_module):
-        """Test falls back to manual method when service trigger fails."""
+    def test_returns_error_when_service_trigger_fails(self, updater_module):
+        """Test returns error when service trigger fails (no fallback to manual).
+
+        When the service is running but signal delivery fails, we must NOT
+        fall back to manual freshclam — the service holds all locks and the
+        manual method would fail with a confusing lock contention error.
+        """
         from src.core.updater import (
             FreshclamServiceStatus,
             FreshclamUpdater,
-            UpdateMethod,
             UpdateStatus,
         )
 
         mock_log_manager = MagicMock()
 
-        # Mock successful manual update (fallback)
-        mock_process = MagicMock()
-        mock_process.communicate.return_value = ("daily.cvd updated (version: 26929", "")
-        mock_process.returncode = 0
-        mock_process.poll.return_value = 0
-
         with patch("src.core.updater.is_flatpak", return_value=False):
             with patch(
                 "src.core.updater.check_freshclam_installed", return_value=(True, "0.103.8")
             ):
-                with patch("shutil.which", return_value="/usr/bin/pkexec"):
-                    with patch("subprocess.Popen", return_value=mock_process):
-                        with patch("src.core.updater.wrap_host_command", side_effect=lambda x: x):
-                            updater = FreshclamUpdater(log_manager=mock_log_manager)
-                            with patch.object(
-                                updater,
-                                "check_freshclam_service",
-                                return_value=(FreshclamServiceStatus.RUNNING, "12345"),
-                            ):
-                                with patch.object(
-                                    updater,
-                                    "trigger_service_update",
-                                    return_value=(False, "Permission denied"),
-                                ):
-                                    result = updater.update_sync(force=False, prefer_service=True)
+                updater = FreshclamUpdater(log_manager=mock_log_manager)
+                with patch.object(
+                    updater,
+                    "check_freshclam_service",
+                    return_value=(FreshclamServiceStatus.RUNNING, "12345"),
+                ):
+                    with patch.object(
+                        updater,
+                        "trigger_service_update",
+                        return_value=(False, "Permission denied"),
+                    ):
+                        result = updater.update_sync(force=False, prefer_service=True)
 
-        # Should fall back to manual method
-        assert result.status == UpdateStatus.SUCCESS
-        assert result.update_method == UpdateMethod.MANUAL
+        # Should return error, not fall back to manual
+        assert result.status == UpdateStatus.ERROR
+        assert result.error_message is not None
 
 
 # =============================================================================
@@ -2601,11 +2656,16 @@ class TestUpdateAsyncService:
                                     "check_freshclam_service",
                                     return_value=(FreshclamServiceStatus.NOT_FOUND, None),
                                 ):
-                                    updater.update_async(mock_callback, prefer_service=True)
+                                    with patch.object(
+                                        updater,
+                                        "_check_freshclam_running",
+                                        return_value=(False, None),
+                                    ):
+                                        updater.update_async(mock_callback, prefer_service=True)
 
-                                    import time
+                                        import time
 
-                                    time.sleep(0.2)
+                                        time.sleep(0.2)
 
         mock_callback.assert_called_once()
         result = mock_callback.call_args[0][0]

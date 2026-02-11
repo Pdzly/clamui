@@ -35,6 +35,7 @@ from .threat_classifier import (
 from .utils import (
     check_clamd_connection,
     check_clamdscan_installed,
+    get_clean_env,
     validate_path,
 )
 
@@ -159,7 +160,11 @@ class DaemonScanner:
         try:
             with self._process_lock:
                 self._current_process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=get_clean_env(),
                 )
 
             progress_files_scanned = 0

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ClamUI 0.1.3\n"
 "Report-Msgid-Bugs-To: https://github.com/linx-systems/clamui/issues\n"
-"POT-Creation-Date: 2026-02-09 17:57+0100\n"
+"POT-Creation-Date: 2026-02-11 20:03+0100\n"
 "PO-Revision-Date: 2026-02-10 12:00+0100\n"
 "Last-Translator: ClamUI Contributors\n"
 "Language-Team: German\n"
@@ -22,8 +22,22 @@ msgstr "ClamUI Geplanter Scan - Antivirus-Scan ohne Benutzeroberfläche"
 
 #: src/cli/scheduled_scan.py:108
 #, python-format
-msgid "\nExamples:\n  %(prog)s                                    # Use settings from config\n  %(prog)s --target /home/user/Documents      # Scan specific directory\n  %(prog)s --skip-on-battery --auto-quarantine # Skip on battery, quarantine threats\n"
-msgstr "\nBeispiele:\n  %(prog)s                                    # Einstellungen aus Konfiguration verwenden\n  %(prog)s --target /home/user/Documents      # Bestimmtes Verzeichnis scannen\n  %(prog)s --skip-on-battery --auto-quarantine # Bei Akkubetrieb überspringen, Bedrohungen in Quarantäne\n"
+msgid ""
+"\n"
+"Examples:\n"
+"  %(prog)s                                    # Use settings from config\n"
+"  %(prog)s --target /home/user/Documents      # Scan specific directory\n"
+"  %(prog)s --skip-on-battery --auto-quarantine # Skip on battery, quarantine "
+"threats\n"
+msgstr ""
+"\n"
+"Beispiele:\n"
+"  %(prog)s                                    # Einstellungen aus "
+"Konfiguration verwenden\n"
+"  %(prog)s --target /home/user/Documents      # Bestimmtes Verzeichnis "
+"scannen\n"
+"  %(prog)s --skip-on-battery --auto-quarantine # Bei Akkubetrieb "
+"überspringen, Bedrohungen in Quarantäne\n"
 
 #: src/cli/scheduled_scan.py:120
 msgid "Skip scan if running on battery power"
@@ -60,8 +74,12 @@ msgstr "Geplanter Scan übersprungen (Akkubetrieb)"
 
 #: src/cli/scheduled_scan.py:245
 #, python-brace-format
-msgid "Battery level: {percent:.0f}%\nScan skipped due to battery-aware settings."
-msgstr "Akkustand: {percent:.0f}%\nScan aufgrund der Akkueinstellungen übersprungen."
+msgid ""
+"Battery level: {percent:.0f}%\n"
+"Scan skipped due to battery-aware settings."
+msgstr ""
+"Akkustand: {percent:.0f}%\n"
+"Scan aufgrund der Akkueinstellungen übersprungen."
 
 #: src/cli/scheduled_scan.py:267
 msgid "Error: No scan targets specified"
@@ -164,7 +182,8 @@ msgstr "  Quarantäne fehlgeschlagen: {count} Datei(en)"
 #: src/cli/scheduled_scan.py:467
 #, python-brace-format
 msgid "Scheduled scan found {infected} threat(s), {quarantined} quarantined"
-msgstr "Geplanter Scan fand {infected} Bedrohung(en), {quarantined} unter Quarantäne"
+msgstr ""
+"Geplanter Scan fand {infected} Bedrohung(en), {quarantined} unter Quarantäne"
 
 #: src/cli/scheduled_scan.py:473
 #, python-brace-format
@@ -178,7 +197,8 @@ msgstr "Geplanter Scan mit Fehlern abgeschlossen"
 #: src/cli/scheduled_scan.py:479
 #, python-brace-format
 msgid "Scheduled scan completed - {count} files scanned, no threats"
-msgstr "Geplanter Scan abgeschlossen - {count} Dateien gescannt, keine Bedrohungen"
+msgstr ""
+"Geplanter Scan abgeschlossen - {count} Dateien gescannt, keine Bedrohungen"
 
 #: src/cli/scheduled_scan.py:502
 #, python-brace-format
@@ -227,7 +247,8 @@ msgstr "Fehler ({target})"
 #: src/cli/scheduled_scan.py:584 src/core/notification_manager.py:177
 #, python-brace-format
 msgid "{infected} infected file(s) found, {quarantined} quarantined"
-msgstr "{infected} infizierte Datei(en) gefunden, {quarantined} unter Quarantäne"
+msgstr ""
+"{infected} infizierte Datei(en) gefunden, {quarantined} unter Quarantäne"
 
 #: src/cli/scheduled_scan.py:589
 #, python-brace-format
@@ -244,7 +265,9 @@ msgstr "Geplanter Scan abgeschlossen"
 
 #: src/cli/scheduled_scan.py:594
 msgid "Scan completed with some errors. Check logs for details."
-msgstr "Scan mit einigen Fehlern abgeschlossen. Details finden Sie in den Protokollen."
+msgstr ""
+"Scan mit einigen Fehlern abgeschlossen. Details finden Sie in den "
+"Protokollen."
 
 #: src/cli/scheduled_scan.py:599 src/core/notification_manager.py:164
 msgid "Scheduled Scan Complete"
@@ -264,124 +287,138 @@ msgstr "ClamUI geplanter Scan wird gestartet..."
 msgid "Scan completed in {duration:.1f} seconds"
 msgstr "Scan abgeschlossen in {duration:.1f} Sekunden"
 
-#: src/core/clamav_detection.py:42
-msgid "ClamAV is not installed. Please install it with: sudo apt install clamav"
-msgstr "ClamAV ist nicht installiert. Bitte installieren Sie es mit: sudo apt install clamav"
+#: src/core/clamav_detection.py:43
+msgid ""
+"ClamAV is not installed. Please install it with: sudo apt install clamav"
+msgstr ""
+"ClamAV ist nicht installiert. Bitte installieren Sie es mit: sudo apt "
+"install clamav"
 
-#: src/core/clamav_detection.py:60
+#: src/core/clamav_detection.py:62
 #, python-brace-format
 msgid "ClamAV found but returned error: {error}"
 msgstr "ClamAV gefunden, aber Fehler zurückgegeben: {error}"
 
-#: src/core/clamav_detection.py:64
+#: src/core/clamav_detection.py:66
 msgid "ClamAV check timed out"
 msgstr "ClamAV-Überprüfung hat Zeitlimit überschritten"
 
-#: src/core/clamav_detection.py:66
+#: src/core/clamav_detection.py:68
 msgid "ClamAV executable not found"
 msgstr "ClamAV-Programmdatei nicht gefunden"
 
-#: src/core/clamav_detection.py:68
+#: src/core/clamav_detection.py:70
 msgid "Permission denied when accessing ClamAV"
 msgstr "Zugriff auf ClamAV verweigert"
 
-#: src/core/clamav_detection.py:70
+#: src/core/clamav_detection.py:72
 #, python-brace-format
 msgid "Error checking ClamAV: {error}"
 msgstr "Fehler beim Überprüfen von ClamAV: {error}"
 
-#: src/core/clamav_detection.py:89
-msgid "freshclam is not installed. Please install it with: sudo apt install clamav-freshclam"
-msgstr "freshclam ist nicht installiert. Bitte installieren Sie es mit: sudo apt install clamav-freshclam"
+#: src/core/clamav_detection.py:91
+msgid ""
+"freshclam is not installed. Please install it with: sudo apt install clamav-"
+"freshclam"
+msgstr ""
+"freshclam ist nicht installiert. Bitte installieren Sie es mit: sudo apt "
+"install clamav-freshclam"
 
-#: src/core/clamav_detection.py:123
+#: src/core/clamav_detection.py:126
 #, python-brace-format
 msgid "freshclam found but returned error: {error}"
 msgstr "freshclam gefunden, aber Fehler zurückgegeben: {error}"
 
-#: src/core/clamav_detection.py:129
+#: src/core/clamav_detection.py:132
 msgid "freshclam check timed out"
 msgstr "freshclam-Überprüfung hat Zeitlimit überschritten"
 
-#: src/core/clamav_detection.py:131 src/core/updater.py:487
+#: src/core/clamav_detection.py:134 src/core/updater.py:592
 msgid "freshclam executable not found"
 msgstr "freshclam-Programmdatei nicht gefunden"
 
-#: src/core/clamav_detection.py:133
+#: src/core/clamav_detection.py:136
 msgid "Permission denied when accessing freshclam"
 msgstr "Zugriff auf freshclam verweigert"
 
-#: src/core/clamav_detection.py:135
+#: src/core/clamav_detection.py:138
 #, python-brace-format
 msgid "Error checking freshclam: {error}"
 msgstr "Fehler beim Überprüfen von freshclam: {error}"
 
-#: src/core/clamav_detection.py:153 src/core/clamav_detection.py:182
-msgid "clamdscan is not installed. Please install it with: sudo apt install clamav-daemon"
-msgstr "clamdscan ist nicht installiert. Bitte installieren Sie es mit: sudo apt install clamav-daemon"
+#: src/core/clamav_detection.py:156 src/core/clamav_detection.py:186
+msgid ""
+"clamdscan is not installed. Please install it with: sudo apt install clamav-"
+"daemon"
+msgstr ""
+"clamdscan ist nicht installiert. Bitte installieren Sie es mit: sudo apt "
+"install clamav-daemon"
 
-#: src/core/clamav_detection.py:174
+#: src/core/clamav_detection.py:178
 #, python-brace-format
 msgid "clamdscan returned error: {error}"
 msgstr "clamdscan hat Fehler zurückgegeben: {error}"
 
-#: src/core/clamav_detection.py:178
+#: src/core/clamav_detection.py:182
 msgid "clamdscan check timed out"
 msgstr "clamdscan-Überprüfung hat Zeitlimit überschritten"
 
-#: src/core/clamav_detection.py:185
+#: src/core/clamav_detection.py:189
 msgid "Permission denied when accessing clamdscan"
 msgstr "Zugriff auf clamdscan verweigert"
 
-#: src/core/clamav_detection.py:187
+#: src/core/clamav_detection.py:191
 #, python-brace-format
 msgid "Error checking clamdscan: {error}"
 msgstr "Fehler beim Überprüfen von clamdscan: {error}"
 
-#: src/core/clamav_detection.py:238
+#: src/core/clamav_detection.py:242
 msgid "Could not find clamd socket. Is clamav-daemon installed?"
-msgstr "clamd-Socket konnte nicht gefunden werden. Ist clamav-daemon installiert?"
+msgstr ""
+"clamd-Socket konnte nicht gefunden werden. Ist clamav-daemon installiert?"
 
-#: src/core/clamav_detection.py:252
+#: src/core/clamav_detection.py:258
 #, python-brace-format
 msgid "Daemon not responding: {error}"
 msgstr "Daemon antwortet nicht: {error}"
 
-#: src/core/clamav_detection.py:255
+#: src/core/clamav_detection.py:261
 msgid "Connection to clamd timed out"
 msgstr "Verbindung zu clamd hat Zeitlimit überschritten"
 
-#: src/core/clamav_detection.py:257
+#: src/core/clamav_detection.py:263
 msgid "clamdscan executable not found"
 msgstr "clamdscan-Programmdatei nicht gefunden"
 
-#: src/core/clamav_detection.py:259
+#: src/core/clamav_detection.py:265
 #, python-brace-format
 msgid "Error connecting to clamd: {error}"
 msgstr "Fehler beim Verbinden mit clamd: {error}"
 
-#: src/core/clamav_detection.py:302
+#: src/core/clamav_detection.py:308
 msgid "Could not determine Flatpak database directory"
 msgstr "Flatpak-Datenbankverzeichnis konnte nicht ermittelt werden"
 
-#: src/core/clamav_detection.py:309
+#: src/core/clamav_detection.py:315
 #, python-brace-format
 msgid "Database directory does not exist: {path}"
 msgstr "Datenbankverzeichnis existiert nicht: {path}"
 
-#: src/core/clamav_detection.py:317
+#: src/core/clamav_detection.py:323
 #, python-brace-format
 msgid "Permission denied accessing: {path}"
 msgstr "Zugriff verweigert auf: {path}"
 
-#: src/core/clamav_detection.py:319
+#: src/core/clamav_detection.py:325
 #, python-brace-format
 msgid "Error accessing database: {error}"
 msgstr "Fehler beim Zugriff auf Datenbank: {error}"
 
-#: src/core/clamav_detection.py:321
+#: src/core/clamav_detection.py:327
 msgid "No virus database files found. Please download the database first."
-msgstr "Keine Virendatenbank-Dateien gefunden. Bitte laden Sie zuerst die Datenbank herunter."
+msgstr ""
+"Keine Virendatenbank-Dateien gefunden. Bitte laden Sie zuerst die Datenbank "
+"herunter."
 
 #: src/core/file_manager_integration.py:207
 msgid "Linux Mint / Cinnamon file manager"
@@ -410,7 +447,7 @@ msgid "Unknown file manager: {name}"
 msgstr "Unbekannter Dateimanager: {name}"
 
 #: src/core/file_manager_integration.py:299
-#: src/core/file_manager_integration.py:343 src/core/updater.py:502
+#: src/core/file_manager_integration.py:343 src/core/updater.py:607
 #, python-brace-format
 msgid "Permission denied: {error}"
 msgstr "Zugriff verweigert: {error}"
@@ -534,7 +571,9 @@ msgstr "VirusTotal Ratenlimit"
 
 #: src/core/notification_manager.py:262
 msgid "Too many requests. Try again in a minute or use the website."
-msgstr "Zu viele Anfragen. Versuchen Sie es in einer Minute erneut oder nutzen Sie die Website."
+msgstr ""
+"Zu viele Anfragen. Versuchen Sie es in einer Minute erneut oder nutzen Sie "
+"die Website."
 
 #: src/core/notification_manager.py:279
 msgid "VirusTotal Not Configured"
@@ -542,16 +581,27 @@ msgstr "VirusTotal nicht konfiguriert"
 
 #: src/core/notification_manager.py:280
 msgid "Add your API key in Preferences to scan with VirusTotal."
-msgstr "Fügen Sie Ihren API-Schlüssel in den Einstellungen hinzu, um mit VirusTotal zu scannen."
+msgstr ""
+"Fügen Sie Ihren API-Schlüssel in den Einstellungen hinzu, um mit VirusTotal "
+"zu scannen."
 
 #: src/core/quarantine/manager.py:192
-msgid "Failed to record quarantine entry in database. File has been restored to original location."
-msgstr "Quarantäne-Eintrag konnte nicht in der Datenbank gespeichert werden. Datei wurde an ihren ursprünglichen Ort zurückgesetzt."
+msgid ""
+"Failed to record quarantine entry in database. File has been restored to "
+"original location."
+msgstr ""
+"Quarantäne-Eintrag konnte nicht in der Datenbank gespeichert werden. Datei "
+"wurde an ihren ursprünglichen Ort zurückgesetzt."
 
 #: src/core/quarantine/manager.py:196
 #, python-brace-format
-msgid "Failed to record quarantine entry in database. Rollback also failed: {error}. File may be orphaned at: {path}"
-msgstr "Quarantäne-Eintrag konnte nicht in der Datenbank gespeichert werden. Rollback ist ebenfalls fehlgeschlagen: {error}. Datei könnte verwaist sein unter: {path}"
+msgid ""
+"Failed to record quarantine entry in database. Rollback also failed: "
+"{error}. File may be orphaned at: {path}"
+msgstr ""
+"Quarantäne-Eintrag konnte nicht in der Datenbank gespeichert werden. "
+"Rollback ist ebenfalls fehlgeschlagen: {error}. Datei könnte verwaist sein "
+"unter: {path}"
 
 #: src/core/quarantine/manager.py:268 src/core/quarantine/manager.py:373
 #: src/core/quarantine/manager.py:545
@@ -661,131 +711,177 @@ msgstr "Zeitstempel"
 msgid "Scan cancelled by user"
 msgstr "Scan vom Benutzer abgebrochen"
 
-#: src/core/updater.py:208
+#: src/core/updater.py:213
 #, python-brace-format
 msgid "Freshclam service not running (status: {status})"
 msgstr "freshclam-Dienst läuft nicht (Status: {status})"
 
-#: src/core/updater.py:224
+#: src/core/updater.py:229
 msgid "Could not determine freshclam PID"
 msgstr "freshclam-PID konnte nicht ermittelt werden"
 
-#: src/core/updater.py:226
+#: src/core/updater.py:231
 #, python-brace-format
 msgid "Failed to get freshclam PID: {error}"
 msgstr "freshclam-PID konnte nicht abgerufen werden: {error}"
 
-#: src/core/updater.py:240
+#: src/core/updater.py:245 src/core/updater.py:265
 #, python-brace-format
 msgid "Update signal sent to freshclam service (PID {pid})"
 msgstr "Aktualisierungssignal an freshclam-Dienst gesendet (PID {pid})"
 
-#: src/core/updater.py:246
+#: src/core/updater.py:270 src/core/updater.py:280
 #, python-brace-format
 msgid "Failed to send signal: {error}"
 msgstr "Signal konnte nicht gesendet werden: {error}"
 
-#: src/core/updater.py:249
+#: src/core/updater.py:274
+#, fuzzy
+msgid "Timeout sending elevated signal to freshclam"
+msgstr "Zeitüberschreitung beim Senden des Signals an freshclam"
+
+#: src/core/updater.py:283
 msgid "Timeout sending signal to freshclam"
 msgstr "Zeitüberschreitung beim Senden des Signals an freshclam"
 
-#: src/core/updater.py:251
+#: src/core/updater.py:285
 #, python-brace-format
 msgid "Error sending signal: {error}"
 msgstr "Fehler beim Senden des Signals: {error}"
 
-#: src/core/updater.py:343
+#: src/core/updater.py:385
+msgid ""
+"Could not trigger freshclam service update. Try restarting the service: sudo "
+"systemctl restart clamav-freshclam"
+msgstr ""
+
+#: src/core/updater.py:420
 msgid "Backup failed"
 msgstr "Backup fehlgeschlagen"
 
-#: src/core/updater.py:361
+#: src/core/updater.py:438
 msgid "Delete failed"
 msgstr "Löschen fehlgeschlagen"
 
-#: src/core/updater.py:441
+#: src/core/updater.py:462
+#, python-brace-format
+msgid ""
+"Another freshclam instance is running (PID {pid}). Stop it first: sudo "
+"systemctl stop clamav-freshclam"
+msgstr ""
+
+#: src/core/updater.py:546
 msgid "Update timed out after 10 minutes"
 msgstr "Aktualisierung nach 10 Minuten abgebrochen"
 
-#: src/core/updater.py:458
+#: src/core/updater.py:563
 msgid "Update cancelled by user"
 msgstr "Aktualisierung vom Benutzer abgebrochen"
 
-#: src/core/updater.py:517
+#: src/core/updater.py:622
 #, python-brace-format
 msgid "Update failed: {error}"
 msgstr "Aktualisierung fehlgeschlagen: {error}"
 
-#: src/core/updater.py:734
-msgid "Authentication cancelled. Database update requires administrator privileges."
-msgstr "Authentifizierung abgebrochen. Datenbankaktualisierung erfordert Administratorrechte."
+#: src/core/updater.py:839
+msgid ""
+"Authentication cancelled. Database update requires administrator privileges."
+msgstr ""
+"Authentifizierung abgebrochen. Datenbankaktualisierung erfordert "
+"Administratorrechte."
 
-#: src/core/updater.py:736
+#: src/core/updater.py:841
 msgid "Authorization failed. You are not authorized to update the database."
-msgstr "Autorisierung fehlgeschlagen. Sie sind nicht berechtigt, die Datenbank zu aktualisieren."
+msgstr ""
+"Autorisierung fehlgeschlagen. Sie sind nicht berechtigt, die Datenbank zu "
+"aktualisieren."
 
-#: src/core/updater.py:749
+#: src/core/updater.py:854
 msgid "Update rate limited by mirror. Please wait a few minutes and try again."
-msgstr "Aktualisierung durch Mirror ratenbegrenzt. Bitte warten Sie einige Minuten und versuchen Sie es erneut."
+msgstr ""
+"Aktualisierung durch Mirror ratenbegrenzt. Bitte warten Sie einige Minuten "
+"und versuchen Sie es erneut."
 
-#: src/core/updater.py:754
-msgid "Update blocked by CDN. This may be due to rate limiting. Please wait and try again later."
-msgstr "Aktualisierung durch CDN blockiert. Dies kann auf Ratenbegrenzung zurückzuführen sein. Bitte warten Sie und versuchen Sie es später erneut."
+#: src/core/updater.py:859
+msgid ""
+"Update blocked by CDN. This may be due to rate limiting. Please wait and try "
+"again later."
+msgstr ""
+"Aktualisierung durch CDN blockiert. Dies kann auf Ratenbegrenzung "
+"zurückzuführen sein. Bitte warten Sie und versuchen Sie es später erneut."
 
-#: src/core/updater.py:760
+#: src/core/updater.py:865
 msgid "ClamAV mirror is currently unavailable. Please try again later."
-msgstr "ClamAV-Mirror ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut."
+msgstr ""
+"ClamAV-Mirror ist derzeit nicht verfügbar. Bitte versuchen Sie es später "
+"erneut."
 
-#: src/core/updater.py:766
+#: src/core/updater.py:871
 msgid "SSL/TLS certificate error. The mirror may have configuration issues."
-msgstr "SSL/TLS-Zertifikatfehler. Der Mirror hat möglicherweise Konfigurationsprobleme."
+msgstr ""
+"SSL/TLS-Zertifikatfehler. Der Mirror hat möglicherweise "
+"Konfigurationsprobleme."
 
-#: src/core/updater.py:770
+#: src/core/updater.py:875
 msgid "Connection timed out. Please check your network connection."
-msgstr "Verbindung hat Zeitlimit überschritten. Bitte überprüfen Sie Ihre Netzwerkverbindung."
+msgstr ""
+"Verbindung hat Zeitlimit überschritten. Bitte überprüfen Sie Ihre "
+"Netzwerkverbindung."
 
-#: src/core/updater.py:774
+#: src/core/updater.py:879
 msgid "Authorization failed. Please try again and enter your password."
-msgstr "Autorisierung fehlgeschlagen. Bitte versuchen Sie es erneut und geben Sie Ihr Passwort ein."
+msgstr ""
+"Autorisierung fehlgeschlagen. Bitte versuchen Sie es erneut und geben Sie "
+"Ihr Passwort ein."
 
-#: src/core/updater.py:778
+#: src/core/updater.py:883
 msgid "Database is locked. Another freshclam instance may be running."
-msgstr "Datenbank ist gesperrt. Möglicherweise läuft eine andere freshclam-Instanz."
+msgstr ""
+"Datenbank ist gesperrt. Möglicherweise läuft eine andere freshclam-Instanz."
 
-#: src/core/updater.py:782
-msgid "Permission denied. You may need elevated privileges to update the database."
-msgstr "Zugriff verweigert. Sie benötigen möglicherweise erweiterte Rechte, um die Datenbank zu aktualisieren."
+#: src/core/updater.py:887
+msgid ""
+"Permission denied. You may need elevated privileges to update the database."
+msgstr ""
+"Zugriff verweigert. Sie benötigen möglicherweise erweiterte Rechte, um die "
+"Datenbank zu aktualisieren."
 
-#: src/core/updater.py:786
+#: src/core/updater.py:891
 msgid "Connection error. Please check your network connection."
 msgstr "Verbindungsfehler. Bitte überprüfen Sie Ihre Netzwerkverbindung."
 
-#: src/core/updater.py:790
+#: src/core/updater.py:895
 msgid "DNS resolution failed. Please check your network settings."
-msgstr "DNS-Auflösung fehlgeschlagen. Bitte überprüfen Sie Ihre Netzwerkeinstellungen."
+msgstr ""
+"DNS-Auflösung fehlgeschlagen. Bitte überprüfen Sie Ihre "
+"Netzwerkeinstellungen."
 
-#: src/core/updater.py:796
+#: src/core/updater.py:901
 msgid "Update failed with an unknown error. Check the logs for details."
-msgstr "Aktualisierung mit unbekanntem Fehler fehlgeschlagen. Details finden Sie in den Protokollen."
+msgstr ""
+"Aktualisierung mit unbekanntem Fehler fehlgeschlagen. Details finden Sie in "
+"den Protokollen."
 
-#: src/core/updater.py:808
+#: src/core/updater.py:913
 #, python-brace-format
 msgid "Database update completed - {count} database(s) updated"
-msgstr "Datenbankaktualisierung abgeschlossen - {count} Datenbank(en) aktualisiert"
+msgstr ""
+"Datenbankaktualisierung abgeschlossen - {count} Datenbank(en) aktualisiert"
 
-#: src/core/updater.py:812
+#: src/core/updater.py:917
 msgid "Database update completed - Already up to date"
 msgstr "Datenbankaktualisierung abgeschlossen - Bereits aktuell"
 
-#: src/core/updater.py:814
+#: src/core/updater.py:919
 msgid "Database update cancelled"
 msgstr "Datenbankaktualisierung abgebrochen"
 
-#: src/core/updater.py:816
+#: src/core/updater.py:921
 #, python-brace-format
 msgid "Database update failed: {error}"
 msgstr "Datenbankaktualisierung fehlgeschlagen: {error}"
 
-#: src/core/updater.py:817 src/ui/scan_results_dialog.py:223
+#: src/core/updater.py:922 src/ui/scan_results_dialog.py:223
 #: src/ui/virustotal_results_dialog.py:197
 msgid "Unknown error"
 msgstr "Unbekannter Fehler"
@@ -899,7 +995,8 @@ msgstr "Kopiere..."
 #: src/ui/clipboard_helper.py:189
 #, python-brace-format
 msgid "Content too large ({size}). Use export to save to file."
-msgstr "Inhalt zu groß ({size}). Verwenden Sie Export, um in Datei zu speichern."
+msgstr ""
+"Inhalt zu groß ({size}). Verwenden Sie Export, um in Datei zu speichern."
 
 #: src/ui/close_behavior_dialog.py:68
 msgid "Close Application?"
@@ -946,24 +1043,36 @@ msgid "clamscan Installation"
 msgstr "clamscan-Installation"
 
 #: src/ui/components_view.py:37
-msgid "clamscan is the on-demand virus scanner. After installation, update the virus database with freshclam."
-msgstr "clamscan ist der bedarfsgesteuerte Virenscanner. Nach der Installation aktualisieren Sie die Virendatenbank mit freshclam."
+msgid ""
+"clamscan is the on-demand virus scanner. After installation, update the "
+"virus database with freshclam."
+msgstr ""
+"clamscan ist der bedarfsgesteuerte Virenscanner. Nach der Installation "
+"aktualisieren Sie die Virendatenbank mit freshclam."
 
 #: src/ui/components_view.py:41
 msgid "freshclam Installation"
 msgstr "freshclam-Installation"
 
 #: src/ui/components_view.py:48
-msgid "freshclam updates the virus database. Enable the service for automatic updates:"
-msgstr "freshclam aktualisiert die Virendatenbank. Aktivieren Sie den Dienst für automatische Aktualisierungen:"
+msgid ""
+"freshclam updates the virus database. Enable the service for automatic "
+"updates:"
+msgstr ""
+"freshclam aktualisiert die Virendatenbank. Aktivieren Sie den Dienst für "
+"automatische Aktualisierungen:"
 
 #: src/ui/components_view.py:53
 msgid "clamdscan Installation"
 msgstr "clamdscan-Installation"
 
 #: src/ui/components_view.py:60
-msgid "clamdscan is a client for the clamd daemon, providing faster scanning. Requires clamd daemon to be running."
-msgstr "clamdscan ist ein Client für den clamd-Daemon und ermöglicht schnelleres Scannen. Erfordert laufenden clamd-Daemon."
+msgid ""
+"clamdscan is a client for the clamd daemon, providing faster scanning. "
+"Requires clamd daemon to be running."
+msgstr ""
+"clamdscan ist ein Client für den clamd-Daemon und ermöglicht schnelleres "
+"Scannen. Erfordert laufenden clamd-Daemon."
 
 #: src/ui/components_view.py:64
 msgid "clamd Daemon Setup"
@@ -983,7 +1092,8 @@ msgstr "ClamAV-Komponenten"
 
 #: src/ui/components_view.py:143
 msgid "Check the status of ClamAV components and get setup instructions"
-msgstr "Status der ClamAV-Komponenten überprüfen und Einrichtungsanleitungen erhalten"
+msgstr ""
+"Status der ClamAV-Komponenten überprüfen und Einrichtungsanleitungen erhalten"
 
 #: src/ui/components_view.py:148
 msgid "Component Status"
@@ -991,15 +1101,20 @@ msgstr "Komponentenstatus"
 
 #: src/ui/components_view.py:149
 msgid "View installation status and setup guides for ClamAV tools"
-msgstr "Installationsstatus und Einrichtungsanleitungen für ClamAV-Tools anzeigen"
+msgstr ""
+"Installationsstatus und Einrichtungsanleitungen für ClamAV-Tools anzeigen"
 
 #: src/ui/components_view.py:164
 msgid "Components Status"
 msgstr "Komponentenstatus"
 
 #: src/ui/components_view.py:169
-msgid "clamscan and freshclam are bundled with the Flatpak. Daemon components run on the host system via flatpak-spawn."
-msgstr "clamscan und freshclam sind im Flatpak enthalten. Daemon-Komponenten laufen auf dem Hostsystem via flatpak-spawn."
+msgid ""
+"clamscan and freshclam are bundled with the Flatpak. Daemon components run "
+"on the host system via flatpak-spawn."
+msgstr ""
+"clamscan und freshclam sind im Flatpak enthalten. Daemon-Komponenten laufen "
+"auf dem Hostsystem via flatpak-spawn."
 
 #: src/ui/components_view.py:175
 msgid "Expand each component for installation instructions"
@@ -1035,12 +1150,18 @@ msgid "Copy to clipboard"
 msgstr "In Zwischenablage kopieren"
 
 #: src/ui/components_view.py:384
-msgid "clamscan is bundled with the Flatpak package. No installation is required."
-msgstr "clamscan ist im Flatpak-Paket enthalten. Keine Installation erforderlich."
+msgid ""
+"clamscan is bundled with the Flatpak package. No installation is required."
+msgstr ""
+"clamscan ist im Flatpak-Paket enthalten. Keine Installation erforderlich."
 
 #: src/ui/components_view.py:388
-msgid "freshclam is bundled with the Flatpak package. No installation is required. The virus database is automatically stored in the Flatpak sandbox."
-msgstr "freshclam ist im Flatpak-Paket enthalten. Keine Installation erforderlich. Die Virendatenbank wird automatisch in der Flatpak-Sandbox gespeichert."
+msgid ""
+"freshclam is bundled with the Flatpak package. No installation is required. "
+"The virus database is automatically stored in the Flatpak sandbox."
+msgstr ""
+"freshclam ist im Flatpak-Paket enthalten. Keine Installation erforderlich. "
+"Die Virendatenbank wird automatisch in der Flatpak-Sandbox gespeichert."
 
 #: src/ui/components_view.py:434 src/ui/preferences/scanner_page.py:194
 msgid "Refresh Status"
@@ -1111,8 +1232,12 @@ msgid "<b>Virus Database Not Found</b>"
 msgstr "<b>Virendatenbank nicht gefunden</b>"
 
 #: src/ui/database_missing_dialog.py:116
-msgid "ClamAV requires a virus database to scan files. The database needs to be downloaded before you can perform scans."
-msgstr "ClamAV benötigt eine Virendatenbank zum Scannen von Dateien. Die Datenbank muss heruntergeladen werden, bevor Sie Scans durchführen können."
+msgid ""
+"ClamAV requires a virus database to scan files. The database needs to be "
+"downloaded before you can perform scans."
+msgstr ""
+"ClamAV benötigt eine Virendatenbank zum Scannen von Dateien. Die Datenbank "
+"muss heruntergeladen werden, bevor Sie Scans durchführen können."
 
 #: src/ui/database_missing_dialog.py:137
 msgid "Download Now"
@@ -1159,16 +1284,26 @@ msgid "Add Context Menu Actions"
 msgstr "Kontextmenü-Aktionen hinzufügen"
 
 #: src/ui/file_manager_integration_dialog.py:130
-msgid "ClamUI can add 'Scan with ClamUI' options to your file manager's right-click menu. This makes it easy to scan files and folders directly from your file browser."
-msgstr "ClamUI kann 'Mit ClamUI scannen'-Optionen zum Kontextmenü Ihres Dateimanagers hinzufügen. Dies erleichtert das Scannen von Dateien und Ordnern direkt aus Ihrem Dateibrowser."
+msgid ""
+"ClamUI can add 'Scan with ClamUI' options to your file manager's right-click "
+"menu. This makes it easy to scan files and folders directly from your file "
+"browser."
+msgstr ""
+"ClamUI kann 'Mit ClamUI scannen'-Optionen zum Kontextmenü Ihres "
+"Dateimanagers hinzufügen. Dies erleichtert das Scannen von Dateien und "
+"Ordnern direkt aus Ihrem Dateibrowser."
 
 #: src/ui/file_manager_integration_dialog.py:138
 msgid "What gets installed?"
 msgstr "Was wird installiert?"
 
 #: src/ui/file_manager_integration_dialog.py:141
-msgid "Small configuration files are added to your user profile. No system files are modified."
-msgstr "Kleine Konfigurationsdateien werden Ihrem Benutzerprofil hinzugefügt. Keine Systemdateien werden verändert."
+msgid ""
+"Small configuration files are added to your user profile. No system files "
+"are modified."
+msgstr ""
+"Kleine Konfigurationsdateien werden Ihrem Benutzerprofil hinzugefügt. Keine "
+"Systemdateien werden verändert."
 
 #: src/ui/file_manager_integration_dialog.py:156
 msgid "Available File Managers"
@@ -1220,8 +1355,12 @@ msgid "Clear All Logs?"
 msgstr "Alle Logs löschen?"
 
 #: src/ui/logs_view.py:55
-msgid "This will permanently delete all historical logs. This action cannot be undone."
-msgstr "Dies löscht alle historischen Logs dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden."
+msgid ""
+"This will permanently delete all historical logs. This action cannot be "
+"undone."
+msgstr ""
+"Dies löscht alle historischen Logs dauerhaft. Diese Aktion kann nicht "
+"rückgängig gemacht werden."
 
 #: src/ui/logs_view.py:109 src/ui/logs_view.py:287
 msgid "Clear All"
@@ -1317,7 +1456,9 @@ msgstr "Daemon-Logs erscheinen hier."
 
 #: src/ui/logs_view.py:543
 msgid "Click the play button to start live updates."
-msgstr "Klicken Sie auf die Wiedergabe-Schaltfläche, um Live-Aktualisierungen zu starten."
+msgstr ""
+"Klicken Sie auf die Wiedergabe-Schaltfläche, um Live-Aktualisierungen zu "
+"starten."
 
 #: src/ui/logs_view.py:755
 msgid "SCAN LOG"
@@ -1395,8 +1536,16 @@ msgid "Full Output:"
 msgstr "Vollständige Ausgabe:"
 
 #: src/ui/logs_view.py:1251
-msgid "ClamAV daemon (clamd) is not installed.\n\nThe daemon is optional and provides faster scanning.\nYou can still use ClamUI for on-demand scanning without it."
-msgstr "ClamAV-Daemon (clamd) ist nicht installiert.\n\nDer Daemon ist optional und ermöglicht schnelleres Scannen.\nSie können ClamUI weiterhin für manuelle Scans verwenden."
+msgid ""
+"ClamAV daemon (clamd) is not installed.\n"
+"\n"
+"The daemon is optional and provides faster scanning.\n"
+"You can still use ClamUI for on-demand scanning without it."
+msgstr ""
+"ClamAV-Daemon (clamd) ist nicht installiert.\n"
+"\n"
+"Der Daemon ist optional und ermöglicht schnelleres Scannen.\n"
+"Sie können ClamUI weiterhin für manuelle Scans verwenden."
 
 #: src/ui/logs_view.py:1270
 msgid "Stop live log updates"
@@ -1480,8 +1629,12 @@ msgid "Window Behavior"
 msgstr "Fensterverhalten"
 
 #: src/ui/preferences/behavior_page.py:93
-msgid "System tray is not available. Window behavior settings require a system tray to be active."
-msgstr "Systemleiste nicht verfügbar. Fensterverhalten-Einstellungen erfordern eine aktive Systemleiste."
+msgid ""
+"System tray is not available. Window behavior settings require a system tray "
+"to be active."
+msgstr ""
+"Systemleiste nicht verfügbar. Fensterverhalten-Einstellungen erfordern eine "
+"aktive Systemleiste."
 
 #: src/ui/preferences/behavior_page.py:119
 msgid "Configure what happens when closing the window"
@@ -1513,7 +1666,9 @@ msgstr "Dateien in Echtzeit mit detailliertem Fortschritt anzeigen"
 
 #: src/ui/preferences/behavior_page.py:216
 msgid "Add context menu actions to scan files directly from your file manager"
-msgstr "Kontextmenü-Aktionen hinzufügen, um Dateien direkt aus Ihrem Dateimanager zu scannen"
+msgstr ""
+"Kontextmenü-Aktionen hinzufügen, um Dateien direkt aus Ihrem Dateimanager zu "
+"scannen"
 
 #: src/ui/preferences/behavior_page.py:220
 msgid "Configure Integration"
@@ -1523,140 +1678,208 @@ msgstr "Integration konfigurieren"
 msgid "Install or manage 'Scan with ClamUI' menu actions"
 msgstr "'Mit ClamUI scannen'-Menüaktionen installieren oder verwalten"
 
-#: src/ui/preferences/database_page.py:124
+#: src/ui/preferences/database_page.py:60
+msgid "Free malware URL blocklist by abuse.ch, updated every minute"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:61
+#: src/ui/preferences/database_page.py:93
+msgid "No registration required. Click 'Suggested' above to add."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:69
+msgid "Millions of signatures for zero-day malware, phishing, and spam"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:71
+msgid ""
+"Free registration required at securiteinfo.com. URLs contain your personal "
+"API key."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:80
+msgid "Macro malware, phishing, scam, and spam signatures (hourly updates)"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:82
+msgid ""
+"Requires 'fangfrisch' or 'clamav-unofficial-sigs' tool. Cannot be added as "
+"custom URL directly."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:92
+msgid "Hash-based signatures, web shell detection, and general malware"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:184
 msgid "Database Updates"
 msgstr "Datenbank-Aktualisierungen"
 
-#: src/ui/preferences/database_page.py:134
+#: src/ui/preferences/database_page.py:194
 #: src/ui/preferences/scanner_page.py:91
 msgid "Configuration File"
 msgstr "Konfigurationsdatei"
 
-#: src/ui/preferences/database_page.py:134
+#: src/ui/preferences/database_page.py:194
 msgid "freshclam.conf location"
 msgstr "freshclam.conf-Speicherort"
 
-#: src/ui/preferences/database_page.py:169
+#: src/ui/preferences/database_page.py:232
 msgid "Paths"
 msgstr "Pfade"
 
-#: src/ui/preferences/database_page.py:170
+#: src/ui/preferences/database_page.py:233
 msgid "Configure database and log file locations"
 msgstr "Datenbank- und Log-Datei-Speicherorte konfigurieren"
 
-#: src/ui/preferences/database_page.py:175
+#: src/ui/preferences/database_page.py:238
 msgid "Database Directory"
 msgstr "Datenbank-Verzeichnis"
 
-#: src/ui/preferences/database_page.py:185
+#: src/ui/preferences/database_page.py:248
 msgid "Update Log File"
 msgstr "Aktualisierungs-Log-Datei"
 
-#: src/ui/preferences/database_page.py:195
+#: src/ui/preferences/database_page.py:258
 msgid "Notify ClamD Config"
 msgstr "ClamD-Konfiguration benachrichtigen"
 
-#: src/ui/preferences/database_page.py:205
+#: src/ui/preferences/database_page.py:268
 #: src/ui/preferences/scanner_page.py:548
 msgid "Verbose Logging"
 msgstr "Ausführliche Protokollierung"
 
-#: src/ui/preferences/database_page.py:206
+#: src/ui/preferences/database_page.py:269
 msgid "Enable detailed logging for database updates"
 msgstr "Detaillierte Protokollierung für Datenbank-Aktualisierungen aktivieren"
 
-#: src/ui/preferences/database_page.py:212
+#: src/ui/preferences/database_page.py:275
 #: src/ui/preferences/scanner_page.py:555
 msgid "Syslog Logging"
 msgstr "Syslog-Protokollierung"
 
-#: src/ui/preferences/database_page.py:213
+#: src/ui/preferences/database_page.py:276
 #: src/ui/preferences/scanner_page.py:556
 msgid "Send log messages to system log"
 msgstr "Log-Nachrichten an Systemprotokoll senden"
 
-#: src/ui/preferences/database_page.py:234
+#: src/ui/preferences/database_page.py:297
 msgid "Update Behavior"
 msgstr "Aktualisierungsverhalten"
 
-#: src/ui/preferences/database_page.py:235
+#: src/ui/preferences/database_page.py:298
 msgid "Configure how often and where to check for updates"
 msgstr "Konfigurieren Sie, wie oft und wo nach Aktualisierungen gesucht wird"
 
-#: src/ui/preferences/database_page.py:243
+#: src/ui/preferences/database_page.py:306
 msgid "Checks Per Day"
 msgstr "Überprüfungen pro Tag"
 
-#: src/ui/preferences/database_page.py:244
+#: src/ui/preferences/database_page.py:307
 msgid "Number of update checks per day (0 to disable)"
 msgstr "Anzahl der Aktualisierungsprüfungen pro Tag (0 zum Deaktivieren)"
 
-#: src/ui/preferences/database_page.py:255
+#: src/ui/preferences/database_page.py:318
 msgid "Database Mirror"
 msgstr "Datenbank-Spiegelserver"
 
-#: src/ui/preferences/database_page.py:283
+#: src/ui/preferences/database_page.py:346
 msgid "Custom Signature Databases"
 msgstr "Benutzerdefinierte Signaturdatenbanken"
 
-#: src/ui/preferences/database_page.py:286
-msgid "Third-party signature URLs (e.g., SecuriteInfo). Paste URLs or config lines - 'DatabaseCustomURL' prefix auto-stripped."
-msgstr "Drittanbieter-Signatur-URLs (z.B. SecuriteInfo). Fügen Sie URLs oder Konfigurationszeilen ein - 'DatabaseCustomURL'-Präfix wird automatisch entfernt."
+#: src/ui/preferences/database_page.py:349
+msgid ""
+"Third-party signature URLs (e.g., SecuriteInfo). Paste URLs or config lines "
+"- 'DatabaseCustomURL' prefix auto-stripped."
+msgstr ""
+"Drittanbieter-Signatur-URLs (z.B. SecuriteInfo). Fügen Sie URLs oder "
+"Konfigurationszeilen ein - 'DatabaseCustomURL'-Präfix wird automatisch "
+"entfernt."
 
-#: src/ui/preferences/database_page.py:298
+#: src/ui/preferences/database_page.py:361
 msgid "Add URL(s)"
 msgstr "URL(s) hinzufügen"
 
-#: src/ui/preferences/database_page.py:299
+#: src/ui/preferences/database_page.py:362
 msgid "Paste URL or multi-line config block"
 msgstr "URL oder mehrzeiligen Konfigurationsblock einfügen"
 
-#: src/ui/preferences/database_page.py:309
+#: src/ui/preferences/database_page.py:372
 #: src/ui/preferences/exclusions_page.py:134 src/ui/profile_dialogs.py:706
 msgid "Add"
 msgstr "Hinzufügen"
 
-#: src/ui/preferences/database_page.py:310
+#: src/ui/preferences/database_page.py:373
 msgid "Add custom signature URL(s)"
 msgstr "Benutzerdefinierte Signatur-URL(s) hinzufügen"
 
-#: src/ui/preferences/database_page.py:318
+#: src/ui/preferences/database_page.py:381
 msgid "Suggested"
 msgstr "Vorgeschlagen"
 
-#: src/ui/preferences/database_page.py:319
-msgid "Add free community signature databases (URLhaus)"
+#: src/ui/preferences/database_page.py:383
+#, fuzzy
+msgid "Add free community signature databases (URLhaus, InterServer)"
 msgstr "Kostenlose Community-Signaturdatenbanken hinzufügen (URLhaus)"
 
-#: src/ui/preferences/database_page.py:373
+#: src/ui/preferences/database_page.py:438
 msgid "Remove this URL"
 msgstr "Diese URL entfernen"
 
-#: src/ui/preferences/database_page.py:443
+#: src/ui/preferences/database_page.py:503
+msgid "Popular Signature Providers"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:506
+msgid ""
+"Third-party databases can significantly improve detection rates. Providers "
+"marked with a key icon require free registration."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:518
+msgid "Registration required"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:532
+#, fuzzy
+msgid "Free registration required"
+msgstr "Profilname ist erforderlich"
+
+#: src/ui/preferences/database_page.py:542
+msgid "Tip: fangfrisch"
+msgstr ""
+
+#: src/ui/preferences/database_page.py:545
+msgid ""
+"For SaneSecurity and other rsync-based providers, install the 'fangfrisch' "
+"tool which handles downloading and updating signatures automatically."
+msgstr ""
+
+#: src/ui/preferences/database_page.py:577
 msgid "Proxy Settings"
 msgstr "Proxy-Einstellungen"
 
-#: src/ui/preferences/database_page.py:444
+#: src/ui/preferences/database_page.py:578
 msgid "Configure HTTP proxy for database downloads (optional)"
 msgstr "HTTP-Proxy für Datenbank-Downloads konfigurieren (optional)"
 
-#: src/ui/preferences/database_page.py:449
+#: src/ui/preferences/database_page.py:583
 msgid "Proxy Server"
 msgstr "Proxy-Server"
 
-#: src/ui/preferences/database_page.py:462
+#: src/ui/preferences/database_page.py:596
 msgid "Proxy Port"
 msgstr "Proxy-Port"
 
-#: src/ui/preferences/database_page.py:463
+#: src/ui/preferences/database_page.py:597
 msgid "Proxy server port number (0 to disable)"
 msgstr "Proxy-Server-Portnummer (0 zum Deaktivieren)"
 
-#: src/ui/preferences/database_page.py:474
+#: src/ui/preferences/database_page.py:608
 msgid "Proxy Username"
 msgstr "Proxy-Benutzername"
 
-#: src/ui/preferences/database_page.py:486
+#: src/ui/preferences/database_page.py:620
 msgid "Proxy Password"
 msgstr "Proxy-Passwort"
 
@@ -1685,8 +1908,12 @@ msgid "Logging Settings"
 msgstr "Protokollierungseinstellungen"
 
 #: src/ui/preferences/debug_page.py:110
-msgid "Configure debug logging for troubleshooting. Higher levels produce more detailed logs but use more disk space."
-msgstr "Debug-Protokollierung zur Fehlerbehebung konfigurieren. Höhere Stufen erzeugen detailliertere Protokolle, benötigen aber mehr Speicherplatz."
+msgid ""
+"Configure debug logging for troubleshooting. Higher levels produce more "
+"detailed logs but use more disk space."
+msgstr ""
+"Debug-Protokollierung zur Fehlerbehebung konfigurieren. Höhere Stufen "
+"erzeugen detailliertere Protokolle, benötigen aber mehr Speicherplatz."
 
 #: src/ui/preferences/debug_page.py:117
 msgid "Log Level"
@@ -1714,7 +1941,8 @@ msgstr "Protokollverwaltung"
 
 #: src/ui/preferences/debug_page.py:171
 msgid "Export logs for sharing or clear them to free disk space."
-msgstr "Protokolle zum Teilen exportieren oder löschen, um Speicherplatz freizugeben."
+msgstr ""
+"Protokolle zum Teilen exportieren oder löschen, um Speicherplatz freizugeben."
 
 #: src/ui/preferences/debug_page.py:175
 msgid "Current Log Size"
@@ -1875,8 +2103,12 @@ msgid "No Logs to Export"
 msgstr "Keine Protokolle zum Exportieren"
 
 #: src/ui/preferences/debug_page.py:561
-msgid "There are no log files to export. Logs will be created when debug logging is enabled and the application runs."
-msgstr "Es gibt keine Protokolldateien zum Exportieren. Protokolle werden erstellt, wenn die Debug-Protokollierung aktiviert ist und die Anwendung läuft."
+msgid ""
+"There are no log files to export. Logs will be created when debug logging is "
+"enabled and the application runs."
+msgstr ""
+"Es gibt keine Protokolldateien zum Exportieren. Protokolle werden erstellt, "
+"wenn die Debug-Protokollierung aktiviert ist und die Anwendung läuft."
 
 #: src/ui/preferences/exclusions_page.py:31
 msgid "Node.js dependencies"
@@ -2056,7 +2288,8 @@ msgstr "Scan-Loop-Prävention"
 
 #: src/ui/preferences/onaccess_page.py:287
 msgid "CRITICAL: Set at least one to prevent infinite loops"
-msgstr "KRITISCH: Mindestens eine Option setzen, um Endlosschleifen zu verhindern"
+msgstr ""
+"KRITISCH: Mindestens eine Option setzen, um Endlosschleifen zu verhindern"
 
 #: src/ui/preferences/onaccess_page.py:292
 msgid "Required Configuration"
@@ -2123,16 +2356,40 @@ msgid "Configuration Error"
 msgstr "Konfigurationsfehler"
 
 #: src/ui/preferences/save_page.py:282
-msgid "Cannot save freshclam settings: Configuration failed to load.\n\nThis may be due to:\n- Missing configuration file\n- Insufficient permissions\n- Disk space issues (Flatpak)\n\nCheck the application logs for details."
-msgstr "freshclam-Einstellungen können nicht gespeichert werden: Konfiguration konnte nicht geladen werden.\n\nMögliche Ursachen:\n- Fehlende Konfigurationsdatei\n- Unzureichende Berechtigungen\n- Speicherplatzprobleme (Flatpak)\n\nPrüfen Sie die Anwendungsprotokolle für Details."
+msgid ""
+"Cannot save freshclam settings: Configuration failed to load.\n"
+"\n"
+"This may be due to:\n"
+"- Missing configuration file\n"
+"- Insufficient permissions\n"
+"- Disk space issues (Flatpak)\n"
+"\n"
+"Check the application logs for details."
+msgstr ""
+"freshclam-Einstellungen können nicht gespeichert werden: Konfiguration "
+"konnte nicht geladen werden.\n"
+"\n"
+"Mögliche Ursachen:\n"
+"- Fehlende Konfigurationsdatei\n"
+"- Unzureichende Berechtigungen\n"
+"- Speicherplatzprobleme (Flatpak)\n"
+"\n"
+"Prüfen Sie die Anwendungsprotokolle für Details."
 
 #: src/ui/preferences/save_page.py:296 src/ui/preferences/save_page.py:316
 msgid "Validation Error"
 msgstr "Validierungsfehler"
 
 #: src/ui/preferences/save_page.py:306
-msgid "Cannot save clamd settings: Configuration failed to load.\n\nCheck that /etc/clamav/clamd.conf exists and is readable."
-msgstr "clamd-Einstellungen können nicht gespeichert werden: Konfiguration konnte nicht geladen werden.\n\nPrüfen Sie, ob /etc/clamav/clamd.conf vorhanden und lesbar ist."
+msgid ""
+"Cannot save clamd settings: Configuration failed to load.\n"
+"\n"
+"Check that /etc/clamav/clamd.conf exists and is readable."
+msgstr ""
+"clamd-Einstellungen können nicht gespeichert werden: Konfiguration konnte "
+"nicht geladen werden.\n"
+"\n"
+"Prüfen Sie, ob /etc/clamav/clamd.conf vorhanden und lesbar ist."
 
 #: src/ui/preferences/save_page.py:429
 msgid "Configuration Saved"
@@ -2168,8 +2425,12 @@ msgid "Scan Backend"
 msgstr "Scan-Backend"
 
 #: src/ui/preferences/scanner_page.py:148
-msgid "Select how ClamUI performs scans. Daemon runs on host via flatpak-spawn. Auto-saved."
-msgstr "Wählen Sie, wie ClamUI Scans durchführt. Daemon läuft auf dem Host über flatpak-spawn. Automatisch gespeichert."
+msgid ""
+"Select how ClamUI performs scans. Daemon runs on host via flatpak-spawn. "
+"Auto-saved."
+msgstr ""
+"Wählen Sie, wie ClamUI Scans durchführt. Daemon läuft auf dem Host über "
+"flatpak-spawn. Automatisch gespeichert."
 
 #: src/ui/preferences/scanner_page.py:152
 msgid "Select how ClamUI performs scans. Auto-saved."
@@ -2207,24 +2468,39 @@ msgid "About scan backends"
 msgstr "Über Scan-Backends"
 
 #: src/ui/preferences/scanner_page.py:232
-msgid "Recommended — Automatically uses daemon if available, falls back to clamscan for reliability"
-msgstr "Empfohlen — Verwendet automatisch Daemon, falls verfügbar, Fallback auf clamscan für Zuverlässigkeit"
+msgid ""
+"Recommended — Automatically uses daemon if available, falls back to clamscan "
+"for reliability"
+msgstr ""
+"Empfohlen — Verwendet automatisch Daemon, falls verfügbar, Fallback auf "
+"clamscan für Zuverlässigkeit"
 
 #: src/ui/preferences/scanner_page.py:235
-msgid "Fastest — Instant startup with in-memory database, requires clamd service running"
-msgstr "Am schnellsten — Sofortstart mit In-Memory-Datenbank, erfordert laufenden clamd-Dienst"
+msgid ""
+"Fastest — Instant startup with in-memory database, requires clamd service "
+"running"
+msgstr ""
+"Am schnellsten — Sofortstart mit In-Memory-Datenbank, erfordert laufenden "
+"clamd-Dienst"
 
 #: src/ui/preferences/scanner_page.py:237
-msgid "Most compatible — Works anywhere, loads database each scan (3-10 sec startup)"
-msgstr "Am kompatibelsten — Funktioniert überall, lädt Datenbank bei jedem Scan (3-10 Sek. Startzeit)"
+msgid ""
+"Most compatible — Works anywhere, loads database each scan (3-10 sec startup)"
+msgstr ""
+"Am kompatibelsten — Funktioniert überall, lädt Datenbank bei jedem Scan "
+"(3-10 Sek. Startzeit)"
 
 #: src/ui/preferences/scanner_page.py:304
 msgid "Documentation Not Found"
 msgstr "Dokumentation nicht gefunden"
 
 #: src/ui/preferences/scanner_page.py:306
-msgid "The scan backends documentation file could not be found. It may have been moved or deleted."
-msgstr "Die Scan-Backends-Dokumentationsdatei konnte nicht gefunden werden. Sie wurde möglicherweise verschoben oder gelöscht."
+msgid ""
+"The scan backends documentation file could not be found. It may have been "
+"moved or deleted."
+msgstr ""
+"Die Scan-Backends-Dokumentationsdatei konnte nicht gefunden werden. Sie "
+"wurde möglicherweise verschoben oder gelöscht."
 
 #: src/ui/preferences/scanner_page.py:323
 msgid "Error Opening Documentation"
@@ -2349,7 +2625,8 @@ msgstr "Konfiguration geplanter Scans"
 
 #: src/ui/preferences/scheduled_page.py:91
 msgid "Configure automatic scanning. Save with 'Save &amp; Apply'."
-msgstr "Automatisches Scannen konfigurieren. Mit 'Speichern & Anwenden' speichern."
+msgstr ""
+"Automatisches Scannen konfigurieren. Mit 'Speichern & Anwenden' speichern."
 
 #: src/ui/preferences/scheduled_page.py:95
 msgid "Enable Scheduled Scans"
@@ -2555,8 +2832,12 @@ msgid "Delete API Key?"
 msgstr "API-Schlüssel löschen?"
 
 #: src/ui/preferences/virustotal_page.py:345
-msgid "This will remove your VirusTotal API key. You'll need to enter it again to use VirusTotal scanning."
-msgstr "Dies entfernt Ihren VirusTotal API-Schlüssel. Sie müssen ihn erneut eingeben, um VirusTotal-Scans zu verwenden."
+msgid ""
+"This will remove your VirusTotal API key. You'll need to enter it again to "
+"use VirusTotal scanning."
+msgstr ""
+"Dies entfernt Ihren VirusTotal API-Schlüssel. Sie müssen ihn erneut "
+"eingeben, um VirusTotal-Scans zu verwenden."
 
 #: src/ui/preferences/virustotal_page.py:369
 msgid "API key deleted"
@@ -2652,7 +2933,9 @@ msgstr "Keine Ziele hinzugefügt"
 
 #: src/ui/profile_dialogs.py:213
 msgid "Click the folder or file button to add scan targets"
-msgstr "Klicken Sie auf die Ordner- oder Datei-Schaltfläche, um Scan-Ziele hinzuzufügen"
+msgstr ""
+"Klicken Sie auf die Ordner- oder Datei-Schaltfläche, um Scan-Ziele "
+"hinzuzufügen"
 
 #: src/ui/profile_dialogs.py:226
 msgid "Paths and patterns to skip during scan"
@@ -2672,7 +2955,8 @@ msgstr "Keine Ausschlüsse hinzugefügt"
 
 #: src/ui/profile_dialogs.py:257
 msgid "Add paths or patterns to exclude from scanning"
-msgstr "Fügen Sie Pfade oder Muster hinzu, die vom Scan ausgeschlossen werden sollen"
+msgstr ""
+"Fügen Sie Pfade oder Muster hinzu, die vom Scan ausgeschlossen werden sollen"
 
 #: src/ui/profile_dialogs.py:291 src/ui/profile_dialogs.py:590
 msgid "Profile name is required"
@@ -2727,7 +3011,9 @@ msgstr "Ausschlussmuster hinzufügen"
 
 #: src/ui/profile_dialogs.py:724
 msgid "Enter a glob pattern to exclude (e.g., *.tmp, .git/*, cache/*)"
-msgstr "Geben Sie ein Glob-Muster ein, das ausgeschlossen werden soll (z.B. *.tmp, .git/*, cache/*)"
+msgstr ""
+"Geben Sie ein Glob-Muster ein, das ausgeschlossen werden soll (z.B. *.tmp, ."
+"git/*, cache/*)"
 
 #: src/ui/profile_dialogs.py:792
 msgid "Delete Profile?"
@@ -2747,8 +3033,13 @@ msgid "Restore Default Profiles?"
 msgstr "Standardprofile wiederherstellen?"
 
 #: src/ui/profile_dialogs.py:914
-msgid "This will reset Quick Scan, Full Scan, and Home Folder profiles to their original settings. Any changes you made to these profiles will be lost."
-msgstr "Dies setzt die Profile Schnellscan, Vollständiger Scan und Home-Ordner auf ihre ursprünglichen Einstellungen zurück. Alle Änderungen, die Sie an diesen Profilen vorgenommen haben, gehen verloren."
+msgid ""
+"This will reset Quick Scan, Full Scan, and Home Folder profiles to their "
+"original settings. Any changes you made to these profiles will be lost."
+msgstr ""
+"Dies setzt die Profile Schnellscan, Vollständiger Scan und Home-Ordner auf "
+"ihre ursprünglichen Einstellungen zurück. Alle Änderungen, die Sie an diesen "
+"Profilen vorgenommen haben, gehen verloren."
 
 #: src/ui/profile_dialogs.py:919
 msgid "Your custom profiles will not be affected."
@@ -2871,7 +3162,8 @@ msgstr "Alte Elemente löschen"
 
 #: src/ui/quarantine_view.py:221
 msgid "Remove quarantined files older than 30 days"
-msgstr "Unter Quarantäne gestellte Dateien entfernen, die älter als 30 Tage sind"
+msgstr ""
+"Unter Quarantäne gestellte Dateien entfernen, die älter als 30 Tage sind"
 
 #: src/ui/quarantine_view.py:252
 msgid "No Quarantined Files"
@@ -2955,8 +3247,12 @@ msgid "<b><big>Scan in Progress</big></b>"
 msgstr "<b><big>Scan läuft</big></b>"
 
 #: src/ui/scan_in_progress_dialog.py:111
-msgid "A virus scan is currently running. If you close now, the scan will be cancelled and any partial results will be lost."
-msgstr "Ein Virenscan läuft derzeit. Wenn Sie jetzt schließen, wird der Scan abgebrochen und alle Teilergebnisse gehen verloren."
+msgid ""
+"A virus scan is currently running. If you close now, the scan will be "
+"cancelled and any partial results will be lost."
+msgstr ""
+"Ein Virenscan läuft derzeit. Wenn Sie jetzt schließen, wird der Scan "
+"abgebrochen und alle Teilergebnisse gehen verloren."
 
 #: src/ui/scan_in_progress_dialog.py:122
 msgid "Do you want to cancel the scan and close?"
@@ -3061,8 +3357,11 @@ msgstr "... und {count} weitere"
 
 #: src/ui/scan_results_dialog.py:344
 #, python-brace-format
-msgid "<b>Large result set:</b> Found {count} threats. Displaying first {limit}."
-msgstr "<b>Große Ergebnismenge:</b> {count} Bedrohungen gefunden. Zeige die ersten {limit}."
+msgid ""
+"<b>Large result set:</b> Found {count} threats. Displaying first {limit}."
+msgstr ""
+"<b>Große Ergebnismenge:</b> {count} Bedrohungen gefunden. Zeige die ersten "
+"{limit}."
 
 #: src/ui/scan_results_dialog.py:393 src/ui/virustotal_results_dialog.py:338
 #, python-brace-format
@@ -3240,7 +3539,9 @@ msgstr "EICAR-Test"
 
 #: src/ui/scan_view.py:1052
 msgid "Run a scan with EICAR test file to verify antivirus detection"
-msgstr "Führen Sie einen Scan mit der EICAR-Testdatei durch, um die Virenerkennung zu überprüfen"
+msgstr ""
+"Führen Sie einen Scan mit der EICAR-Testdatei durch, um die Virenerkennung "
+"zu überprüfen"
 
 #: src/ui/scan_view.py:1061 src/ui/scan_view.py:1511
 msgid "Cancel the current scan"
@@ -3348,7 +3649,9 @@ msgstr "Scan abgeschlossen - {count} Bedrohung(en) erkannt"
 #: src/ui/scan_view.py:1789
 #, python-brace-format
 msgid "Scan complete - No threats found ({count} file(s) not accessible)"
-msgstr "Scan abgeschlossen - Keine Bedrohungen gefunden ({count} Datei(en) nicht zugänglich)"
+msgstr ""
+"Scan abgeschlossen - Keine Bedrohungen gefunden ({count} Datei(en) nicht "
+"zugänglich)"
 
 #: src/ui/scan_view.py:1794
 msgid "Scan complete - No threats found"
@@ -3615,7 +3918,8 @@ msgstr "Noch keine Scan-Historie"
 
 #: src/ui/statistics_view.py:859
 msgid "Run your first scan to see statistics and protection status"
-msgstr "Führen Sie Ihren ersten Scan durch, um Statistiken und Schutzstatus zu sehen"
+msgstr ""
+"Führen Sie Ihren ersten Scan durch, um Statistiken und Schutzstatus zu sehen"
 
 #: src/ui/statistics_view.py:879 src/ui/statistics_view.py:944
 msgid "Unable to load statistics"
@@ -3623,7 +3927,9 @@ msgstr "Statistiken können nicht geladen werden"
 
 #: src/ui/statistics_view.py:902
 msgid "Try refreshing or check that ClamAV is installed correctly"
-msgstr "Versuchen Sie zu aktualisieren oder prüfen Sie, ob ClamAV korrekt installiert ist"
+msgstr ""
+"Versuchen Sie zu aktualisieren oder prüfen Sie, ob ClamAV korrekt "
+"installiert ist"
 
 #: src/ui/statistics_view.py:923
 msgid "No scan history available"
@@ -3690,7 +3996,9 @@ msgstr "Datenbank-Aktualisierung"
 
 #: src/ui/update_view.py:89
 msgid "Update ClamAV virus definitions to detect the latest threats"
-msgstr "Aktualisieren Sie die ClamAV-Virendefinitionen, um die neuesten Bedrohungen zu erkennen"
+msgstr ""
+"Aktualisieren Sie die ClamAV-Virendefinitionen, um die neuesten Bedrohungen "
+"zu erkennen"
 
 #: src/ui/update_view.py:94
 msgid "Virus Definitions"
@@ -3698,7 +4006,9 @@ msgstr "Virendefinitionen"
 
 #: src/ui/update_view.py:95
 msgid "Click 'Update Database' to download the latest virus signatures"
-msgstr "Klicken Sie auf 'Datenbank aktualisieren', um die neuesten Virensignaturen herunterzuladen"
+msgstr ""
+"Klicken Sie auf 'Datenbank aktualisieren', um die neuesten Virensignaturen "
+"herunterzuladen"
 
 #: src/ui/update_view.py:114 src/ui/update_view.py:399
 msgid "Update Database"
@@ -3713,8 +4023,13 @@ msgid "Force Update"
 msgstr "Erzwungene Aktualisierung"
 
 #: src/ui/update_view.py:129
-msgid "Force update: Backs up local databases, deletes them, then downloads fresh copies from mirrors. Automatically restores from backup if update fails."
-msgstr "Erzwungene Aktualisierung: Sichert lokale Datenbanken, löscht sie und lädt dann neue Kopien von Spiegelservern herunter. Stellt automatisch aus der Sicherung wieder her, wenn die Aktualisierung fehlschlägt."
+msgid ""
+"Force update: Backs up local databases, deletes them, then downloads fresh "
+"copies from mirrors. Automatically restores from backup if update fails."
+msgstr ""
+"Erzwungene Aktualisierung: Sichert lokale Datenbanken, löscht sie und lädt "
+"dann neue Kopien von Spiegelservern herunter. Stellt automatisch aus der "
+"Sicherung wieder her, wenn die Aktualisierung fehlschlägt."
 
 #: src/ui/update_view.py:156
 msgid "Update Results"
@@ -3730,7 +4045,9 @@ msgstr "Noch keine Aktualisierungsergebnisse."
 
 #: src/ui/update_view.py:192
 msgid "Click 'Update Database' to download the latest virus definitions."
-msgstr "Klicken Sie auf 'Datenbank aktualisieren', um die neuesten Virendefinitionen herunterzuladen."
+msgstr ""
+"Klicken Sie auf 'Datenbank aktualisieren', um die neuesten Virendefinitionen "
+"herunterzuladen."
 
 #: src/ui/update_view.py:220
 msgid "Checking freshclam..."
@@ -3774,12 +4091,18 @@ msgid "Force updating virus database..."
 msgstr "Erzwinge Virendatenbank-Aktualisierung..."
 
 #: src/ui/update_view.py:360
-msgid "Backing up local databases, then deleting them to force fresh downloads from mirrors."
-msgstr "Lokale Datenbanken werden gesichert und dann gelöscht, um neue Downloads von Spiegelservern zu erzwingen."
+msgid ""
+"Backing up local databases, then deleting them to force fresh downloads from "
+"mirrors."
+msgstr ""
+"Lokale Datenbanken werden gesichert und dann gelöscht, um neue Downloads von "
+"Spiegelservern zu erzwingen."
 
 #: src/ui/update_view.py:363
 msgid "Previous databases will be restored if the update fails."
-msgstr "Frühere Datenbanken werden wiederhergestellt, wenn die Aktualisierung fehlschlägt."
+msgstr ""
+"Frühere Datenbanken werden wiederhergestellt, wenn die Aktualisierung "
+"fehlschlägt."
 
 #: src/ui/update_view.py:365 src/ui/update_view.py:371
 msgid "Please wait, this may take a few minutes."
@@ -3802,7 +4125,8 @@ msgstr "Aktualisierungssignal an freshclam-Dienst gesendet"
 msgid "Database updated successfully ({count} database updated)"
 msgid_plural "Database updated successfully ({count} databases updated)"
 msgstr[0] "Datenbank erfolgreich aktualisiert ({count} Datenbank aktualisiert)"
-msgstr[1] "Datenbank erfolgreich aktualisiert ({count} Datenbanken aktualisiert)"
+msgstr[1] ""
+"Datenbank erfolgreich aktualisiert ({count} Datenbanken aktualisiert)"
 
 #: src/ui/update_view.py:462
 msgid "Database is already up to date"
@@ -3853,7 +4177,8 @@ msgstr "  Aktualisierte Datenbanken: {count}"
 
 #: src/ui/update_view.py:502
 msgid "Note: The freshclam service is handling the update in the background."
-msgstr "Hinweis: Der freshclam-Dienst führt die Aktualisierung im Hintergrund durch."
+msgstr ""
+"Hinweis: Der freshclam-Dienst führt die Aktualisierung im Hintergrund durch."
 
 #: src/ui/update_view.py:503
 msgid "Check service logs for detailed progress:"
@@ -3997,8 +4322,13 @@ msgid "VirusTotal API Key Required"
 msgstr "VirusTotal-API-Schlüssel erforderlich"
 
 #: src/ui/virustotal_setup_dialog.py:136
-msgid "To scan files with VirusTotal, you need a free API key. You can get one by creating a free account on virustotal.com."
-msgstr "Um Dateien mit VirusTotal zu scannen, benötigen Sie einen kostenlosen API-Schlüssel. Sie können einen erhalten, indem Sie ein kostenloses Konto auf virustotal.com erstellen."
+msgid ""
+"To scan files with VirusTotal, you need a free API key. You can get one by "
+"creating a free account on virustotal.com."
+msgstr ""
+"Um Dateien mit VirusTotal zu scannen, benötigen Sie einen kostenlosen API-"
+"Schlüssel. Sie können einen erhalten, indem Sie ein kostenloses Konto auf "
+"virustotal.com erstellen."
 
 #: src/ui/virustotal_setup_dialog.py:163
 msgid "Enter API Key"
@@ -4018,7 +4348,8 @@ msgstr "Datei manuell hochladen"
 
 #: src/ui/virustotal_setup_dialog.py:206
 msgid "Open VirusTotal website to upload files without API key"
-msgstr "Öffnen Sie die VirusTotal-Website, um Dateien ohne API-Schlüssel hochzuladen"
+msgstr ""
+"Öffnen Sie die VirusTotal-Website, um Dateien ohne API-Schlüssel hochzuladen"
 
 #: src/ui/virustotal_setup_dialog.py:223
 msgid "Don't ask again when scanning without API key"
@@ -4047,4 +4378,3 @@ msgstr "Über ClamUI"
 #: src/ui/window.py:609
 msgid "ClamAV Desktop Scanner"
 msgstr "ClamAV Desktop-Scanner"
-

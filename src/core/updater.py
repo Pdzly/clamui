@@ -24,7 +24,12 @@ from .flatpak import (
 )
 from .i18n import _
 from .log_manager import LogEntry, LogManager
-from .utils import check_freshclam_installed, get_freshclam_path, wrap_host_command
+from .utils import (
+    check_freshclam_installed,
+    get_clean_env,
+    get_freshclam_path,
+    wrap_host_command,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -240,15 +245,70 @@ class FreshclamUpdater:
                 return True, _("Update signal sent to freshclam service (PID {pid})").format(
                     pid=pid
                 )
-            else:
-                error = result.stderr.strip() or "Unknown error"
-                logger.warning("Failed to send signal to freshclam: %s", error)
-                return False, _("Failed to send signal: {error}").format(error=error)
+
+            # Regular signal failed (likely permission denied for clamav-owned process)
+            # Try with pkexec elevation
+            error = result.stderr.strip() or "Unknown error"
+            logger.info("Regular kill failed (%s), trying elevated signal via pkexec", error)
+            pkexec = get_pkexec_path()
+            if pkexec:
+                try:
+                    elevated_result = subprocess.run(
+                        wrap_host_command([pkexec, "kill", "-s", "SIGUSR1", pid]),
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if elevated_result.returncode == 0:
+                        logger.info("Sent SIGUSR1 to freshclam via pkexec (PID %s)", pid)
+                        return True, _(
+                            "Update signal sent to freshclam service (PID {pid})"
+                        ).format(pid=pid)
+                    else:
+                        elevated_error = elevated_result.stderr.strip() or error
+                        logger.warning("Elevated signal also failed: %s", elevated_error)
+                        return False, _("Failed to send signal: {error}").format(
+                            error=elevated_error
+                        )
+                except subprocess.TimeoutExpired:
+                    return False, _("Timeout sending elevated signal to freshclam")
+                except OSError as e:
+                    logger.warning("pkexec signal failed: %s", e)
+
+            # Both attempts failed (or pkexec not available)
+            logger.warning("Failed to send signal to freshclam: %s", error)
+            return False, _("Failed to send signal: {error}").format(error=error)
 
         except subprocess.TimeoutExpired:
             return False, _("Timeout sending signal to freshclam")
         except OSError as e:
             return False, _("Error sending signal: {error}").format(error=e)
+
+    def _check_freshclam_running(self) -> tuple[bool, str | None]:
+        """
+        Check if a freshclam process is currently running.
+
+        Uses pidof to detect running freshclam instances. Skipped in Flatpak
+        (where freshclam runs on the host and pidof may not work).
+
+        Returns:
+            Tuple of (is_running, pid_string_or_none)
+        """
+        if is_flatpak():
+            return False, None
+        try:
+            pid_result = subprocess.run(
+                wrap_host_command(["pidof", "freshclam"]),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if pid_result.returncode == 0 and pid_result.stdout.strip():
+                pid = pid_result.stdout.strip().split()[0]
+                return True, pid
+        except Exception:
+            pass  # Best-effort check; proceed with update if anything goes wrong
+        return False, None
 
     def update_sync(self, force: bool = False, prefer_service: bool = True) -> UpdateResult:
         """
@@ -308,11 +368,28 @@ class FreshclamUpdater:
                     self._save_update_log(result, duration)
                     return result
                 else:
-                    # Service trigger failed, fall back to manual method
-                    logger.info(
-                        "Service update trigger failed (%s), falling back to manual method",
+                    # Service is running but signal failed - do NOT fall back to manual.
+                    # Manual freshclam will fail because the service holds all locks.
+                    logger.warning(
+                        "Service update trigger failed (%s), "
+                        "not falling back to manual method (service holds locks)",
                         message,
                     )
+                    result = UpdateResult(
+                        status=UpdateStatus.ERROR,
+                        stdout="",
+                        stderr=message,
+                        exit_code=-1,
+                        databases_updated=0,
+                        error_message=_(
+                            "Could not trigger freshclam service update. "
+                            "Try restarting the service: "
+                            "sudo systemctl restart clamav-freshclam"
+                        ),
+                    )
+                    duration = time.monotonic() - start_time
+                    self._save_update_log(result, duration)
+                    return result
         # Continue with manual update method
 
         # If force update, backup existing databases (for potential restore)
@@ -366,13 +443,41 @@ class FreshclamUpdater:
 
                 logger.info("Deleted %d database file(s) before force update", deleted_count)
 
+        # Before building manual command, check for running freshclam processes.
+        # Service check may have been skipped (force mode), but a running process
+        # will hold locks and cause the manual method to fail.
+        is_running, running_pid = self._check_freshclam_running()
+        if is_running and running_pid:
+            logger.warning(
+                "Another freshclam instance running (PID %s), aborting manual update",
+                running_pid,
+            )
+            result = UpdateResult(
+                status=UpdateStatus.ERROR,
+                stdout="",
+                stderr="",
+                exit_code=-1,
+                databases_updated=0,
+                error_message=_(
+                    "Another freshclam instance is running (PID {pid}). "
+                    "Stop it first: sudo systemctl stop clamav-freshclam"
+                ).format(pid=running_pid),
+            )
+            duration = time.monotonic() - start_time
+            self._save_update_log(result, duration)
+            return result
+
         # Build freshclam command
         cmd = self._build_command(force=force)
 
         try:
             self._update_cancelled = False
             self._current_process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=get_clean_env(),
             )
 
             timed_out = False

@@ -48,6 +48,29 @@ def is_flatpak() -> bool:
         return _flatpak_detected
 
 
+def get_clean_env() -> dict[str, str]:
+    """Return a clean environment for subprocess calls to system binaries.
+
+    When running inside an AppImage, LD_LIBRARY_PATH is set to prefer
+    bundled libraries (e.g. libssl, libpcre2). This causes version conflicts
+    when spawning system ClamAV binaries that link against different versions.
+
+    This function strips AppImage-injected variables so that clamscan,
+    clamdscan, and freshclam use the system's native libraries.
+
+    Safe to call in all environments - stripping unset vars is a no-op.
+    """
+    env = os.environ.copy()
+    # Remove library path overrides that cause version conflicts
+    for var in ("LD_LIBRARY_PATH", "LD_PRELOAD"):
+        env.pop(var, None)
+    # Remove AppImage-specific variables that may affect library resolution
+    for var in list(env.keys()):
+        if var.startswith(("APPIMAGE", "APPDIR")):
+            env.pop(var, None)
+    return env
+
+
 def get_clamav_database_dir() -> Path | None:
     """
     Get the ClamAV database directory for Flatpak installations.

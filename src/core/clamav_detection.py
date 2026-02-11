@@ -14,6 +14,7 @@ import subprocess
 
 from .flatpak import (
     ensure_freshclam_config,
+    get_clean_env,
     is_flatpak,
     which_host_command,
     wrap_host_command,
@@ -49,6 +50,7 @@ def check_clamav_installed() -> tuple[bool, str | None]:
             capture_output=True,
             text=True,
             timeout=10,
+            env=get_clean_env(),
         )
 
         if result.returncode == 0:
@@ -112,6 +114,7 @@ def check_freshclam_installed() -> tuple[bool, str | None]:
             capture_output=True,
             text=True,
             timeout=10,
+            env=get_clean_env(),
         )
 
         if result.returncode == 0:
@@ -162,6 +165,7 @@ def check_clamdscan_installed() -> tuple[bool, str | None]:
             capture_output=True,
             text=True,
             timeout=10,
+            env=get_clean_env(),
         )
 
         if result.returncode == 0:
@@ -242,7 +246,9 @@ def check_clamd_connection(socket_path: str | None = None) -> tuple[bool, str | 
     # Flatpak sandbox. The bundled clamdscan can't communicate with the host daemon.
     try:
         cmd = wrap_host_command(["clamdscan", "--ping", "3"], force_host=True)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=10, env=get_clean_env()
+        )
 
         if result.returncode == 0 and "PONG" in result.stdout:
             return (True, "PONG")
